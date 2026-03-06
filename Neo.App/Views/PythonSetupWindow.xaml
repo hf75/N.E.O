@@ -1,0 +1,56 @@
+<Window x:Class="Neo.App.PythonSetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Python Setup" FontFamily="Segoe UI Semilight"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        SizeToContent="Height" Width="460"
+        ShowInTaskbar="False">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock Text="&#x1F40D;" FontSize="28" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <TextBlock Text="Python Runtime Setup" FontSize="18" VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <!-- Info Text -->
+        <TextBlock Grid.Row="1" TextWrapping="Wrap" Margin="0,0,0,12"
+                   Text="Python 3.11 is required for Python integration but was not found on your system. Would you like to download it now? The runtime will be stored locally and is only needed once."/>
+
+        <!-- Download size info -->
+        <TextBlock Grid.Row="2" x:Name="StatusText" Margin="0,0,0,8"
+                   Text="Download size: approximately 30 MB" Foreground="#666"/>
+
+        <!-- Progress Bar -->
+        <ProgressBar Grid.Row="3" x:Name="DownloadProgress"
+                     Height="20" Margin="0,0,0,12"
+                     Minimum="0" Maximum="100"
+                     Visibility="Collapsed"/>
+
+        <!-- Buttons -->
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Style="{StaticResource RoundedButton}" Grid.Column="0"
+                    x:Name="DownloadButton" Content="Download"
+                    Margin="0,0,8,0" IsDefault="True"
+                    Click="DownloadButton_Click"/>
+
+            <Button Style="{StaticResource RoundedButton}" Grid.Column="1"
+                    x:Name="CancelButton" Content="Cancel"
+                    IsCancel="True"
+                    Click="CancelButton_Click"/>
+        </Grid>
+    </Grid>
+</Window>

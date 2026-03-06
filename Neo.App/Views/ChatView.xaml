@@ -1,0 +1,278 @@
+﻿<UserControl x:Class="Neo.App.ChatView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Neo.App"
+             xmlns:mdxam="clr-namespace:MdXaml;assembly=MdXaml"    
+             xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit"             
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800"
+             SnapsToDevicePixels="True"
+             UseLayoutRounding="True"
+             TextOptions.TextFormattingMode="Ideal"
+             TextOptions.TextRenderingMode="Auto"             
+             FontFamily="Segoe UI Semilight" FontSize="18">
+
+    <UserControl.Resources>
+
+        <Style TargetType="{x:Type FlowDocumentScrollViewer}">
+            <EventSetter Event="PreviewMouseWheel" Handler="RouteMouseWheelToChatScroll"/>
+        </Style>
+
+        <!-- ========================= -->
+        <!-- PALETTE (dezente Farben)  -->
+        <!-- ========================= -->
+        <SolidColorBrush x:Key="Chat.Text"               Color="#2F2F2F"/>
+        <SolidColorBrush x:Key="Chat.TextMuted"          Color="#5A5F66"/>
+        <SolidColorBrush x:Key="Chat.BubbleBackground"   Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="Chat.Border"             Color="#E6E6EA"/>
+        <!-- sehr dezente Status-Akzente nur für den Rahmen -->
+        <SolidColorBrush x:Key="Chat.Border.Prompt"      Color="#D3E3FD"/>
+        <SolidColorBrush x:Key="Chat.Border.Info"        Color="#DAD7FE"/>
+        <SolidColorBrush x:Key="Chat.Border.Success"     Color="#CAEBCB"/>
+        <SolidColorBrush x:Key="Chat.Border.Error"       Color="#F4D0CD"/>
+        <SolidColorBrush x:Key="Chat.Border.Code"        Color="#C8CCD3"/>
+
+        <!-- ========================= -->
+        <!-- MARKDOWN (MdXaml)         -->
+        <!-- ========================= -->
+        <Style x:Key="ChatMarkdownDocumentStyle" TargetType="{x:Type FlowDocument}">
+            <!-- gleiche Typo wie der Chat -->
+            <Setter Property="FontFamily"
+                Value="{Binding FontFamily, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+            <Setter Property="FontSize"
+                Value="{Binding FontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+            <!-- elegantes Anthrazit -->
+            <Setter Property="Foreground" Value="{StaticResource Chat.Text}"/>
+            <Setter Property="PagePadding" Value="0"/>
+            <Setter Property="TextAlignment" Value="Left"/>
+            <!-- dezente Abstände für ruhige Typo -->
+            <Setter Property="Paragraph.Margin" Value="0,0,0,8"/>
+        </Style>
+
+        <mdxam:Markdown x:Key="MdChat" DocumentStyle="{StaticResource ChatMarkdownDocumentStyle}"/>
+        <mdxam:TextToFlowDocumentConverter x:Key="MdConverter" Markdown="{StaticResource MdChat}"/>
+
+        <!-- ========================= -->
+        <!-- BUBBLE BASIS              -->
+        <!-- ========================= -->
+        <Style x:Key="BubbleBorderStyle" TargetType="Border">
+            <!-- MaxWidth raus -->
+            <Setter Property="Margin" Value="5,25,5,0" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Background" Value="{StaticResource Chat.BubbleBackground}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Chat.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <!-- WICHTIG: auf Spaltenbreite strecken -->
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="6" ShadowDepth="1" Direction="270" Opacity="0.05" Color="#000000"/>
+                </Setter.Value>
+            </Setter>
+
+            <EventSetter Event="PreviewMouseWheel" Handler="RouteMouseWheelToChatScroll"/>
+
+        </Style>
+
+        <!-- ========================= -->
+        <!-- BUBBLE VARIANTEN          -->
+        <!-- ========================= -->
+        <Style x:Key="ChatMessageBorderStyle" TargetType="Border" BasedOn="{StaticResource BubbleBorderStyle}">
+            <Style.Triggers>
+                <!-- User-Prompt: rechtsbündig + hauchzart bläulicher Rahmen -->
+                <DataTrigger Binding="{Binding Type}" Value="Prompt">
+                    <Setter Property="BorderBrush" Value="{StaticResource Chat.Border.Prompt}"/>
+                </DataTrigger>
+
+                <!-- Nur Rahmenfarbe variieren, keine Flächen! -->
+                <DataTrigger Binding="{Binding Type}" Value="CompletionError">
+                    <Setter Property="BorderBrush" Value="{StaticResource Chat.Border.Error}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Type}" Value="CompletionSuccess">
+                    <Setter Property="BorderBrush" Value="{StaticResource Chat.Border.Success}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Type}" Value="Info">
+                    <Setter Property="BorderBrush" Value="{StaticResource Chat.Border.Info}"/>
+                </DataTrigger>
+
+                <!-- Codeblöcke: etwas „technischer“ wirkender Rand -->
+                <DataTrigger Binding="{Binding IsCodeBlock}" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource Chat.Border.Code}"/>
+                    <!-- keine Füllung -->
+                    <Setter Property="Background" Value="{StaticResource Chat.BubbleBackground}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- ========================= -->
+        <!-- TEXT-STYLES               -->
+        <!-- ========================= -->
+        <Style x:Key="ChatMessageTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Chat.Text}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="TextOptions.TextFormattingMode" Value="Ideal"/>
+            <Setter Property="TextOptions.TextRenderingMode" Value="Auto"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsCodeBlock}" Value="True">
+                    <Setter Property="FontFamily" Value="Consolas, 'Cascadia Mono', 'Courier New'"/>
+                    <Setter Property="Foreground" Value="{StaticResource Chat.Text}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- ========================= -->
+        <!-- COPY-BUTTON (minimal)     -->
+        <!-- ========================= -->
+        <Style x:Key="CopyButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="ToolTip" Value="In die Zwischenablage kopieren"/>
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <TextBlock FontFamily="Segoe MDL2 Assets"
+                                   Text="&#xE8C8;"
+                                   FontSize="14"
+                                   Foreground="{StaticResource Chat.TextMuted}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="Foreground" Value="{StaticResource Chat.Text}"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Opacity" Value="0.8"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+    </UserControl.Resources>
+
+
+    <!-- =============================================================== -->
+    <!-- HAUPTLAYOUT DER KOMPONENTE                                      -->
+    <!-- =============================================================== -->
+    <ScrollViewer x:Name="ScrollViewer"
+              VerticalScrollBarVisibility="Auto"
+              HorizontalScrollBarVisibility="Disabled"
+              PanningMode="VerticalOnly">
+        <ItemsControl x:Name="ChatItemsControl">
+
+            <ItemsControl.ItemContainerStyle>
+                <Style TargetType="ContentPresenter">
+                    <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                </Style>
+            </ItemsControl.ItemContainerStyle>
+
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type local:ChatMessage}">
+                    <!-- Neu: 3-Spalten-Grid, damit die mittlere Spalte immer 75% ist -->
+                    <Grid HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <!-- Startzustand: linke Nachricht -> links * , rechts 0* -->
+                            <ColumnDefinition x:Name="LeftSpacer"  Width="0*"/>
+                            <ColumnDefinition                        Width="3*"/>
+                            <ColumnDefinition x:Name="RightSpacer" Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Deine Bubble füllt die 3*-Spalte -->
+                        <Border x:Name="BubbleBorder"
+                    Grid.Column="1"
+                    Style="{StaticResource ChatMessageBorderStyle}">
+                            <!-- Dein bisheriges Grid mit Text/Markdown/Copy-Button bleibt unverändert -->
+                            <Grid>
+                                <TextBlock x:Name="PlainText"
+                               Text="{Binding Text}"
+                               TextWrapping="Wrap"
+                               Style="{StaticResource ChatMessageTextStyle}"
+                               Margin="0,0,25,0"
+                               Visibility="Visible"/>
+
+                                <FlowDocumentScrollViewer x:Name="MarkdownView"
+                          VerticalScrollBarVisibility="Disabled"
+                          HorizontalScrollBarVisibility="Disabled"
+                          IsSelectionEnabled="True"
+                          Background="Transparent"
+                          Padding="0"
+                          Margin="0,0,25,0"
+                          Document="{Binding Text, Converter={StaticResource MdConverter}}"
+                          Visibility="Collapsed"
+                          PreviewMouseWheel="RouteMouseWheelToChatScroll">
+                                    <FlowDocumentScrollViewer.Resources>
+
+                                        <!-- Scrollbars IM Markdown-Inhalt aus -->
+                                        <Style TargetType="{x:Type ScrollViewer}">
+                                            <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
+                                            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+                                        </Style>
+
+                                        <!-- HIERHER: AvalonEdit-Monospaced + Wheel-Routing -->
+                                        <Style TargetType="{x:Type avalonedit:TextEditor}">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="BorderBrush" Value="Transparent"/>
+                                            <Setter Property="ShowLineNumbers" Value="False"/>
+                                            <Setter Property="IsReadOnly" Value="True"/>
+                                            <Setter Property="Padding" Value="10,8"/>
+
+                                            <Setter Property="FontFamily" Value="Consolas, 'Cascadia Mono', 'Courier New'"/>
+                                            <Setter Property="FontSize" Value="16"/>
+                                            <Setter Property="Foreground" Value="#3A3A3A"/>
+
+                                            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+                                            <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
+                                            <Setter Property="WordWrap" Value="True"/>
+
+                                            <EventSetter Event="PreviewMouseWheel" Handler="RouteMouseWheelToChatScroll"/>
+                                        </Style>
+                                    </FlowDocumentScrollViewer.Resources>
+                                </FlowDocumentScrollViewer>
+
+                                <Button x:Name="CopyBtn"
+                            Style="{StaticResource CopyButtonStyle}"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Margin="0,-2,-2,0"
+                            Click="CopyButton_Click"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- Triggers bleiben am DataTemplate -->
+                    <DataTemplate.Triggers>
+                        <!-- Copy-Button nur bei Hover -->
+                        <DataTrigger Binding="{Binding IsMouseOver, ElementName=BubbleBorder}" Value="True">
+                            <Setter TargetName="CopyBtn" Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+
+                        <!-- Markdown statt PlainText -->
+                        <DataTrigger Binding="{Binding IsMarkdown}" Value="True">
+                            <Setter TargetName="PlainText" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="MarkdownView" Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+
+                        <!-- Prompt (rechte Seite): Spacer tauschen -> 0* | 3* | * -->
+                        <DataTrigger Binding="{Binding Type}" Value="Prompt">
+                            <Setter TargetName="LeftSpacer"  Property="Width" Value="*"/>
+                            <Setter TargetName="RightSpacer" Property="Width" Value="0*"/>
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+
+        </ItemsControl>
+    </ScrollViewer>
+</UserControl>

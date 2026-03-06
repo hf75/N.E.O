@@ -1,0 +1,30 @@
+# Build output
+bin/
+obj/
+
+# IDE
+.vs/
+*.user
+*.suo
+*.userprefs
+*.DotSettings.user
+
+# Claude Code
+.claude/
+
+# Debug/Release artifacts
+debug/
+release/
+*.pdb
+
+# Publish profiles
+*.pubxml.user
+
+# Embedded Python runtimes (downloaded on-demand via PythonDownloadService)
+Neo.App/PythonInterop/python311-win/
+Neo.App/PythonInterop/python311-linux/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+Desktop.ini

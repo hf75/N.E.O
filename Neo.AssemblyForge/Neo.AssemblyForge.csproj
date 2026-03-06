@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(NeoTargetFramework)</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Neo.AssemblyForge</AssemblyName>
+    <RootNamespace>Neo.AssemblyForge</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.Core\Neo.Agents.Core.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpCompile\Neo.Agents.CSharpCompile.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpDllCompile\Neo.Agents.CSharpDllCompile.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.NugetLoader\Neo.Agents.NugetLoader.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\\AppHostTemplates\\apphost-template-windows.exe" LogicalName="Neo.AssemblyForge.Resources.AppHostTemplates.apphost-template-windows.exe" />
+    <EmbeddedResource Include="Resources\\AppHostTemplates\\apphost-template-linux" LogicalName="Neo.AssemblyForge.Resources.AppHostTemplates.apphost-template-linux" />
+    <EmbeddedResource Include="Resources\\AppHostTemplates\\apphost-template-osx" LogicalName="Neo.AssemblyForge.Resources.AppHostTemplates.apphost-template-osx" />
+    <EmbeddedResource Include="Resources\\AppHostTemplates\\DOTNET-SDK-LICENSE.TXT" LogicalName="Neo.AssemblyForge.Resources.AppHostTemplates.DOTNET-SDK-LICENSE.TXT" />
+  </ItemGroup>
+
+</Project>

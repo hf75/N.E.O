@@ -1,0 +1,42 @@
+<Window x:Class="Neo.App.HistoryRailsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Neo.App"
+        Title="History"
+        WindowStartupLocation="CenterOwner"
+        Width="980"
+        Height="560"
+        Background="#FAFAFA"
+        FontFamily="Segoe UI Semilight"
+        KeyDown="HistoryRailsWindow_KeyDown">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Vertical" Margin="0,0,0,10">
+            <TextBlock Text="History Rails" FontSize="20" FontWeight="Bold"/>
+            <TextBlock Foreground="#666" TextWrapping="Wrap"
+                       Text="Click a node to select. Enter or double-click to checkout. Esc closes without changes. Right-drag pans."/>
+        </StackPanel>
+
+        <Border Grid.Row="1" CornerRadius="10" BorderBrush="#DDD" BorderThickness="1" Background="White">
+            <local:RailsGraphControl x:Name="Graph"
+                                    Root="{Binding Root}"
+                                    Current="{Binding Current}"
+                                    Selected="{Binding Selected, Mode=TwoWay}"/>
+        </Border>
+
+        <DockPanel Grid.Row="2" Margin="0,10,0,0">
+            <Button x:Name="CheckoutButton" DockPanel.Dock="Right"
+                    Style="{StaticResource RoundedButton}"
+                    HorizontalAlignment="Right"
+                    IsDefault="True" Click="Checkout_Click">Checkout</Button>
+            <TextBlock DockPanel.Dock="Left" Foreground="#666" VerticalAlignment="Center"
+                       Text="{Binding IsRedoAmbiguous, StringFormat=Redo ambiguous: {0}}"/>
+        </DockPanel>
+    </Grid>
+</Window>
+

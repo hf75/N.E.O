@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(NeoTargetFramework)</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NuGet.Common" Version="7.0.0" />
+    <PackageReference Include="NuGet.Packaging" Version="7.0.0" />
+    <PackageReference Include="NuGet.Protocol" Version="7.0.0" />
+    <PackageReference Include="NuGet.Resolver" Version="7.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Neo.Agents.Core\Neo.Agents.Core.csproj" />
+  </ItemGroup>
+
+</Project>
