@@ -54,6 +54,7 @@ namespace Neo.App
             var agent = new CSharpCompileAgent();
 
             agent.SetOption("CoreDllPath", new List<string> { _coreRefPath });
+            agent.SetOption("NugetPackageVersions", new Dictionary<string, string>());
 
             agent.SetInput("Code", codes);
             agent.SetInput("OutputPath", outputDirectory);
