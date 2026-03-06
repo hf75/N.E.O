@@ -4,7 +4,7 @@
 
 Think of it as Claude Artifacts or ChatGPT Canvas — but for native .NET desktop apps with a real GUI (WPF or Avalonia), running locally on your machine.
 
-> **Status:** Pre-alpha (V0.000006) — hobby project, born out of curiosity about what happens when you combine LLMs with runtime compilation.
+> **Status:** Pre-alpha (v0.000000000001) — hobby project, born out of curiosity about what happens when you combine LLMs with runtime compilation.
 
 ## What is N.E.O.?
 
@@ -14,7 +14,8 @@ N.E.O. is a .NET desktop application that lets you create small, ready-to-use ut
 - Generate WPF, Avalonia, or React (WebView2) user interfaces from text descriptions
 - Live compilation and hot-reload of generated code
 - Incremental updates through unified diff patches
-- Export to standalone executables (Windows, Linux, macOS)
+- Export WPF apps as native Windows executables
+- Export Avalonia apps for Windows, Linux, and macOS
 - Branching undo/redo history
 - Visual designer mode (click-to-edit)
 - Optional sandboxed execution via Windows AppContainer
