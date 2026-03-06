@@ -19,10 +19,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Remove="Cursors\inv_cursor.cur" />
-    <None Remove="logo.png" />
-    <None Remove="logo_grey.png" />
-    <None Remove="logo_inv.png" />
-    <None Remove="logo_inv2.png" />
     <None Remove="logo3.png" />    
   </ItemGroup>
 
@@ -94,10 +90,6 @@
     <Resource Include="Cursors\wait_cursor.ani">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Resource>
-    <Resource Include="logo.png" />
-    <Resource Include="logo_grey.png" />
-    <Resource Include="logo_inv.png" />
-    <Resource Include="logo_inv2.png" />
     <Resource Include="logo3.png" />
   </ItemGroup>
 
