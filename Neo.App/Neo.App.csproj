@@ -1,0 +1,106 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>$(NeoTargetFrameworkWindows)</TargetFramework>
+    <RollForward>LatestMajor</RollForward>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <UseWindowsForms>true</UseWindowsForms>	
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+    <DisableMSBuildAssemblyCopyCheck>true</DisableMSBuildAssemblyCopyCheck>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="IconLoader.cs" />
+    <Compile Remove="PythonInterop\PythonHost.cs" />
+    <Compile Remove="PythonInterop\PythonModuleLoader.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Remove="Cursors\inv_cursor.cur" />
+    <None Remove="logo.png" />
+    <None Remove="logo_grey.png" />
+    <None Remove="logo_inv.png" />
+    <None Remove="logo_inv2.png" />
+    <None Remove="logo3.png" />    
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="AgentHelper.cs" />
+    <EmbeddedResource Include="IconLoader.cs" />
+    <EmbeddedResource Include="PythonInterop\PythonHost.cs" />
+    <EmbeddedResource Include="PythonInterop\PythonModuleLoader.cs" />	  
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="./AppHostTemplates/apphost-template-windows.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+
+	  <Content Include="./AppHostTemplates/apphost-template-linux">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+
+	  <Content Include="./AppHostTemplates/apphost-template-osx">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>	  
+	  
+    <Content Include="icon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MdXaml" Version="1.27.0" />
+    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.257">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="NuGet.Commands" Version="7.0.1" />
+    <PackageReference Include="pythonnet" Version="3.0.5" />
+    <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
+    <PackageReference Include="Vestris.ResourceLib" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Neo.AssemblyForge\Neo.AssemblyForge.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.Claude\Neo.Agents.Claude.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.Core\Neo.Agents.Core.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpCompile\Neo.Agents.CSharpCompile.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpDllCompile\Neo.Agents.CSharpDllCompile.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.Gemini\Neo.Agents.Gemini.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.NugetLoader\Neo.Agents.NugetLoader.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.OpenAI\Neo.Agents.OpenAI.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.Ollama\Neo.Agents.Ollama.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.LmStudio\Neo.Agents.LmStudio.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.PowerShell\Neo.Agents.PowerShell.csproj" />
+    <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
+    <ProjectReference Include="..\Neo.PluginWindowWPF\Neo.PluginWindowWPF.csproj" />
+    <ProjectReference Include="..\Neo.PluginWindowAvalonia\Neo.PluginWindowAvalonia.csproj" />
+  </ItemGroup>
+
+  <Target Name="CopyChildOutputs" AfterTargets="Build">
+    <!-- Pfad anpassen falls nötig -->
+    <ItemGroup>
+      <ChildOutputs Include="..\Neo.PluginWindowWPF\bin\$(Configuration)\$(NeoTargetFrameworkWindows)\**\*.*" />
+      <ChildOutputs Include="..\Neo.PluginWindowAvalonia\bin\$(Configuration)\$(NeoTargetFramework)\**\*.*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(ChildOutputs)" DestinationFolder="$(TargetDir)%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <ItemGroup>
+    <Resource Include="Cursors\inv_cursor.cur" />
+    <Resource Include="Cursors\wait_cursor.ani">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Resource>
+    <Resource Include="logo.png" />
+    <Resource Include="logo_grey.png" />
+    <Resource Include="logo_inv.png" />
+    <Resource Include="logo_inv2.png" />
+    <Resource Include="logo3.png" />
+  </ItemGroup>
+
+	<!-- Python distributions removed from repo. Downloaded on-demand via PythonDownloadService. -->
+
+</Project>

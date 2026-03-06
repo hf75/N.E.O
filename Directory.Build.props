@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <NeoNetMajor>9</NeoNetMajor>
+    <NeoTargetFramework>net$(NeoNetMajor).0</NeoTargetFramework>
+    <NeoTargetFrameworkWindows>net$(NeoNetMajor).0-windows</NeoTargetFrameworkWindows>
+  </PropertyGroup>
+</Project>

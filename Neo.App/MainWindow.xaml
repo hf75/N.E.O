@@ -1,0 +1,345 @@
+﻿<Window x:Class="Neo.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"        
+        xmlns:local="clr-namespace:Neo.App"
+        xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit"
+        mc:Ignorable="d"
+        WindowStartupLocation="CenterScreen" Title="N.E.O. Native Executable Orchestrator v0.000000000001 pre-alpha" Height="768" Width="1024" FontFamily="Segoe UI Semilight">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <Style TargetType="ToolTip">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border CornerRadius="8" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- =============================================================== -->
+        <!-- ZENTRALE STYLES FÜR EIN EINHEITLICHES DESIGN                      -->
+        <!-- =============================================================== -->
+
+        <Style x:Key="OptionsToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="bd" CornerRadius="12" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="#AAAAAA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>        
+        
+        <Style x:Key="MinimalistToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="bd" CornerRadius="12" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="#AAAAAA"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#E6F5E6"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="#70AD70"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MinimalistButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>            
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" CornerRadius="12" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="#AAAAAA"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#F0F0F0"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="#888888"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MinimalistPopupButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" CornerRadius="8" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#F5F5F5"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="#AAAAAA"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#E0E0E0"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="#888888"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="IconText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+    <Border Padding="6">
+        <Grid x:Name="contentGrid">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3*"/>
+                <RowDefinition Height="auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- GANZ OBEN: Globales Overlay über den kompletten Inhaltsbereich -->
+            <Grid x:Name="GlobalOverlay"
+              Grid.Row="0" Grid.Column="0"
+              Grid.RowSpan="3" Grid.ColumnSpan="3"
+              Background="Transparent"
+              Visibility="Collapsed"
+              Panel.ZIndex="9999" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid>
+                    <ContentControl x:Name="GlobalOverlayContent" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Button Name="btnCancel" Visibility="Hidden" Foreground="White" Background="DarkRed" MinWidth="240" Padding="6" Margin="0, 256, 0, 32" Content="Cancel" HorizontalAlignment="Center" VerticalAlignment="Center" Click="btnCancel_Click">
+                        <Button.Resources>
+                            <Style TargetType="{x:Type Border}">
+                                <Setter Property="CornerRadius" Value="12"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+                </Grid>
+            </Grid>
+
+            <Border Name="wvHistoryBorder" Grid.Row="0" BorderBrush="LightGray" CornerRadius="8" BorderThickness="1" Margin="0 0 6 6" Padding="6">
+                <local:ChatView x:Name="historyView"/>
+            </Border>
+
+            <StackPanel x:Name="stackPanelLeft" Grid.Row="0" Grid.RowSpan="3" Grid.Column="1" Orientation="Horizontal">
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
+            </StackPanel>
+
+            <Separator Name="seperatorLeft" Margin="0 4 6 4" Grid.Row="1"/>
+
+            <Border x:Name="txtPromptBorder" Grid.Row="2" BorderBrush="LightGray" Background="#F0F0F0F0" CornerRadius="8" BorderThickness="1" Margin="0 4 6 0">
+                <TextBox Margin="6" Background="Transparent" BorderThickness="0" FontFamily="Segoe UI Semilight" FontSize="20" PreviewKeyDown="input_PreviewKeyDown" DataObject.Pasting="input_Pasting" HorizontalContentAlignment="Left" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" Name="txtPrompt" Grid.Column="0" Padding="2"/>
+            </Border>
+
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Name="optionsHub">
+                <!-- Import Button -->
+                <Button ToolTip="Import" Margin="8,0,0,0" Content="&#xE8B5;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Import"></Button>
+
+                <!-- Export Button -->
+                <Button ToolTip="Export" Margin="8,0,0,0" Content="&#xEDE1;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Export"></Button>
+
+                <!-- SANDBOX HUB -->
+                <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                    <ToggleButton x:Name="BtnSandboxHub" ToolTip="Sandbox Controls" IsChecked="False">
+                        <ToggleButton.Style>
+                            <!-- Wir definieren einen komplett neuen Style, ohne "BasedOn", um volle Kontrolle zu haben -->
+                            <Style TargetType="ToggleButton">
+                                <!-- Standard-Aussehen aus dem Basis-Style kopiert -->
+                                <Setter Property="Width" Value="24"/>
+                                <Setter Property="Height" Value="24"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Background" Value="White"/>
+                                <Setter Property="BorderBrush" Value="#CCCCCC"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="Foreground" Value="Black"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="bd" CornerRadius="12" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <!-- Trigger für den Hover-Effekt (unabhängig von allem) -->
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="BorderBrush" Value="#AAAAAA"/>
+                                    </Trigger>
+
+                                    <!-- Trigger für den "Menü offen"-Zustand, ABER NUR WENN SANDBOX AUS IST -->
+                                    <!-- Dieser wird vom DataTrigger unten überschrieben, wenn die Sandbox angeht -->
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter Property="Background" Value="#F0F0F0"/>
+                                        <!-- Leicht grauer Hintergrund für "offen" -->
+                                        <Setter Property="BorderBrush" Value="#AAAAAA"/>
+                                    </Trigger>
+
+                                    <!-- HÖCHSTE PRIORITÄT: Wenn die Sandbox AN ist, ist der Hub IMMER grün. -->
+                                    <!-- Dieser DataTrigger überschreibt den normalen IsChecked-Trigger. -->
+                                    <DataTrigger Binding="{Binding IsChecked, ElementName=BtnSandboxToggle}" Value="True">
+                                        <Setter Property="Background" Value="#E6F5E6"/>
+                                        <Setter Property="BorderBrush" Value="#70AD70"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ToggleButton.Style>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xEA18;"/>
+                    </ToggleButton>
+
+                    <StackPanel x:Name="SandboxOrbit" Orientation="Horizontal" Visibility="{Binding IsChecked, ElementName=BtnSandboxHub, Converter={StaticResource BoolToVis}}">
+                        <ToggleButton x:Name="BtnSandboxToggle" Margin="2, 0, 2, 0" Style="{StaticResource MinimalistToggleButtonStyle}" ToolTip="Secure Mode (Sandbox)" Click="BtnSandboxToggle_Click">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE72E;"/>
+                        </ToggleButton>
+                        <ToggleButton IsEnabled="False" x:Name="BtnInternetToggle" Margin="0, 0, 2, 0" Style="{StaticResource MinimalistToggleButtonStyle}" ToolTip="Allow Internet"  Click="BtnInternetToggle_Click">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE774;"/>
+                        </ToggleButton>
+                        <ToggleButton IsEnabled="False" x:Name="BtnFolderAccess" Margin="0, 0, 2, 0" Style="{StaticResource MinimalistToggleButtonStyle}" ToolTip="Grant Folder Access" Click="BtnFolderAccess_Click">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE838;"/>
+                        </ToggleButton>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Settings Button -->
+                <Button ToolTip="Settings" Margin="8,0,0,0" Content="&#xE713;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Settings"></Button>                
+                
+                <!-- Designer Mode (Click-to-Edit) -->
+                <ToggleButton x:Name="BtnDesignerMode" Margin="8,0,0,0" Style="{StaticResource MinimalistToggleButtonStyle}" ToolTip="Designer Mode (Click-to-Edit)" Click="BtnDesignerMode_Click">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE70F;"/>
+                </ToggleButton>
+
+                <!-- Code Editor Toggle -->
+                <ToggleButton x:Name="BtnCodeEditor" Margin="8,0,0,0" Style="{StaticResource MinimalistToggleButtonStyle}" ToolTip="Code Editor (Ctrl+Shift+C)" Click="BtnCodeEditor_Click">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE943;"/>
+                </ToggleButton>
+
+                <!-- History Rails Button -->
+                <Button ToolTip="History" Margin="8,0,0,0" Content="&#xE81C;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_HistoryRails"></Button>
+
+                <!-- Clear Button -->
+                <Button ToolTip="Clear" Margin="8,0,0,0" Content="&#xE894;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Clear"></Button>
+
+            </StackPanel>
+
+            <Grid Grid.Column="2" Grid.RowSpan="3" Name="dynamicContentGrid">
+                <ContentControl x:Name="dynamicContent" />
+
+                <!-- Frosted snapshot overlay (shown while AI generates new code) -->
+                <Image x:Name="frostedSnapshot"
+                       Visibility="Collapsed"
+                       Stretch="Fill"
+                       IsHitTestVisible="False">
+                    <Image.Effect>
+                        <BlurEffect Radius="20" KernelType="Gaussian"/>
+                    </Image.Effect>
+                </Image>
+                <Border x:Name="frostedDim"
+                        Visibility="Collapsed"
+                        Background="#40000000"
+                        IsHitTestVisible="False"/>
+
+                <!-- Code Editor Panel (toggled via toolbar button) -->
+                <Grid x:Name="codeEditorPanel" Visibility="Collapsed" Background="White">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <avalonedit:TextEditor x:Name="codeEditor"
+                        Grid.Row="0"
+                        FontFamily="Consolas, 'Cascadia Mono', 'Courier New'"
+                        FontSize="14"
+                        ShowLineNumbers="True"
+                        IsReadOnly="False"
+                        WordWrap="False"
+                        HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Auto"
+                        SyntaxHighlighting="C#"/>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="8">
+                        <Button Content="Apply" Style="{StaticResource MinimalistPopupButtonStyle}"
+                                Margin="0,0,8,0"
+                                Click="BtnCodeEditorApply_Click"/>
+                        <Button Content="Revert" Style="{StaticResource MinimalistPopupButtonStyle}"
+                                Click="BtnCodeEditorRevert_Click"/>
+                    </StackPanel>
+                </Grid>
+
+                <Border x:Name="RepairOverlay" Background="#80FFFFFF" Visibility="Collapsed">
+                    <Grid>
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock HorizontalAlignment="Center" Margin="0, 20" Text="A runtime error occured."  FontFamily="Segoe UI Semilight" FontSize="24" FontWeight="Bold" Foreground="Red"/>
+                            <TextBlock HorizontalAlignment="Center" Margin="0, 20" Text="I am repairing the code. Please wait ..."  FontFamily="Segoe UI Semilight" FontSize="24" FontWeight="Bold" Foreground="Red"/>                            
+                        </StackPanel>
+                        <!--<Button x:Name="AbortRepairButton" Content="Cancel repair &amp; Reset" Click="AbortRepairButton_Click"  Visibility="Visible" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="20" Padding="10,5"/>-->
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
