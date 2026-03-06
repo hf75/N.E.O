@@ -13,7 +13,7 @@ Click the **Export** button in the toolbar to open the Export Dialog.
 
 ### What Gets Exported
 
-- Standalone `.exe` file (no .NET installation required on target machine)
+- Standalone `.exe` file (no .NET SDK required — only the .NET runtime on the target machine)
 - All NuGet dependency DLLs
 - Python runtime (if Python mode was enabled)
 - Project metadata (`.resx` file for re-importing)
@@ -59,4 +59,4 @@ MyApp.resx
 
 - Export early and often — the `.resx` file is your project save file
 - Use **Import** to share projects with others or move between machines
-- The exported `.exe` is fully standalone — copy it anywhere and run it
+- The exported `.exe` only requires the .NET runtime — copy it to any machine with the runtime installed and run it
