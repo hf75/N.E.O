@@ -75,13 +75,21 @@ namespace Neo.Agents.Core
         {
             foreach (var option in Metadata.Options)
             {
-                if (option is IOption<object> genericOption) // Zugriff auf DefaultValue nur wenn IOption<T>
+                // Use reflection to get DefaultValue from IOption<T> since
+                // IOption<T> is not covariant (no 'out T'), so 'is IOption<object>' fails
+                // for generic types like Dictionary<string,string> or List<string>.
+                var iOptionInterface = option.GetType().GetInterfaces()
+                    .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IOption<>));
+
+                if (iOptionInterface != null)
                 {
-                    _options[option.Name] = genericOption.DefaultValue ?? GetDefault(option.OptionType);
+                    var defaultProp = iOptionInterface.GetProperty("DefaultValue");
+                    var defaultValue = defaultProp?.GetValue(option);
+                    _options[option.Name] = defaultValue ?? GetDefault(option.OptionType);
                 }
                 else
                 {
-                    _options[option.Name] = GetDefault(option.OptionType); // Fallback für den Fall, dass es keine generische Option ist. Sollte aber nicht vorkommen.
+                    _options[option.Name] = GetDefault(option.OptionType);
                 }
             }
         }
