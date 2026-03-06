@@ -2,7 +2,7 @@
 
 **AI-powered desktop application builder** — describe what you want in natural language, and N.E.O. generates, compiles, and runs it in real time.
 
-> **Status:** Pre-alpha research preview (V0.000006)
+> **Status:** pre-alpha research preview (V0.0000000000001)
 
 ## What is N.E.O.?
 
