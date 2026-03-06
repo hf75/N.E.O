@@ -359,7 +359,11 @@ namespace Neo.Agents
             bool isWindows = appHostApp.EndsWith("windows.exe") && compileType != "CONSOLE";
 
             CreateRuntimeConfigFile(outputPath, assemblyName, isWindows);
-            CreateDepsJsonFile(outputPath, assemblyName);
+
+            // Only generate deps.json for GUI apps. For console apps, omitting deps.json
+            // lets the .NET host probe the app base directory for all assemblies (including NuGet DLLs).
+            if (compileType != "CONSOLE")
+                CreateDepsJsonFile(outputPath, assemblyName, isWindows, nuGetDlls);
 
             if (result.Success)
             {
@@ -488,11 +492,30 @@ namespace Neo.Agents
             File.WriteAllText(runtimeConfigPath, runtimeConfigContent);
         }
 
-        void CreateDepsJsonFile(string outputDirectory, string projectName)
+        void CreateDepsJsonFile(string outputDirectory, string projectName, bool isWindows, List<string>? nuGetDlls)
         {
             var major = Environment.Version.Major;
             var versionTag = $"v{major}.0";
             var fwVersion = $"{major}.0.0";
+            var fwName = isWindows ? "Microsoft.WindowsDesktop.App.WPF" : "Microsoft.NETCore.App";
+
+            // Build runtime entries for NuGet DLLs so the host can resolve them at runtime
+            var runtimeLines = new List<string>();
+            runtimeLines.Add($"\"{projectName}.dll\": {{}}");
+
+            if (nuGetDlls != null)
+            {
+                foreach (var dllPath in nuGetDlls)
+                {
+                    var fileName = Path.GetFileName(dllPath);
+                    if (!string.IsNullOrEmpty(fileName))
+                    {
+                        runtimeLines.Add($"\"{fileName}\": {{}}");
+                    }
+                }
+            }
+
+            var runtimeBlock = string.Join(",\n                          ", runtimeLines);
 
             string depsJsonPath = Path.Combine(outputDirectory, $"{projectName}.deps.json");
             string depsJsonContent = @"{
@@ -505,10 +528,10 @@ namespace Neo.Agents
                     "".NETCoreApp,Version=" + versionTag + @""": {
                       """ + projectName + @"/1.0.0"": {
                         ""dependencies"": {
-                          ""Microsoft.WindowsDesktop.App.WPF"": """ + fwVersion + @"""
+                          """ + fwName + @""": """ + fwVersion + @"""
                         },
                         ""runtime"": {
-                          """ + projectName + @".dll"": {}
+                          " + runtimeBlock + @"
                         }
                       }
                     }
