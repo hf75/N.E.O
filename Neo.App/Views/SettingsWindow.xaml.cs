@@ -31,7 +31,6 @@ namespace Neo.App
                 UseReactUi = loaded.UseReactUi,
                 UsePython = loaded.UsePython,
                 AcceptAutomatic = loaded.AcceptAutomatic,
-                MaxAgentSteps = loaded.MaxAgentSteps,
                 ClaudeModel = loaded.ClaudeModel,
                 OpenAiModel = loaded.OpenAiModel,
                 GeminiModel = loaded.GeminiModel,
@@ -268,11 +267,6 @@ namespace Neo.App
             // Fallback/Validierung
             if (_workingCopy.AiCodeGenerationAttempts < 1)
                 _workingCopy.AiCodeGenerationAttempts = 5;
-            if (_workingCopy.MaxAgentSteps < 1)
-                _workingCopy.MaxAgentSteps = 10;
-            if (_workingCopy.MaxAgentSteps > 25)
-                _workingCopy.MaxAgentSteps = 25;
-
             // Save model selections from ComboBoxes
             if (ClaudeModelComboBox.SelectedItem is string claudeModel && !string.IsNullOrWhiteSpace(claudeModel))
                 _workingCopy.ClaudeModel = claudeModel;
@@ -316,7 +310,6 @@ namespace Neo.App
             _workingCopy.UsePython = false;
             _workingCopy.UseAvalonia = false;
             _workingCopy.AcceptAutomatic = false;
-            _workingCopy.MaxAgentSteps = 10;
             _workingCopy.ClaudeModel = "claude-opus-4-6";
             _workingCopy.OpenAiModel = "gpt-5.2";
             _workingCopy.GeminiModel = "gemini-3-pro-preview";

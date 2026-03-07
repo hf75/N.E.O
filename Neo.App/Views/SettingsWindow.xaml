@@ -49,14 +49,6 @@
         <CheckBox Style="{StaticResource RoundedCheckBox}" Grid.Row="3" Content="Enable Python" IsChecked="{Binding UsePython, Mode=TwoWay}" Margin="0,8,0,0"/>
         <CheckBox Style="{StaticResource RoundedCheckBox}" Grid.Row="4" Content="Accept changes automatically" IsChecked="{Binding AcceptAutomatic, Mode=TwoWay}" Margin="0,8,0,0"/>
 
-        <TextBlock VerticalAlignment="Center" Grid.Row="5" Grid.Column="0" Margin="0,8,0,0" Text="Max agent steps:"/>
-        <TextBox Style="{StaticResource RoundedTextBox}" Grid.Row="5" Grid.Column="1" x:Name="MaxAgentStepsTextBox"
-                 Margin="0,8,0,0"
-                 Text="{Binding MaxAgentSteps, UpdateSourceTrigger=PropertyChanged}"
-                 PreviewTextInput="AttemptsTextBox_PreviewTextInput"
-                 DataObject.Pasting="AttemptsTextBox_Pasting"
-                 ToolTip="Max steps the AI agent can chain (1-25, default 10)"/>
-
         <!-- AI Models Section -->
         <Border Grid.ColumnSpan="2" Grid.Row="6" Margin="0,12,0,4" BorderBrush="#DDD" BorderThickness="0,1,0,0"/>
 
