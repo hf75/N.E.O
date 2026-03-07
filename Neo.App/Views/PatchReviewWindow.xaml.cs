@@ -10,22 +10,13 @@ namespace Neo.App
     {
         public PatchReviewDecision Decision { get; private set; } = PatchReviewDecision.Reject;
 
-        public PatchReviewWindow(string patch, IEnumerable<string>? nugetPackages, string? explanation, PatchReviewInfo? reviewInfo = null, bool isPowerShellMode = false, bool isConsoleAppMode = false, bool isPlanMode = false)
+        public PatchReviewWindow(string patch, IEnumerable<string>? nugetPackages, string? explanation, PatchReviewInfo? reviewInfo = null, bool isPowerShellMode = false, bool isConsoleAppMode = false)
         {
             InitializeComponent();
 
             PatchTextBox.Text = patch ?? string.Empty;
 
-            if (isPlanMode)
-            {
-                Title = "Review Agent Plan";
-                PackagesText.Visibility = Visibility.Collapsed;
-                AiReviewBorder.Visibility = Visibility.Collapsed;
-                RegenerateButton.Visibility = Visibility.Collapsed;
-                ExplanationExpander.Visibility = Visibility.Collapsed;
-                ApplyButton.Content = "Approve";
-            }
-            else if (isPowerShellMode)
+            if (isPowerShellMode)
             {
                 Title = "Review PowerShell Script";
                 PackagesText.Visibility = Visibility.Collapsed;

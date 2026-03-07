@@ -25,7 +25,4 @@ public sealed class StructuredResponse
 
     [JsonProperty("ConsoleAppCode")]
     public string ConsoleAppCode { get; set; } = string.Empty;
-
-    [JsonProperty("Plan")]
-    public string Plan { get; set; } = string.Empty;
 }
