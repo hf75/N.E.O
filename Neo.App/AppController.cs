@@ -1765,17 +1765,31 @@ namespace Neo.App
 
             Logger.LogMessage("Executing PowerShell script...", BubbleType.Info);
 
-            PowerShellAgent.SetInput("Script", script);
-            PowerShellAgent.SetInput("TimeoutSeconds", 60);
-            await PowerShellAgent.ExecuteAsync(cancellationToken);
-
-            return new AgentStepResult
+            try
             {
-                Stdout = PowerShellAgent.GetOutput<string>("StandardOutput") ?? string.Empty,
-                Stderr = PowerShellAgent.GetOutput<string>("ErrorOutput") ?? string.Empty,
-                ExitCode = PowerShellAgent.GetOutput<int>("ExitCode"),
-                ToolName = "PowerShell",
-            };
+                PowerShellAgent.SetInput("Script", script);
+                PowerShellAgent.SetInput("TimeoutSeconds", 60);
+                await PowerShellAgent.ExecuteAsync(cancellationToken);
+
+                return new AgentStepResult
+                {
+                    Stdout = PowerShellAgent.GetOutput<string>("StandardOutput") ?? string.Empty,
+                    Stderr = PowerShellAgent.GetOutput<string>("ErrorOutput") ?? string.Empty,
+                    ExitCode = PowerShellAgent.GetOutput<int>("ExitCode"),
+                    ToolName = "PowerShell",
+                };
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                return new AgentStepResult
+                {
+                    Stdout = string.Empty,
+                    Stderr = $"PowerShell error: {ex.Message}",
+                    ExitCode = -1,
+                    ToolName = "PowerShell",
+                };
+            }
         }
 
         private async Task<AgentStepResult> ExecuteConsoleAppStepAsync(string code, List<string>? nugetPackages, string? explanation, CancellationToken cancellationToken)

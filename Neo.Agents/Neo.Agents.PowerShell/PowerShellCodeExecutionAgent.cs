@@ -10,8 +10,8 @@ using Neo.Agents.Core;
 namespace Neo.Agents
 {
     /// <summary>
-    /// Ein Agent, der PowerShell-Code ausfuehrt und die Ausgaben zurueckliefert.
-    /// Unterstuetzt sowohl Windows PowerShell (powershell.exe) als auch PowerShell Core (pwsh.exe).
+    /// An agent that executes PowerShell code and returns the output.
+    /// Supports both Windows PowerShell (powershell.exe) and PowerShell Core (pwsh.exe).
     /// </summary>
     public class PowerShellCodeExecutionAgent : AgentBase
     {
@@ -22,45 +22,39 @@ namespace Neo.Agents
             var metadata = new AgentMetadata
             {
                 Name = "PowerShell Code Execution Agent",
-                Description = "Fuehrt PowerShell-Code aus und gibt stdout, stderr und Exit-Code zurueck."
+                Description = "Executes PowerShell code and returns stdout, stderr and exit code."
             };
 
-            // Input: PowerShell-Script (Pflicht)
             metadata.InputParameters.Add(new InputParameter<string>(
                 name: "Script",
                 isRequired: true,
-                description: "Der PowerShell-Code der ausgefuehrt werden soll."
+                description: "The PowerShell code to execute."
             ));
 
-            // Optionale Argumente fuer das Script (verfuegbar ueber $args)
             metadata.InputParameters.Add(new InputParameter<List<string>>(
                 name: "Arguments",
                 isRequired: false,
-                description: "Optionale Argumente die an das Script uebergeben werden (verfuegbar ueber $args)."
+                description: "Optional arguments passed to the script (available via $args)."
             ));
 
-            // Arbeitsverzeichnis
             metadata.InputParameters.Add(new InputParameter<string>(
                 name: "WorkingDirectory",
                 isRequired: false,
-                description: "Arbeitsverzeichnis fuer die Ausfuehrung. Standard: aktuelles Verzeichnis."
+                description: "Working directory for execution. Default: current directory."
             ));
 
-            // Timeout
             metadata.InputParameters.Add(new InputParameter<int>(
                 name: "TimeoutSeconds",
                 isRequired: false,
                 description: "Timeout in seconds. Default: 60. 0 = unlimited."
             ));
 
-            // PowerShell-Variante
             metadata.InputParameters.Add(new InputParameter<bool>(
                 name: "UsePowerShellCore",
                 isRequired: false,
                 description: "true = pwsh.exe (PowerShell Core), false = powershell.exe (Windows PowerShell). Default: false."
             ));
 
-            // Outputs
             metadata.OutputParameters.Add(new OutputParameter<string>(
                 name: "StandardOutput",
                 isAlwaysProvided: true,
@@ -109,23 +103,19 @@ namespace Neo.Agents
 
             var ct = cancellationToken ?? CancellationToken.None;
 
-            // Inputs lesen
             var script = GetInput<string>("Script") ?? throw new InvalidOperationException("Script is required.");
             var arguments = GetInput<List<string>>("Arguments") ?? new List<string>();
             var workingDirectory = GetInput<string>("WorkingDirectory");
             var timeoutSeconds = GetInput<int>("TimeoutSeconds");
             var usePowerShellCore = GetInput<bool>("UsePowerShellCore");
 
-            // Defaults
             if (timeoutSeconds == 0)
-                timeoutSeconds = 60; // Default: 60 Sekunden
+                timeoutSeconds = 60;
             if (string.IsNullOrWhiteSpace(workingDirectory))
                 workingDirectory = Environment.CurrentDirectory;
 
-            // Script mit Argumenten vorbereiten
             var fullScript = PrepareScriptWithArguments(script, arguments);
 
-            // PowerShell ausfuehren
             var (stdout, stderr, exitCode) = await RunPowerShellAsync(
                 fullScript,
                 workingDirectory,
@@ -133,7 +123,6 @@ namespace Neo.Agents
                 timeoutSeconds,
                 ct);
 
-            // Outputs setzen
             SetOutput("StandardOutput", stdout);
             SetOutput("ErrorOutput", stderr);
             SetOutput("ExitCode", exitCode);
@@ -141,14 +130,14 @@ namespace Neo.Agents
         }
 
         /// <summary>
-        /// Bereitet das Script vor und fuegt die Argumente als $args Array hinzu.
+        /// Prepares the script by injecting arguments as the $args array.
         /// </summary>
         private static string PrepareScriptWithArguments(string script, List<string> arguments)
         {
             if (arguments.Count == 0)
                 return script;
 
-            // Argumente escapen (einfache Anfuehrungszeichen verdoppeln)
+            // Escape single quotes by doubling them
             var escapedArgs = arguments.Select(a => $"'{a.Replace("'", "''")}'");
             var argsInit = string.Join(",", escapedArgs);
 
@@ -156,7 +145,7 @@ namespace Neo.Agents
         }
 
         /// <summary>
-        /// Fuehrt PowerShell aus und gibt stdout, stderr und Exit-Code zurueck.
+        /// Executes PowerShell and returns stdout, stderr and exit code.
         /// </summary>
         private static async Task<(string stdout, string stderr, int exitCode)> RunPowerShellAsync(
             string script,
@@ -170,9 +159,6 @@ namespace Neo.Agents
             var startInfo = new ProcessStartInfo
             {
                 FileName = executable,
-                // -NoProfile: Schnellerer Start, keine Profilscripte laden
-                // -NonInteractive: Keine Benutzereingaben erwarten
-                // -Command -: Script von stdin lesen
                 Arguments = "-NoProfile -NonInteractive -Command -",
                 UseShellExecute = false,
                 RedirectStandardInput = true,
@@ -191,19 +177,16 @@ namespace Neo.Agents
             catch (Exception ex)
             {
                 throw new InvalidOperationException(
-                    $"Konnte PowerShell nicht starten ({executable}). " +
-                    $"Ist PowerShell installiert und im PATH? Fehler: {ex.Message}", ex);
+                    $"Could not start PowerShell ({executable}). " +
+                    $"Is PowerShell installed and in PATH? Error: {ex.Message}", ex);
             }
 
-            // Script via stdin senden und stdin schliessen
             await process.StandardInput.WriteAsync(script);
             process.StandardInput.Close();
 
-            // Stdout und stderr async lesen (um Deadlocks zu vermeiden)
             var stdoutTask = process.StandardOutput.ReadToEndAsync();
             var stderrTask = process.StandardError.ReadToEndAsync();
 
-            // Auf Prozess-Ende warten mit Timeout
             var timeoutMs = timeoutSeconds * 1000;
             using var timeoutCts = timeoutSeconds > 0
                 ? new CancellationTokenSource(timeoutMs)
@@ -218,21 +201,11 @@ namespace Neo.Agents
             }
             catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
             {
-                // Timeout - Prozess beenden
-                try
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-                catch
-                {
-                    // Ignorieren wenn Kill fehlschlaegt
-                }
-
+                try { process.Kill(entireProcessTree: true); } catch { }
                 throw new TimeoutException(
-                    $"PowerShell-Ausfuehrung hat das Timeout von {timeoutSeconds} Sekunden ueberschritten.");
+                    $"PowerShell execution exceeded the timeout of {timeoutSeconds} seconds.");
             }
 
-            // Ausgaben lesen
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
 

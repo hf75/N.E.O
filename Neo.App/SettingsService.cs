@@ -92,19 +92,6 @@ namespace Neo.App
             }
         }
 
-        private int _maxAgentSteps = 10;
-        public int MaxAgentSteps
-        {
-            get { return _maxAgentSteps; }
-            set
-            {
-                if (_maxAgentSteps != value)
-                {
-                    _maxAgentSteps = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
 
         public string ClaudeModel
         {
@@ -276,9 +263,6 @@ namespace Neo.App
                 // Minimal-Validierung: sinnvolle Untergrenze
                 if (model.AiCodeGenerationAttempts < 1)
                     model.AiCodeGenerationAttempts = 5;
-                if (model.MaxAgentSteps < 1)
-                    model.MaxAgentSteps = 10;
-
                 return model;
             }
             catch
@@ -293,9 +277,6 @@ namespace Neo.App
             // Minimal-Validierung vor dem Speichern
             if (model.AiCodeGenerationAttempts < 1)
                 model.AiCodeGenerationAttempts = 5;
-            if (model.MaxAgentSteps < 1)
-                model.MaxAgentSteps = 10;
-
             var json = JsonSerializer.Serialize(model, new JsonSerializerOptions
             {
                 WriteIndented = true
