@@ -2,10 +2,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Schema;
 
 namespace Neo.Agents.Core
 {
@@ -228,140 +227,139 @@ namespace Neo.Agents.Core
 
         #endregion
 
-        #region Neue Erweiterung: JSON-Schema-Erstellung und JSON-Initialisierung mit Newtonsoft.Json.Schema
+        #region JSON-Schema-Erstellung und JSON-Initialisierung mit System.Text.Json
 
         /// <summary>
-        /// Erstellt ein JSON-Schema des Agenten basierend auf den Metadaten (Optionen, Inputs, Outputs)
-        /// mithilfe von Newtonsoft.Json.Schema.
+        /// Erstellt ein JSON-Schema des Agenten basierend auf den Metadaten (Optionen, Inputs, Outputs).
         /// </summary>
         /// <returns>Das JSON-Schema als formatierter String.</returns>
         public string GetJsonSchema()
         {
-            // Erstelle das Root-Schema
-            JSchema schema = new JSchema
+            var schema = new JsonObject
             {
-                Title = Metadata.Name,
-                Description = Metadata.Description,
-                Type = JSchemaType.Object
+                ["title"] = Metadata.Name,
+                ["description"] = Metadata.Description,
+                ["type"] = "object",
+                ["additionalProperties"] = false
             };
+
+            var required = new JsonArray();
 
             // Optionen-Schema erstellen
-            JSchema optionsSchema = new JSchema
-            {
-                Type = JSchemaType.Object,
-                AllowAdditionalProperties = false
-            };
-
+            var optionsProperties = new JsonObject();
+            var optionsRequired = new JsonArray();
             foreach (var option in Metadata.Options)
             {
-                JSchema optionSchema = new JSchema
+                var optionSchema = new JsonObject
                 {
-                    Type = MapTypeToJSchemaType(option.OptionType),
-                    Description = option.Description
+                    ["type"] = MapTypeToSchemaString(option.OptionType),
+                    ["description"] = option.Description
                 };
 
-                if (option is IOption<object> genericOption) // Zugriff auf DefaultValue nur wenn IOption<T>
+                var iOptionInterface = option.GetType().GetInterfaces()
+                    .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IOption<>));
+                if (iOptionInterface != null)
                 {
-                    if (genericOption.DefaultValue != null)
-                    {
-                        optionSchema.Default = JToken.FromObject(genericOption.DefaultValue);
-                    }
+                    var defaultProp = iOptionInterface.GetProperty("DefaultValue");
+                    var defaultValue = defaultProp?.GetValue(option);
+                    if (defaultValue != null)
+                        optionSchema["default"] = JsonSerializer.SerializeToNode(defaultValue);
                 }
 
-
-                optionsSchema.Properties.Add(option.Name, optionSchema);
-
+                optionsProperties[option.Name] = optionSchema;
                 if (option.IsRequired)
-                {
-                    optionsSchema.Required.Add(option.Name);
-                }
+                    optionsRequired.Add(option.Name);
             }
+
+            var optionsSchema = new JsonObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = optionsProperties,
+                ["required"] = optionsRequired
+            };
 
             // Eingabeparameter-Schema erstellen
-            JSchema inputSchema = new JSchema
-            {
-                Type = JSchemaType.Object,
-                AllowAdditionalProperties = false
-            };
-
+            var inputProperties = new JsonObject();
+            var inputRequired = new JsonArray();
             foreach (var input in Metadata.InputParameters)
             {
-                JSchema inputPropSchema = new JSchema
+                inputProperties[input.Name] = new JsonObject
                 {
-                    Type = MapTypeToJSchemaType(input.ParameterType),
-                    Description = input.Description
+                    ["type"] = MapTypeToSchemaString(input.ParameterType),
+                    ["description"] = input.Description
                 };
-
-                inputSchema.Properties.Add(input.Name, inputPropSchema);
-
                 if (input.IsRequired)
-                {
-                    inputSchema.Required.Add(input.Name);
-                }
+                    inputRequired.Add(input.Name);
             }
 
-            // Ausgabeparameter-Schema erstellen
-            JSchema outputSchema = new JSchema
+            var inputSchema = new JsonObject
             {
-                Type = JSchemaType.Object,
-                AllowAdditionalProperties = false
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = inputProperties,
+                ["required"] = inputRequired
             };
 
+            // Ausgabeparameter-Schema erstellen
+            var outputProperties = new JsonObject();
+            var outputRequired = new JsonArray();
             foreach (var output in Metadata.OutputParameters)
             {
-                JSchema outputPropSchema = new JSchema
+                outputProperties[output.Name] = new JsonObject
                 {
-                    Type = MapTypeToJSchemaType(output.ParameterType),
-                    Description = output.Description
+                    ["type"] = MapTypeToSchemaString(output.ParameterType),
+                    ["description"] = output.Description
                 };
-
-                outputSchema.Properties.Add(output.Name, outputPropSchema);
-
                 if (output.IsAlwaysProvided)
-                {
-                    outputSchema.Required.Add(output.Name);
-                }
+                    outputRequired.Add(output.Name);
             }
 
+            var outputSchema = new JsonObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = outputProperties,
+                ["required"] = outputRequired
+            };
+
             // Füge die Teilschemas in das Root-Schema ein
-            schema.Properties.Add("optionsSchema", optionsSchema);
-            schema.Properties.Add("inputSchema", inputSchema);
-            schema.Properties.Add("outputSchema", outputSchema);
+            var properties = new JsonObject();
+            properties["optionsSchema"] = optionsSchema;
+            properties["inputSchema"] = inputSchema;
+            properties["outputSchema"] = outputSchema;
+            schema["properties"] = properties;
 
-            // Setze additionalProperties auf false
-            schema.AllowAdditionalProperties = false;
+            if (optionsProperties.Count > 0)
+                required.Add("optionsSchema");
+            if (inputProperties.Count > 0)
+                required.Add("inputSchema");
+            if (outputProperties.Count > 0)
+                required.Add("outputSchema");
+            schema["required"] = required;
 
-            if (optionsSchema.Properties.Count > 0)
-                schema.Required.Add("optionsSchema");
-
-            if (inputSchema.Properties.Count > 0)
-                schema.Required.Add("inputSchema");
-
-            if (outputSchema.Properties.Count > 0)
-                schema.Required.Add("outputSchema");
-
-            return schema.ToString();
+            return schema.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         }
 
         /// <summary>
-        /// Wandelt einen C#-Typ in den entsprechenden JSchemaType um.
+        /// Wandelt einen C#-Typ in den entsprechenden JSON-Schema-Typstring um.
         /// </summary>
-        private JSchemaType MapTypeToJSchemaType(Type type)
+        private string MapTypeToSchemaString(Type type)
         {
             if (type == typeof(string))
-                return JSchemaType.String;
+                return "string";
             if (type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(byte))
-                return JSchemaType.Integer;
+                return "integer";
             if (type == typeof(float) || type == typeof(double) || type == typeof(decimal))
-                return JSchemaType.Number;
+                return "number";
             if (type == typeof(bool))
-                return JSchemaType.Boolean;
+                return "boolean";
             if (typeof(IEnumerable).IsAssignableFrom(type) && type != typeof(string))
-                return JSchemaType.Array;
+                return "array";
             if (type.IsClass || type.IsInterface)
-                return JSchemaType.Object;
+                return "object";
 
-            return JSchemaType.String; // Fallback
+            return "string"; // Fallback
         }
 
         public void InitializeFromJson(string json)
@@ -369,43 +367,40 @@ namespace Neo.Agents.Core
             if (string.IsNullOrWhiteSpace(json))
                 throw new ArgumentNullException(nameof(json));
 
-            JObject root = JObject.Parse(json);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
 
             // Optionen initialisieren
-            if (root.TryGetValue("optionsSchema", out JToken? optionsToken) && optionsToken is JObject optionsObj)
+            if (root.TryGetProperty("optionsSchema", out JsonElement optionsElem) && optionsElem.ValueKind == JsonValueKind.Object)
             {
                 foreach (var option in Metadata.Options)
                 {
-                    if (optionsObj.TryGetValue(option.Name, out JToken? valueToken))
+                    if (optionsElem.TryGetProperty(option.Name, out JsonElement valueElem))
                     {
-                        // Hole die Methode SetOption<T>
                         MethodInfo? setOptionMethod = this.GetType().GetMethod("SetOption", BindingFlags.Public | BindingFlags.Instance);
                         if (setOptionMethod == null)
                             throw new InvalidOperationException("SetOption-Methode nicht gefunden.");
 
-                        // Erzeuge die generische Methode anhand des erwarteten Typs
                         MethodInfo genericSetOption = setOptionMethod.MakeGenericMethod(option.OptionType);
-                        object? value = valueToken.ToObject(option.OptionType);
+                        object? value = JsonSerializer.Deserialize(valueElem.GetRawText(), option.OptionType);
                         genericSetOption.Invoke(this, new object[] { option.Name, value! });
                     }
                 }
             }
 
             // Inputs initialisieren aus dem Schlüssel "inputSchema"
-            if (root.TryGetValue("inputSchema", out JToken? inputsToken) && inputsToken is JObject inputsObj)
+            if (root.TryGetProperty("inputSchema", out JsonElement inputsElem) && inputsElem.ValueKind == JsonValueKind.Object)
             {
                 foreach (var input in Metadata.InputParameters)
                 {
-                    if (inputsObj.TryGetValue(input.Name, out JToken? valueToken))
+                    if (inputsElem.TryGetProperty(input.Name, out JsonElement valueElem))
                     {
-                        // Hole die Methode SetInput<T>
                         MethodInfo? setInputMethod = this.GetType().GetMethod("SetInput", BindingFlags.Public | BindingFlags.Instance);
                         if (setInputMethod == null)
                             throw new InvalidOperationException("SetInput-Methode nicht gefunden.");
 
-                        // Erzeuge die generische Methode anhand des erwarteten Typs
                         MethodInfo genericSetInput = setInputMethod.MakeGenericMethod(input.ParameterType);
-                        object? value = valueToken.ToObject(input.ParameterType);
+                        object? value = JsonSerializer.Deserialize(valueElem.GetRawText(), input.ParameterType);
                         genericSetInput.Invoke(this, new object[] { input.Name, value! });
                     }
                 }
@@ -419,39 +414,37 @@ namespace Neo.Agents.Core
         /// <returns>JSON representation of the agent's current state.</returns>
         public string GetAgentStateAsJson(bool includeOutputs = false)
         {
-            var state = new JObject();
-
-            // Add type information
+            var state = new JsonObject();
             state["agentType"] = this.GetType().FullName;
 
             // Serialize options
-            var optionsObj = new JObject();
+            var optionsObj = new JsonObject();
             foreach (var key in _options.Keys)
             {
-                optionsObj[key] = JToken.FromObject(_options[key]);
+                optionsObj[key] = JsonSerializer.SerializeToNode(_options[key]);
             }
             state["optionsSchema"] = optionsObj;
 
             // Serialize inputs
-            var inputsObj = new JObject();
+            var inputsObj = new JsonObject();
             foreach (var key in _inputs.Keys)
             {
-                inputsObj[key] = JToken.FromObject(_inputs[key]);
+                inputsObj[key] = JsonSerializer.SerializeToNode(_inputs[key]);
             }
             state["inputSchema"] = inputsObj;
 
             // Serialize outputs if requested
             if (includeOutputs)
             {
-                var outputsObj = new JObject();
+                var outputsObj = new JsonObject();
                 foreach (var key in _outputs.Keys)
                 {
-                    outputsObj[key] = JToken.FromObject(_outputs[key]);
+                    outputsObj[key] = JsonSerializer.SerializeToNode(_outputs[key]);
                 }
                 state["outputSchema"] = outputsObj;
             }
 
-            return state.ToString(Formatting.Indented);
+            return state.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         }
 
         #endregion

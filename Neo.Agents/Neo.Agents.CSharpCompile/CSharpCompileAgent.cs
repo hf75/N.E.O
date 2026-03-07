@@ -15,7 +15,6 @@ using System.Reflection;
 using System.Diagnostics;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Emit;
-using Newtonsoft.Json;
 using Microsoft.NET.HostModel.AppHost;
 
 namespace Neo.Agents
