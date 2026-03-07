@@ -16,10 +16,9 @@
                                 ""Explanation"": { ""type"": ""string"" },
                                 ""Chat"": { ""type"": ""string"" },
                                 ""PowerShellScript"": { ""type"": ""string"" },
-                                ""ConsoleAppCode"": { ""type"": ""string"" },
-                                ""Plan"": { ""type"": ""string"" }
+                                ""ConsoleAppCode"": { ""type"": ""string"" }
                               },
-                              ""required"": [ ""Code"", ""Patch"", ""NuGetPackages"", ""Explanation"", ""Chat"", ""PowerShellScript"", ""ConsoleAppCode"", ""Plan"" ],
+                              ""required"": [ ""Code"", ""Patch"", ""NuGetPackages"", ""Explanation"", ""Chat"", ""PowerShellScript"", ""ConsoleAppCode"" ],
                               ""additionalProperties"": false
                             }";
 

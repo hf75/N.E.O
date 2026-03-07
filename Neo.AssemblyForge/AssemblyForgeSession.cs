@@ -135,21 +135,6 @@ public sealed class AssemblyForgeSession
                     };
                 }
 
-                // [PLAN FEATURE DISABLED] — kept for future use
-                // if (!string.IsNullOrWhiteSpace(structuredResponse.Plan))
-                // {
-                //     State.LastErrorMessage = string.Empty;
-                //     return new AssemblyForgeResult
-                //     {
-                //         Status = AssemblyForgeStatus.PlanReady,
-                //         ArtifactKind = Options.ArtifactKind,
-                //         StructuredResponse = structuredResponse,
-                //         AttemptsUsed = attempt,
-                //         AdditionalDllPaths = _workspace.AdditionalReferenceDllPaths,
-                //         NuGetDllPaths = workingNugetDlls,
-                //     };
-                // }
-
                 if (!string.IsNullOrWhiteSpace(structuredResponse.PowerShellScript))
                 {
                     State.LastErrorMessage = string.Empty;

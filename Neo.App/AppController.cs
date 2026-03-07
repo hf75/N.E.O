@@ -1256,12 +1256,12 @@ namespace Neo.App
                         return;
                     }
 
-                    // PowerShell / Console App → Agent Loop (may chain multiple steps)
+                    // PowerShell / Console App → Single-Shot execution
                     if (!string.IsNullOrWhiteSpace(structuredResponse.PowerShellScript) ||
                         !string.IsNullOrWhiteSpace(structuredResponse.ConsoleAppCode))
                     {
                         Logger.LogMessage(originalPrompt, BubbleType.Prompt);
-                        await ExecuteAgentLoopAsync(originalPrompt, structuredResponse, cancellationToken);
+                        await ExecuteSingleShotToolAsync(originalPrompt, structuredResponse, cancellationToken);
                         return;
                     }
 
@@ -1539,37 +1539,7 @@ namespace Neo.App
                 return;
             }
 
-            // Plan → review + plan-aware agent loop
-            if (result.Status == AssemblyForgeStatus.PlanReady)
-            {
-                var plan = result.StructuredResponse!.Plan;
-                Logger.LogMessage(originalPrompt, BubbleType.Prompt);
-                Logger.LogMessageWithMarkdownFormating("**Plan:**\n" + plan, BubbleType.Answer);
-
-                if (!Settings.AcceptAutomatic)
-                {
-                    PatchReviewDecision decision = _view.Dispatcher.Invoke(() =>
-                    {
-                        var review = new PatchReviewWindow(plan, null, null, isPlanMode: true)
-                        {
-                            Owner = _view
-                        };
-                        review.ShowDialog();
-                        return review.Decision;
-                    });
-
-                    if (decision == PatchReviewDecision.Reject)
-                    {
-                        Logger.LogMessage("Plan rejected.", BubbleType.Info);
-                        return;
-                    }
-                }
-
-                await ExecuteAgentLoopWithPlanAsync(originalPrompt, plan, cancellationToken);
-                return;
-            }
-
-            // PowerShell / Console App → Agent Loop (may chain multiple steps)
+            // PowerShell / Console App → Single-Shot execution
             if (result.Status == AssemblyForgeStatus.PowerShellReady ||
                 result.Status == AssemblyForgeStatus.ConsoleAppReady)
             {
@@ -1585,7 +1555,7 @@ namespace Neo.App
                     ConsoleAppCode = sr.ConsoleAppCode,
                 };
                 Logger.LogMessage(originalPrompt, BubbleType.Prompt);
-                await ExecuteAgentLoopAsync(originalPrompt, localResponse, cancellationToken);
+                await ExecuteSingleShotToolAsync(originalPrompt, localResponse, cancellationToken);
                 return;
             }
 
@@ -1665,153 +1635,6 @@ namespace Neo.App
                    "Prefer PATCH RESPONSE. If the patch would be extremely large or cannot be made to apply cleanly, use CODE RESPONSE instead.";
         }
 
-        private async Task HandlePowerShellResultAsync(string originalPrompt, string script, string? explanation, CancellationToken cancellationToken)
-        {
-
-            // Review if AcceptAutomatic is off
-            if (!Settings.AcceptAutomatic)
-            {
-                PatchReviewDecision decision = _view.Dispatcher.Invoke(() =>
-                {
-                    var review = new PatchReviewWindow(script, null, explanation, isPowerShellMode: true)
-                    {
-                        Owner = _view
-                    };
-                    review.ShowDialog();
-                    return review.Decision;
-                });
-
-                if (decision == PatchReviewDecision.Reject)
-                {
-                    Logger.LogMessage("PowerShell script rejected.", BubbleType.Info);
-                    return;
-                }
-            }
-
-            Logger.LogMessage(originalPrompt, BubbleType.Prompt);
-            Logger.LogMessage("Executing PowerShell script...", BubbleType.Info);
-
-            PowerShellAgent.SetInput("Script", script);
-            PowerShellAgent.SetInput("TimeoutSeconds", 60);
-            await PowerShellAgent.ExecuteAsync(cancellationToken);
-
-            var stdout = PowerShellAgent.GetOutput<string>("StandardOutput") ?? string.Empty;
-            var stderr = PowerShellAgent.GetOutput<string>("ErrorOutput") ?? string.Empty;
-            var exitCode = PowerShellAgent.GetOutput<int>("ExitCode");
-
-            // Send output to AI for summarization
-            string summaryPrompt = $"The user asked: \"{originalPrompt}\"\n\n"
-                + $"A PowerShell script was executed.\n\nSTDOUT:\n{stdout}\n\n"
-                + (string.IsNullOrEmpty(stderr) ? "" : $"STDERR:\n{stderr}\n\n")
-                + $"Exit Code: {exitCode}\n\n"
-                + "Please provide a brief, user-friendly explanation of the result "
-                + "in the language the user used.";
-
-            AiAgent!.SetInput("Prompt", summaryPrompt);
-            AiAgent.SetInput("SystemMessage", "You summarize PowerShell output for the user.");
-            AiAgent.SetInput("History", "");
-            AiAgent.SetInput("JsonSchema", "");
-            await AiAgent.ExecuteAsync(cancellationToken);
-
-            var summary = AiAgent.GetOutput<string>("Result") ?? stdout;
-            Logger.LogMessageWithMarkdownFormating(summary, BubbleType.Answer);
-
-            LastErrorMsg = string.Empty;
-        }
-
-        private async Task HandleConsoleAppResultAsync(string originalPrompt, string code, List<string>? nugetPackages, string? explanation, CancellationToken cancellationToken)
-        {
-            // Review if AcceptAutomatic is off
-            if (!Settings.AcceptAutomatic)
-            {
-                PatchReviewDecision decision = _view.Dispatcher.Invoke(() =>
-                {
-                    var review = new PatchReviewWindow(code, nugetPackages, explanation, isConsoleAppMode: true)
-                    {
-                        Owner = _view
-                    };
-                    review.ShowDialog();
-                    return review.Decision;
-                });
-
-                if (decision == PatchReviewDecision.Reject)
-                {
-                    Logger.LogMessage("Console app rejected.", BubbleType.Info);
-                    return;
-                }
-            }
-
-            Logger.LogMessage(originalPrompt, BubbleType.Prompt);
-            Logger.LogMessage("Compiling console application...", BubbleType.Info);
-
-            string? exePath = null;
-            string tempDir = Path.Combine(Path.GetTempPath(), "Neo.ConsoleApp", Guid.NewGuid().ToString("N"));
-
-            try
-            {
-                // Load NuGet packages if needed
-                List<string> nugetDlls = new();
-                if (nugetPackages != null && nugetPackages.Count > 0)
-                {
-                    var packs = ConvertPackageListToDictionary(nugetPackages);
-                    if (packs.Count > 0)
-                    {
-                        var nugetResult = await NugetPackageService.LoadPackagesAsync(packs, new List<string>());
-                        nugetDlls = nugetResult.DllPaths;
-                    }
-                }
-
-                // Compile
-                exePath = await CompilationService.CompileToExeAsync(
-                    new List<string> { code },
-                    tempDir,
-                    nugetDlls,
-                    assemblyName: "ConsoleApp",
-                    mainTypeName: "ConsoleApp.Program");
-
-                if (string.IsNullOrWhiteSpace(exePath))
-                    throw new InvalidOperationException("Compilation failed — no executable was produced.");
-
-                Logger.LogMessage("Running console application...", BubbleType.Info);
-
-                // Run the compiled exe
-                var (stdout, stderr, exitCode) = await RunProcessAsync(exePath, timeoutSeconds: 60, cancellationToken);
-
-                // Send output to AI for summarization
-                string summaryPrompt = $"The user asked: \"{originalPrompt}\"\n\n"
-                    + $"A compiled C# console application was executed.\n\nSTDOUT:\n{stdout}\n\n"
-                    + (string.IsNullOrEmpty(stderr) ? "" : $"STDERR:\n{stderr}\n\n")
-                    + $"Exit Code: {exitCode}\n\n"
-                    + "Please provide a brief, user-friendly explanation of the result "
-                    + "in the language the user used.";
-
-                AiAgent!.SetInput("Prompt", summaryPrompt);
-                AiAgent.SetInput("SystemMessage", "You summarize console application output for the user.");
-                AiAgent.SetInput("History", "");
-                AiAgent.SetInput("JsonSchema", "");
-                await AiAgent.ExecuteAsync(cancellationToken);
-
-                var summary = AiAgent.GetOutput<string>("Result") ?? stdout;
-                Logger.LogMessageWithMarkdownFormating(summary, BubbleType.Answer);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogMessage($"Console app error: {ex.Message}", BubbleType.CompletionError);
-            }
-            finally
-            {
-                // Cleanup temp directory
-                try
-                {
-                    if (Directory.Exists(tempDir))
-                        Directory.Delete(tempDir, recursive: true);
-                }
-                catch { /* best effort */ }
-            }
-
-            LastErrorMsg = string.Empty;
-        }
-
         private static async Task<(string stdout, string stderr, int exitCode)> RunProcessAsync(string exePath, int timeoutSeconds, CancellationToken cancellationToken)
         {
             var startInfo = new ProcessStartInfo
@@ -1860,7 +1683,54 @@ namespace Neo.App
             return (stdout.TrimEnd(), stderr.TrimEnd(), process.ExitCode);
         }
 
-        // ── Agent Loop infrastructure ──────────────────────────────────────
+        // ── Single-Shot Tool Execution ────────────────────────────────────
+
+        private async Task ExecuteSingleShotToolAsync(string originalPrompt, StructuredResponse response, CancellationToken cancellationToken)
+        {
+            AgentStepResult stepResult;
+
+            if (!string.IsNullOrWhiteSpace(response.PowerShellScript))
+                stepResult = await ExecutePowerShellStepAsync(response.PowerShellScript, response.Explanation, cancellationToken);
+            else if (!string.IsNullOrWhiteSpace(response.ConsoleAppCode))
+                stepResult = await ExecuteConsoleAppStepAsync(response.ConsoleAppCode, response.NuGetPackages?.ToList(), response.Explanation, cancellationToken);
+            else
+                return;
+
+            if (stepResult.WasRejected)
+                return;
+
+            string preview = Truncate(ToSingleLine(stepResult.Stdout), 500);
+            if (!string.IsNullOrWhiteSpace(stepResult.Stderr))
+                preview += " | STDERR: " + Truncate(ToSingleLine(stepResult.Stderr), 200);
+            Logger.LogMessage($"{stepResult.ToolName}: {preview}", BubbleType.Info);
+
+            try
+            {
+                string summaryPrompt = $"The user asked: \"{originalPrompt}\"\n\n"
+                    + $"A {stepResult.ToolName} was executed.\n\nSTDOUT:\n{Truncate(stepResult.Stdout, 8000)}\n\n"
+                    + (string.IsNullOrEmpty(stepResult.Stderr) ? "" : $"STDERR:\n{Truncate(stepResult.Stderr, 4000)}\n\n")
+                    + $"Exit Code: {stepResult.ExitCode}\n\n"
+                    + "Please provide a brief, user-friendly explanation of the result in the language the user used.";
+
+                AiAgent!.SetInput("Prompt", summaryPrompt);
+                AiAgent.SetInput("SystemMessage", "You summarize tool execution results for the user.");
+                AiAgent.SetInput("History", "");
+                AiAgent.SetInput("JsonSchema", "");
+                await AiAgent.ExecuteAsync(cancellationToken);
+
+                var summary = AiAgent.GetOutput<string>("Result") ?? stepResult.Stdout;
+                Logger.LogMessageWithMarkdownFormating(summary, BubbleType.Answer);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception)
+            {
+                Logger.LogMessage(Truncate(stepResult.Stdout, 2000), BubbleType.Answer);
+            }
+
+            LastErrorMsg = string.Empty;
+        }
+
+        // ── Agent Step infrastructure ────────────────────────────────────────
 
         private sealed class AgentStepResult
         {
@@ -1991,344 +1861,6 @@ namespace Neo.App
                 }
                 catch { /* best effort */ }
             }
-        }
-
-        private static string BuildAgentFollowUpPrompt(string originalPrompt, string accumulatedContext, int currentStep, int maxSteps)
-        {
-            int remaining = maxSteps - currentStep;
-            return $"ORIGINAL USER REQUEST: {originalPrompt}\n\n" +
-                   $"ACCUMULATED TOOL RESULTS (step {currentStep} of {maxSteps}):\n" +
-                   accumulatedContext + "\n\n" +
-                   "IMPORTANT RULES:\n" +
-                   "1. The tool output above is the AUTHORITATIVE source of truth. Do NOT re-compute, re-count, or second-guess tool results.\n" +
-                   "2. Do NOT repeat a tool execution if the result you need is already in the accumulated output above.\n" +
-                   "3. When you choose CHAT RESPONSE, your answer MUST be based strictly on the tool results. Report what the tools found, do not substitute your own reasoning for factual data the tools already provided.\n\n" +
-                   "Decide your next action:\n" +
-                   "- If you have the final answer from the tool results → CHAT RESPONSE (relay the tool findings).\n" +
-                   "- If you genuinely need more data that is NOT in the results above → POWERSHELL or CONSOLE APP.\n" +
-                   "- If you want to build a UI → CODE or PATCH RESPONSE.\n" +
-                   $"You have {remaining} step(s) left.";
-        }
-
-        private async Task ExecuteAgentLoopAsync(string originalPrompt, StructuredResponse initialResponse, CancellationToken cancellationToken)
-        {
-            int maxSteps = Settings?.MaxAgentSteps ?? 10;
-            if (maxSteps < 1) maxSteps = 10;
-            if (maxSteps > 25) maxSteps = 25;
-
-            var contextAccumulator = new System.Text.StringBuilder();
-            var currentResponse = initialResponse;
-            string systemMessage = AISystemMessages.GetSystemMessage(Settings!.UseAvalonia, Settings.UseReactUi, Settings.UsePython);
-
-            for (int step = 1; step <= maxSteps; step++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                _view._waitIndicator!.StatusText = $"Agent Step {step}";
-
-                // 1. Execute current step
-                AgentStepResult stepResult;
-                if (!string.IsNullOrWhiteSpace(currentResponse.PowerShellScript))
-                {
-                    stepResult = await ExecutePowerShellStepAsync(currentResponse.PowerShellScript, currentResponse.Explanation, cancellationToken);
-                }
-                else if (!string.IsNullOrWhiteSpace(currentResponse.ConsoleAppCode))
-                {
-                    stepResult = await ExecuteConsoleAppStepAsync(currentResponse.ConsoleAppCode, currentResponse.NuGetPackages?.ToList(), currentResponse.Explanation, cancellationToken);
-                }
-                else
-                {
-                    break; // Unexpected — should not reach here
-                }
-
-                if (stepResult.WasRejected)
-                    return;
-
-                // 2. Log output (truncated preview)
-                string preview = Truncate(ToSingleLine(stepResult.Stdout), 500);
-                if (!string.IsNullOrWhiteSpace(stepResult.Stderr))
-                    preview += " | STDERR: " + Truncate(ToSingleLine(stepResult.Stderr), 200);
-                Logger.LogMessage($"[Step {step}] {stepResult.ToolName}: {preview}", BubbleType.Info);
-
-                // 3. Accumulate context
-                contextAccumulator.AppendLine($"--- Step {step}: {stepResult.ToolName} ---");
-                contextAccumulator.AppendLine($"STDOUT:\n{stepResult.Stdout}");
-                if (!string.IsNullOrEmpty(stepResult.Stderr))
-                    contextAccumulator.AppendLine($"STDERR:\n{stepResult.Stderr}");
-                contextAccumulator.AppendLine($"EXIT CODE: {stepResult.ExitCode}");
-                contextAccumulator.AppendLine();
-
-                // 4. Call AI again with FULL schema so it can choose its next action
-                string followUpPrompt = BuildAgentFollowUpPrompt(originalPrompt, contextAccumulator.ToString(), step, maxSteps);
-
-                await ExecuteAIQuery(followUpPrompt, systemMessage, "", JsonSchemata.JsonSchemaResponse, cancellationToken);
-                string? completion = AiAgent!.GetOutput<string>("Result");
-
-                if (string.IsNullOrWhiteSpace(completion))
-                {
-                    Logger.LogMessage("AI returned empty response during agent loop.", BubbleType.CompletionError);
-                    return;
-                }
-
-                currentResponse = JsonConvert.DeserializeObject<StructuredResponse>(completion) ?? new StructuredResponse();
-
-                // 5. Terminal check: Chat → done
-                if (!string.IsNullOrWhiteSpace(currentResponse.Chat))
-                {
-                    Logger.LogMessageWithMarkdownFormating(currentResponse.Chat, BubbleType.CompletionSuccess);
-                    LastErrorMsg = string.Empty;
-                    return;
-                }
-
-                // Terminal check: Code/Patch → compile UI → done
-                if (!string.IsNullOrWhiteSpace(currentResponse.Code) || !string.IsNullOrWhiteSpace(currentResponse.Patch))
-                {
-                    await HandleTerminalCodePatchResponseAsync(originalPrompt, currentResponse, cancellationToken);
-                    return;
-                }
-
-                // Non-terminal: PowerShell/ConsoleApp → continue loop
-                if (!string.IsNullOrWhiteSpace(currentResponse.PowerShellScript) ||
-                    !string.IsNullOrWhiteSpace(currentResponse.ConsoleAppCode))
-                {
-                    continue;
-                }
-
-                // Unexpected empty response — break
-                break;
-            }
-
-            // Max steps reached → force summarization
-            string forceSummaryPrompt = $"ORIGINAL USER REQUEST: {originalPrompt}\n\n" +
-                                        $"ACCUMULATED TOOL RESULTS:\n{contextAccumulator}\n\n" +
-                                        "You have reached the maximum number of agent steps. " +
-                                        "Summarize the tool results below and provide a final answer to the user. " +
-                                        "Base your answer ONLY on the actual tool output. Do not re-compute or guess — report exactly what the tools found.";
-
-            AiAgent!.SetInput("Prompt", forceSummaryPrompt);
-            AiAgent.SetInput("SystemMessage", "You summarize tool execution results for the user.");
-            AiAgent.SetInput("History", "");
-            AiAgent.SetInput("JsonSchema", "");
-            await AiAgent.ExecuteAsync(cancellationToken);
-
-            var summary = AiAgent.GetOutput<string>("Result") ?? "Agent loop completed but no summary could be generated.";
-            Logger.LogMessageWithMarkdownFormating(summary, BubbleType.CompletionSuccess);
-            LastErrorMsg = string.Empty;
-        }
-
-        private async Task ExecuteAgentLoopWithPlanAsync(string originalPrompt, string plan, CancellationToken cancellationToken)
-        {
-            int maxSteps = Settings?.MaxAgentSteps ?? 10;
-            if (maxSteps < 1) maxSteps = 10;
-            if (maxSteps > 25) maxSteps = 25;
-
-            var contextAccumulator = new StringBuilder();
-            string systemMessage = AISystemMessages.GetSystemMessage(Settings!.UseAvalonia, Settings.UseReactUi, Settings.UsePython);
-
-            for (int step = 1; step <= maxSteps; step++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                string stepDesc = GetPlanStepDescription(plan, step);
-                _view._waitIndicator!.StatusText = $"Plan Step {step}: {stepDesc}";
-
-                string stepPrompt = BuildPlanStepPrompt(originalPrompt, plan, contextAccumulator.ToString(), step, maxSteps);
-
-                await ExecuteAIQuery(stepPrompt, systemMessage, "", JsonSchemata.JsonSchemaResponse, cancellationToken);
-                string? completion = AiAgent!.GetOutput<string>("Result");
-
-                if (string.IsNullOrWhiteSpace(completion))
-                {
-                    Logger.LogMessage("AI returned empty response during plan execution.", BubbleType.CompletionError);
-                    return;
-                }
-
-                var currentResponse = JsonConvert.DeserializeObject<StructuredResponse>(completion) ?? new StructuredResponse();
-
-                // Terminal: Chat → done
-                if (!string.IsNullOrWhiteSpace(currentResponse.Chat))
-                {
-                    Logger.LogMessageWithMarkdownFormating(currentResponse.Chat, BubbleType.CompletionSuccess);
-                    LastErrorMsg = string.Empty;
-                    return;
-                }
-
-                // Terminal: Code/Patch → compile UI → done
-                if (!string.IsNullOrWhiteSpace(currentResponse.Code) || !string.IsNullOrWhiteSpace(currentResponse.Patch))
-                {
-                    await HandleTerminalCodePatchResponseAsync(originalPrompt, currentResponse, cancellationToken);
-                    return;
-                }
-
-                // Execute PowerShell or ConsoleApp step
-                AgentStepResult stepResult;
-                if (!string.IsNullOrWhiteSpace(currentResponse.PowerShellScript))
-                {
-                    stepResult = await ExecutePowerShellStepAsync(currentResponse.PowerShellScript, currentResponse.Explanation, cancellationToken);
-                }
-                else if (!string.IsNullOrWhiteSpace(currentResponse.ConsoleAppCode))
-                {
-                    stepResult = await ExecuteConsoleAppStepAsync(currentResponse.ConsoleAppCode, currentResponse.NuGetPackages?.ToList(), currentResponse.Explanation, cancellationToken);
-                }
-                else
-                {
-                    break; // Unexpected empty response
-                }
-
-                if (stepResult.WasRejected)
-                    return;
-
-                string preview = Truncate(ToSingleLine(stepResult.Stdout), 500);
-                if (!string.IsNullOrWhiteSpace(stepResult.Stderr))
-                    preview += " | STDERR: " + Truncate(ToSingleLine(stepResult.Stderr), 200);
-                Logger.LogMessage($"[Plan Step {step}] {stepResult.ToolName}: {preview}", BubbleType.Info);
-
-                contextAccumulator.AppendLine($"--- Step {step}: {stepResult.ToolName} ---");
-                contextAccumulator.AppendLine($"STDOUT:\n{stepResult.Stdout}");
-                if (!string.IsNullOrEmpty(stepResult.Stderr))
-                    contextAccumulator.AppendLine($"STDERR:\n{stepResult.Stderr}");
-                contextAccumulator.AppendLine($"EXIT CODE: {stepResult.ExitCode}");
-                contextAccumulator.AppendLine();
-            }
-
-            // Max steps reached → force summarization
-            string forceSummaryPrompt = $"ORIGINAL USER REQUEST: {originalPrompt}\n\n" +
-                                        $"YOUR PLAN:\n{plan}\n\n" +
-                                        $"ACCUMULATED TOOL RESULTS:\n{contextAccumulator}\n\n" +
-                                        "You have reached the maximum number of plan steps. " +
-                                        "Summarize the tool results and provide a final answer. " +
-                                        "Base your answer ONLY on the actual tool output.";
-
-            AiAgent!.SetInput("Prompt", forceSummaryPrompt);
-            AiAgent.SetInput("SystemMessage", "You summarize tool execution results for the user.");
-            AiAgent.SetInput("History", "");
-            AiAgent.SetInput("JsonSchema", "");
-            await AiAgent.ExecuteAsync(cancellationToken);
-
-            var planSummary = AiAgent.GetOutput<string>("Result") ?? "Plan execution completed but no summary could be generated.";
-            Logger.LogMessageWithMarkdownFormating(planSummary, BubbleType.CompletionSuccess);
-            LastErrorMsg = string.Empty;
-        }
-
-        private static string BuildPlanStepPrompt(string originalPrompt, string plan, string accumulatedContext, int currentStep, int maxSteps)
-        {
-            int remaining = maxSteps - currentStep;
-            return $"ORIGINAL USER REQUEST: {originalPrompt}\n\n" +
-                   $"YOUR PLAN:\n{plan}\n\n" +
-                   (string.IsNullOrEmpty(accumulatedContext)
-                       ? ""
-                       : $"ACCUMULATED TOOL RESULTS:\n{accumulatedContext}\n\n") +
-                   $"Execute the next step of your plan. You are on step {currentStep} of {maxSteps} max steps ({remaining} remaining).\n\n" +
-                   "IMPORTANT RULES:\n" +
-                   "1. Follow your plan. Tool output is the AUTHORITATIVE source of truth.\n" +
-                   "2. Do NOT repeat a tool execution if the result is already in the accumulated output.\n" +
-                   "3. Choose your action: POWERSHELL, CONSOLE APP, CODE/PATCH (if ready for UI), or CHAT (if done).\n" +
-                   "4. Do NOT return a PLAN response again — the plan is already set.";
-        }
-
-        private static string GetPlanStepDescription(string plan, int stepNumber)
-        {
-            var prefix = stepNumber + ".";
-            foreach (var line in plan.Split('\n'))
-            {
-                var trimmed = line.TrimStart();
-                if (trimmed.StartsWith(prefix, StringComparison.Ordinal))
-                {
-                    var desc = trimmed.Substring(prefix.Length).TrimStart();
-                    return desc.Length > 50 ? desc.Substring(0, 50) + "..." : desc;
-                }
-            }
-            return "Executing...";
-        }
-
-        private async Task HandleTerminalCodePatchResponseAsync(string originalPrompt, StructuredResponse response, CancellationToken cancellationToken)
-        {
-            string baseCodeForPatch = VirtualProjectFiles?.GetFileContent("./currentcode.cs") ?? AppState.LastCode ?? string.Empty;
-            string codeToTest = response.Code ?? string.Empty;
-
-            // Apply patch if present
-            if (!string.IsNullOrWhiteSpace(response.Patch))
-            {
-                var patchResult = UnifiedDiffPatcher.TryApplyToCurrentCode(baseCodeForPatch, response.Patch);
-                if (!patchResult.Success || string.IsNullOrWhiteSpace(patchResult.PatchedText))
-                    throw new Exception($"The generated patch could not be applied: {patchResult.ErrorMessage}");
-
-                codeToTest = patchResult.PatchedText;
-                response.Code = codeToTest;
-            }
-
-            if (!ContainsNamedUserControl(codeToTest, "DynamicUserControl"))
-                throw new Exception("The generated UserControl is invalid...");
-
-            // Review if AcceptAutomatic is off
-            if (!Settings.AcceptAutomatic)
-            {
-                PatchReviewDecision decision = _view.Dispatcher.Invoke(() =>
-                {
-                    var review = new PatchReviewWindow(
-                        !string.IsNullOrWhiteSpace(response.Patch) ? response.Patch : codeToTest,
-                        response.NuGetPackages?.ToList(),
-                        response.Explanation)
-                    {
-                        Owner = _view
-                    };
-                    review.ShowDialog();
-                    return review.Decision;
-                });
-
-                if (decision == PatchReviewDecision.Reject)
-                {
-                    Logger.LogMessage("Changes rejected.", BubbleType.Info);
-                    return;
-                }
-            }
-
-            // Load NuGet packages
-            if (response.NuGetPackages != null && response.NuGetPackages.Count > 0)
-            {
-                var packs = ConvertPackageListToDictionary(response.NuGetPackages!);
-                await LoadAndApplyNugetPackages(packs);
-            }
-
-            // Update virtual project
-            VirtualProjectFiles?.UpdateFileContent("./currentcode.cs", codeToTest);
-
-            // Compile and display
-            string? compiledDllPath = await CompileToDllAsync(VirtualProjectFiles!.GetSourceCodeAsStrings());
-            if (string.IsNullOrWhiteSpace(compiledDllPath))
-                throw new InvalidOperationException("Failed to compile the generated code.");
-
-            if (!await DisplayCompiledDllAsync(compiledDllPath))
-                throw new InvalidOperationException("Failed to load the control in the child process.");
-
-            // Log result
-            Logger.LogMessage(originalPrompt, BubbleType.Prompt);
-            Logger.LogMessageWithMarkdownFormating(
-                response.Explanation ?? "Code generated via agent loop.",
-                BubbleType.Answer);
-
-            // Update state
-            string historyTitle = $"Prompt: {Truncate(ToSingleLine(originalPrompt), 60)}";
-            string historyDescription = "Agent loop → UI";
-
-            if (!string.IsNullOrWhiteSpace(response.Explanation))
-                historyDescription = Truncate(ToSingleLine(response.Explanation), 240);
-
-            ApplyState(s =>
-            {
-                s.LastCode = codeToTest;
-                s.NuGetDlls = AppState.NuGetDlls;
-                s.PackageVersions = new Dictionary<string, string>(AppState.PackageVersions, StringComparer.OrdinalIgnoreCase);
-            }, title: historyTitle, description: historyDescription, skipIfUnchanged: true);
-
-            // Sync PromptToDll session state if available
-            if (_promptToDllSession != null)
-            {
-                _promptToDllSession.State.CurrentCode = codeToTest;
-                _promptToDllSession.State.NuGetDlls = AppState.NuGetDlls.ToList();
-                _promptToDllSession.State.PackageVersions = new Dictionary<string, string>(AppState.PackageVersions, StringComparer.OrdinalIgnoreCase);
-            }
-
-            LastErrorMsg = string.Empty;
         }
 
         public static bool ContainsNamedUserControl(string code, string className)

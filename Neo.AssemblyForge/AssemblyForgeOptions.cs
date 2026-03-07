@@ -25,7 +25,6 @@ public enum AssemblyForgeStatus
     Failed,
     PowerShellReady,
     ConsoleAppReady,
-    PlanReady,
 }
 
 public enum AssemblyForgeReviewAction
