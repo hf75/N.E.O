@@ -133,6 +133,14 @@ namespace Neo.App
 
             AdditionalDlls.Add("./Neo.Agents.Core.dll");
             AdditionalDlls.Add(GetAIQueryAgentDll(Settings.AIQueryProvider));
+
+            // DynamicSlot: Make the slot DLL available as a compile reference
+            // so AI-generated code can use DynamicSlot controls
+            var dynamicSlotDll = Settings.UseAvalonia
+                ? "./Neo.DynamicSlot.Avalonia.dll"
+                : "./Neo.DynamicSlot.Wpf.dll";
+            AdditionalDlls.Add(dynamicSlotDll);
+
             DefaultNugets.Add(GetAIQueryNuGetPackage(Settings.AIQueryProvider));
 
             if (Settings.UsePython)

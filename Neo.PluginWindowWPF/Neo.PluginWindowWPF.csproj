@@ -15,6 +15,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
     <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
+    <ProjectReference Include="..\Neo.DynamicSlot.Wpf\Neo.DynamicSlot.Wpf.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.Claude\Neo.Agents.Claude.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.OpenAI\Neo.Agents.OpenAI.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.Gemini\Neo.Agents.Gemini.csproj" />
   </ItemGroup>
 
 </Project>

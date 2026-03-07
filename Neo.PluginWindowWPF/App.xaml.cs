@@ -107,10 +107,13 @@ namespace Neo.PluginWindowWPF
             await SafeSendAsync(new IpcEnvelope(
                 IpcTypes.Hello,
                 Guid.NewGuid().ToString("N"),
-                Json.ToJson(new HelloMessage("Child", Environment.ProcessId, Hwnd: hwnd.ToInt64()))
+                Neo.IPC.Json.ToJson(new HelloMessage("Child", Environment.ProcessId, Hwnd: hwnd.ToInt64()))
             ));
 
-            // 6) NEU: Framed Receive-Loop starten (Control + Blob)
+            // 6) DynamicSlot-Compiler konfigurieren (bevor irgendein Plugin geladen wird)
+            ConfigureDynamicSlotCompiler();
+
+            // 7) NEU: Framed Receive-Loop starten (Control + Blob)
             _ = Task.Run(() => FramedListenLoopAsync(_ipcCts.Token));
 
             // 7) Heartbeat
@@ -126,12 +129,84 @@ namespace Neo.PluginWindowWPF
                     var hb = new { Pid = Environment.ProcessId, WhenUtc = DateTime.UtcNow };
 
                     // WICHTIG: Der Sende-Aufruf selbst darf die UI nicht blockieren.
-                    _ = SafeSendAsync(new IpcEnvelope(IpcTypes.Heartbeat, "", Json.ToJson(hb)));
+                    _ = SafeSendAsync(new IpcEnvelope(IpcTypes.Heartbeat, "", Neo.IPC.Json.ToJson(hb)));
                 }
                 catch (Exception ex) { Debug.WriteLine($"[Heartbeat] {ex.Message}"); }
             };
 
             _hb.Start();
+        }
+
+        // =======================================================
+        // DynamicSlot – Embedded AI Compiler Setup
+        // =======================================================
+        private void ConfigureDynamicSlotCompiler()
+        {
+            try
+            {
+                Neo.Agents.Core.IAgent? agent = null;
+
+                // Priority: Claude → Gemini → OpenAI (same as host AppController)
+                var anthropicKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY", EnvironmentVariableTarget.User);
+                if (!string.IsNullOrWhiteSpace(anthropicKey))
+                {
+                    agent = new Neo.Agents.AnthropicTextChatAgent();
+                    agent.SetOption("ApiKey", anthropicKey);
+                    agent.SetOption("Model", Environment.GetEnvironmentVariable("NEO_SLOT_MODEL") ?? "claude-sonnet-4-20250514");
+                }
+
+                if (agent == null)
+                {
+                    var geminiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY", EnvironmentVariableTarget.User);
+                    if (!string.IsNullOrWhiteSpace(geminiKey))
+                    {
+                        agent = new Neo.Agents.GeminiTextChatAgent();
+                        agent.SetOption("ApiKey", geminiKey);
+                        agent.SetOption("Model", Environment.GetEnvironmentVariable("NEO_SLOT_MODEL") ?? "gemini-2.0-flash");
+                    }
+                }
+
+                if (agent == null)
+                {
+                    var openAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY", EnvironmentVariableTarget.User);
+                    if (!string.IsNullOrWhiteSpace(openAiKey))
+                    {
+                        agent = new Neo.Agents.OpenAiTextChatAgent();
+                        agent.SetOption("ApiKey", openAiKey);
+                        agent.SetOption("Model", Environment.GetEnvironmentVariable("NEO_SLOT_MODEL") ?? "gpt-4o");
+                    }
+                }
+
+                if (agent == null)
+                {
+                    Debug.WriteLine("[DynamicSlot] No AI API key found. DynamicSlots will show an error message.");
+                    return;
+                }
+
+                var completionProvider = new Neo.AssemblyForge.Completion.AiApiAgentCompletionProvider(agent);
+
+                var dotnetMajor = Environment.Version.Major;
+                var refDirs = new List<string>();
+                var corePath = Neo.AssemblyForge.Utils.DotNetRuntimeFinder.GetHighestRuntimePath(
+                    Neo.AssemblyForge.Utils.DotNetRuntimeType.NetCoreApp, dotnetMajor);
+                if (!string.IsNullOrWhiteSpace(corePath)) refDirs.Add(corePath);
+                var desktopPath = Neo.AssemblyForge.Utils.DotNetRuntimeFinder.GetHighestRuntimePath(
+                    Neo.AssemblyForge.Utils.DotNetRuntimeType.WindowsDesktopApp, dotnetMajor);
+                if (!string.IsNullOrWhiteSpace(desktopPath)) refDirs.Add(desktopPath);
+
+                var workspacePath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Neo.Create", "Slots");
+
+                Neo.AssemblyForge.Slot.DynamicSlotService.Compiler =
+                    new Neo.AssemblyForge.Slot.EmbeddedSlotCompiler(completionProvider, refDirs, workspacePath);
+
+                Debug.WriteLine($"[DynamicSlot] Compiler configured with {agent.GetType().Name}, {refDirs.Count} ref dirs.");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[DynamicSlot] Configuration failed: {ex.Message}");
+            }
         }
 
         protected override async void OnExit(ExitEventArgs e)
@@ -257,12 +332,12 @@ namespace Neo.PluginWindowWPF
                 case IpcTypes.Hello:
                     await SafeSendAsync(new IpcEnvelope(
                         IpcTypes.Ack, env.CorrelationId,
-                        Json.ToJson(new AckMessage("Hello received by Child"))
+                        Neo.IPC.Json.ToJson(new AckMessage("Hello received by Child"))
                     ));
                     break;
                 case IpcTypes.LoadControl:
                     {
-                        var req = Json.FromJson<LoadControlRequest>(env.PayloadJson)!;
+                        var req = Neo.IPC.Json.FromJson<LoadControlRequest>(env.PayloadJson)!;
 
                         try
                         {
@@ -280,20 +355,20 @@ namespace Neo.PluginWindowWPF
                             await SendLogAsync(LogLevel.Info, "LoadControl executed.", "Child", "Mode=Bytes(In-Memory)");
                             await SafeSendAsync(new IpcEnvelope(
                                 IpcTypes.Ack, env.CorrelationId,
-                                Json.ToJson(new AckMessage("Loaded (bytes/in-memory)"))
+                                Neo.IPC.Json.ToJson(new AckMessage("Loaded (bytes/in-memory)"))
                             ));
                         }
                         catch (Exception ex)
                         {
                             await _client!.SendAsync(new IpcEnvelope(
                                 IpcTypes.Error, env.CorrelationId,
-                                Json.ToJson(new ErrorMessage(ex.Message, ex.GetType().FullName, ex.ToString()))
+                                Neo.IPC.Json.ToJson(new ErrorMessage(ex.Message, ex.GetType().FullName, ex.ToString()))
                             ));
                         }
                         break;
                     }
                 case IpcTypes.CursorVisible:
-                    var msg = Json.FromJson<IsCursorVisible>(env.PayloadJson)!;
+                    var msg = Neo.IPC.Json.FromJson<IsCursorVisible>(env.PayloadJson)!;
 
                     await Dispatcher.BeginInvoke(() =>
                     {
@@ -302,11 +377,11 @@ namespace Neo.PluginWindowWPF
 
                     await SafeSendAsync(new IpcEnvelope(
                         IpcTypes.Ack, env.CorrelationId,
-                        Json.ToJson(new AckMessage($"Cursor Changed!"))
+                        Neo.IPC.Json.ToJson(new AckMessage($"Cursor Changed!"))
                     ));
                     break;
                 case IpcTypes.SetChildModal:
-                    var modalMsg = Json.FromJson<IsChildModal>(env.PayloadJson)!;
+                    var modalMsg = Neo.IPC.Json.FromJson<IsChildModal>(env.PayloadJson)!;
 
                     await Dispatcher.BeginInvoke(() =>
                     {
@@ -315,11 +390,11 @@ namespace Neo.PluginWindowWPF
 
                     await SafeSendAsync(new IpcEnvelope(
                         IpcTypes.Ack, env.CorrelationId,
-                        Json.ToJson(new AckMessage($"Cursor Changed!"))
+                        Neo.IPC.Json.ToJson(new AckMessage($"Cursor Changed!"))
                     ));
                     break;
                 case IpcTypes.SetDesignerMode:
-                    var designerMsg = Json.FromJson<SetDesignerModeMessage>(env.PayloadJson)!;
+                    var designerMsg = Neo.IPC.Json.FromJson<SetDesignerModeMessage>(env.PayloadJson)!;
 
                     await Dispatcher.BeginInvoke(() =>
                     {
@@ -328,7 +403,7 @@ namespace Neo.PluginWindowWPF
 
                     await SafeSendAsync(new IpcEnvelope(
                         IpcTypes.Ack, env.CorrelationId,
-                        Json.ToJson(new AckMessage("Designer mode updated."))
+                        Neo.IPC.Json.ToJson(new AckMessage("Designer mode updated."))
                     ));
                     break;
                 case IpcTypes.UnloadControl:
@@ -339,13 +414,13 @@ namespace Neo.PluginWindowWPF
 
                     await SafeSendAsync(new IpcEnvelope(
                         IpcTypes.Ack, env.CorrelationId,
-                        Json.ToJson(new AckMessage("Control unloaded."))
+                        Neo.IPC.Json.ToJson(new AckMessage("Control unloaded."))
                     ));
                     break;
                 default:
                     await SafeSendAsync(new IpcEnvelope(
                         IpcTypes.Ack, env.CorrelationId,
-                        Json.ToJson(new AckMessage($"Unknown command '{env.Type}' ignored by Child"))
+                        Neo.IPC.Json.ToJson(new AckMessage($"Unknown command '{env.Type}' ignored by Child"))
                     ));
                     break;
             }
@@ -382,7 +457,7 @@ namespace Neo.PluginWindowWPF
         {
             if (_client == null) return Task.CompletedTask;
             var log = new LogMessage(level, message, category, details);
-            return SafeSendAsync(new IpcEnvelope(IpcTypes.Log, CorrelationId: "", PayloadJson: Json.ToJson(log)));
+            return SafeSendAsync(new IpcEnvelope(IpcTypes.Log, CorrelationId: "", PayloadJson: Neo.IPC.Json.ToJson(log)));
         }
 
         private Task SendErrorAsync(string context, Exception? ex)
@@ -397,7 +472,7 @@ namespace Neo.PluginWindowWPF
                 Level: LogLevel.Error
             );
 
-            return SafeSendAsync(new IpcEnvelope(IpcTypes.Error, CorrelationId: "", PayloadJson: Json.ToJson(err)));
+            return SafeSendAsync(new IpcEnvelope(IpcTypes.Error, CorrelationId: "", PayloadJson: Neo.IPC.Json.ToJson(err)));
         }
 
         private void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
@@ -435,7 +510,7 @@ namespace Neo.PluginWindowWPF
                     Context: isTerminating ? $"{context} (IsTerminating=true)" : context,
                     Level: LogLevel.Error
                 );
-                var envelope = new IpcEnvelope(IpcTypes.Error, "", Json.ToJson(payload));
+                var envelope = new IpcEnvelope(IpcTypes.Error, "", Neo.IPC.Json.ToJson(payload));
 
                 _client.SendAsync(envelope).Wait(TimeSpan.FromMilliseconds(100));
             }
@@ -514,7 +589,7 @@ namespace Neo.PluginWindowWPF
 
             await SafeSendAsync(new IpcEnvelope(IpcTypes.NotifyFirstChildVisibility,
                 CorrelationId: "",
-                PayloadJson: Json.ToJson(msg)));
+                PayloadJson: Neo.IPC.Json.ToJson(msg)));
         }
 
         public async Task NotifyParentAboutActivation()
@@ -526,7 +601,7 @@ namespace Neo.PluginWindowWPF
 
             await SafeSendAsync(new IpcEnvelope(IpcTypes.ChildActivated, 
                 CorrelationId: "", 
-                PayloadJson: Json.ToJson(msg)));
+                PayloadJson: Neo.IPC.Json.ToJson(msg)));
         }
 
         public Task NotifyParentDesignerSelection(DesignerSelectionMessage selection)
@@ -537,7 +612,7 @@ namespace Neo.PluginWindowWPF
             return SafeSendAsync(new IpcEnvelope(
                 IpcTypes.DesignerSelection,
                 CorrelationId: "",
-                PayloadJson: Json.ToJson(selection)));
+                PayloadJson: Neo.IPC.Json.ToJson(selection)));
         }
 
         private void HardExitNow()
