@@ -239,5 +239,17 @@ namespace Neo.App
                 return new List<string>();
             }
         }
+
+        public static Task<List<string>> FetchOpenAiWhisperModelsAsync()
+        {
+            // The OpenAI transcription models are a known static set.
+            var models = new List<string>
+            {
+                "gpt-4o-mini-transcribe",
+                "gpt-4o-transcribe",
+                "whisper-1",
+            };
+            return Task.FromResult(models);
+        }
     }
 }

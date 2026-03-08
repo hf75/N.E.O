@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
@@ -538,5 +539,117 @@ namespace Neo.Agents.Core
             IsAlwaysProvided = isAlwaysProvided;
             Description = description;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Streaming Infrastructure
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A single chunk of streaming output from a streaming agent.
+    /// </summary>
+    public class StreamChunk
+    {
+        /// <summary>
+        /// Identifies what is being streamed (e.g. "TranscribedText", "AudioData").
+        /// Maps to an OutputParameter name.
+        /// </summary>
+        public string Name { get; }
+
+        /// <summary>
+        /// The partial value for this chunk.
+        /// </summary>
+        public object Value { get; }
+
+        /// <summary>
+        /// True if this is the final chunk for this output name.
+        /// </summary>
+        public bool IsFinal { get; }
+
+        public StreamChunk(string name, object value, bool isFinal = false)
+        {
+            Name = name ?? throw new ArgumentNullException(nameof(name));
+            Value = value ?? throw new ArgumentNullException(nameof(value));
+            IsFinal = isFinal;
+        }
+
+        /// <summary>
+        /// Typed access to the chunk value.
+        /// </summary>
+        public T GetValue<T>() => (T)Value;
+    }
+
+    /// <summary>
+    /// Extension of IAgent that supports streaming partial results
+    /// via IAsyncEnumerable during execution.
+    /// </summary>
+    public interface IStreamingAgent : IAgent
+    {
+        /// <summary>
+        /// Executes the agent and yields partial results as they become available.
+        /// After enumeration completes, final results are also available via GetOutput().
+        /// </summary>
+        IAsyncEnumerable<StreamChunk> ExecuteStreamingAsync(
+            CancellationToken cancellationToken = default);
+    }
+
+    /// <summary>
+    /// Base class for agents that support streaming partial results.
+    /// Subclasses override ExecuteStreamingCoreAsync to yield StreamChunks.
+    /// Both streaming and batch execution are supported:
+    ///   - ExecuteStreamingAsync() yields chunks and sets final outputs
+    ///   - ExecuteAsync() calls ExecuteStreamingAsync() internally, discarding chunks
+    /// </summary>
+    public abstract class StreamingAgentBase : AgentBase, IStreamingAgent
+    {
+        /// <summary>
+        /// Override this to implement the streaming logic.
+        /// Yield StreamChunks as partial results become available.
+        /// Call SetOutput() for final results before returning.
+        /// </summary>
+        protected abstract IAsyncEnumerable<StreamChunk> ExecuteStreamingCoreAsync(
+            CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Executes the agent with streaming. Yields partial results,
+        /// then final outputs are available via GetOutput().
+        /// </summary>
+        public async IAsyncEnumerable<StreamChunk> ExecuteStreamingAsync(
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            ValidateOptionsAndInputs();
+
+            await foreach (var chunk in ExecuteStreamingCoreAsync(cancellationToken)
+                .WithCancellation(cancellationToken))
+            {
+                yield return chunk;
+            }
+        }
+
+        /// <summary>
+        /// Batch-compatible execution. Runs the streaming pipeline internally
+        /// but discards intermediate chunks — only final outputs remain.
+        /// </summary>
+        public override async Task ExecuteAsync(CancellationToken? cancellationToken = null)
+        {
+            var ct = cancellationToken ?? CancellationToken.None;
+
+            await foreach (var _ in ExecuteStreamingAsync(ct).WithCancellation(ct))
+            {
+                // Consume and discard — final outputs are set via SetOutput()
+            }
+        }
+
+        /// <summary>
+        /// Helper: create a StreamChunk for a partial result.
+        /// </summary>
+        protected StreamChunk Chunk(string name, object value) =>
+            new StreamChunk(name, value, isFinal: false);
+
+        /// <summary>
+        /// Helper: create a StreamChunk marked as final.
+        /// </summary>
+        protected StreamChunk FinalChunk(string name, object value) =>
+            new StreamChunk(name, value, isFinal: true);
     }
 }

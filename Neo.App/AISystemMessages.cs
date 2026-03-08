@@ -9,7 +9,7 @@ namespace Neo.App
 {
     public static class AISystemMessages
     {
-        public static string GetSystemMessage(bool useAvalonia = false, bool useReact = false, bool usePython = false, bool useImageGen = false)
+        public static string GetSystemMessage(bool useAvalonia = false, bool useReact = false, bool usePython = false, bool useImageGen = false, bool useSpeechToText = false)
         {
             if (useAvalonia == true && useReact == true)
                 throw new NotImplementedException("Avalonia and React cannot be used in conjunction, yet!");
@@ -28,6 +28,9 @@ namespace Neo.App
 
             if (useImageGen)
                 sp += ImageGenSystemMessage;
+
+            if (useSpeechToText)
+                sp += SpeechToTextSystemMessage;
 
             return sp;
         }
@@ -124,6 +127,24 @@ namespace Neo.App
             When the user asks you to generate, create, or display an image, ALWAYS use AIImageGen.GenerateImageAsync (or EditImageAsync for modifications).
             Convert the returned byte[] to a BitmapImage via MemoryStream for display in an Image control.
             Never use stock photo URLs, placeholder images, or web scraping for image generation — always use AIImageGen.
+            ";
+
+        private static string SpeechToTextSystemMessage =
+            @"You also have access to AI speech-to-text transcription in the 'Neo.App' namespace:
+
+            // Transcribe audio to text (batch mode). Returns the transcribed text.
+            // audioFileName: file name with extension for format detection (e.g. 'recording.wav', 'memo.mp3')
+            // language: optional ISO-639-1 code (e.g. 'en', 'de') — auto-detected if omitted
+            // prompt: optional context hint to guide transcription vocabulary/style
+            public static async Task<string> AISpeechToText.TranscribeAsync(byte[] audioData, string audioFileName = ""audio.wav"", string? language = null, string? prompt = null, CancellationToken cancellationToken = default)
+
+            // Transcribe audio with streaming partial results. The callback receives the growing text as it is transcribed.
+            public static async Task<string> AISpeechToText.TranscribeStreamingAsync(byte[] audioData, Action<string> onPartialResult, string audioFileName = ""audio.wav"", string? language = null, string? prompt = null, CancellationToken cancellationToken = default)
+
+            Supported audio formats: mp3, mp4, wav, webm, ogg, flac, m4a (max 25 MB).
+            When the user asks to transcribe, convert, or recognize speech/audio, ALWAYS use AISpeechToText.
+            Use TranscribeStreamingAsync when real-time feedback is desired (e.g. updating a TextBox as speech is recognized).
+            For recording audio from a microphone, use NAudio (add NuGet package NAudio|default).
             ";
 
         private static string PatchReviewerSystemMessage =

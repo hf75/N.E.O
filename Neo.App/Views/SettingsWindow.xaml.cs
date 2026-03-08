@@ -41,6 +41,7 @@ namespace Neo.App
                 LmStudioModel = loaded.LmStudioModel,
                 LmStudioEndpoint = loaded.LmStudioEndpoint,
                 ImageGenModel = loaded.ImageGenModel,
+                SpeechToTextModel = loaded.SpeechToTextModel,
             };
 
             this.DataContext = _workingCopy;
@@ -62,6 +63,9 @@ namespace Neo.App
                 RowOpenAiModel.Visibility = Visibility.Visible;
                 SetComboBoxSingleItem(OpenAiModelComboBox, _workingCopy.OpenAiModel);
                 _availableProviders.Add("OpenAI");
+
+                RowSpeechToTextModel.Visibility = Visibility.Visible;
+                SetComboBoxSingleItem(SpeechToTextModelComboBox, _workingCopy.SpeechToTextModel);
             }
 
             if (!string.IsNullOrWhiteSpace(_geminiKey))
@@ -123,8 +127,12 @@ namespace Neo.App
                     () => ModelListService.FetchAnthropicModelsAsync(_anthropicKey)));
 
             if (!string.IsNullOrWhiteSpace(_openAiKey))
+            {
                 tasks.Add(LoadModelsAsync(OpenAiModelComboBox, _workingCopy.OpenAiModel,
                     () => ModelListService.FetchOpenAiModelsAsync(_openAiKey)));
+                tasks.Add(LoadModelsAsync(SpeechToTextModelComboBox, _workingCopy.SpeechToTextModel,
+                    () => ModelListService.FetchOpenAiWhisperModelsAsync()));
+            }
 
             if (!string.IsNullOrWhiteSpace(_geminiKey))
             {
@@ -284,6 +292,8 @@ namespace Neo.App
                 _workingCopy.GeminiModel = geminiModel;
             if (ImageGenModelComboBox.SelectedItem is string imageGenModel && !string.IsNullOrWhiteSpace(imageGenModel))
                 _workingCopy.ImageGenModel = imageGenModel;
+            if (SpeechToTextModelComboBox.SelectedItem is string sttModel && !string.IsNullOrWhiteSpace(sttModel))
+                _workingCopy.SpeechToTextModel = sttModel;
 
             // Save Ollama/LM Studio selections
             var ollamaModel = OllamaModelComboBox.Text;
@@ -328,6 +338,7 @@ namespace Neo.App
             _workingCopy.LmStudioModel = "";
             _workingCopy.LmStudioEndpoint = "http://localhost:1234/v1/";
             _workingCopy.ImageGenModel = "gemini-3.1-flash-image-preview";
+            _workingCopy.SpeechToTextModel = "gpt-4o-mini-transcribe";
             _workingCopy.AIQueryProvider = "Claude";
             _workingCopy.AIQueryModel = "claude-sonnet-4-5";
 
@@ -335,6 +346,7 @@ namespace Neo.App
             SetComboBoxSingleItem(OpenAiModelComboBox, _workingCopy.OpenAiModel);
             SetComboBoxSingleItem(GeminiModelComboBox, _workingCopy.GeminiModel);
             SetComboBoxSingleItem(ImageGenModelComboBox, _workingCopy.ImageGenModel);
+            SetComboBoxSingleItem(SpeechToTextModelComboBox, _workingCopy.SpeechToTextModel);
             SetComboBoxSingleItem(OllamaModelComboBox, _workingCopy.OllamaModel);
             OllamaEndpointTextBox.Text = _workingCopy.OllamaEndpoint;
             SetComboBoxSingleItem(LmStudioModelComboBox, _workingCopy.LmStudioModel);
