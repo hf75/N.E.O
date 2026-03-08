@@ -37,6 +37,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.Agents.Ollama", "Neo.Ag
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.Agents.LmStudio", "Neo.Agents\Neo.Agents.LmStudio\Neo.Agents.LmStudio.csproj", "{D4E5F6A7-B8C9-4D1E-A2F3-5C6D7E8F9A0B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.Agents.GeminiImageGen", "Neo.Agents\Neo.Agents.GeminiImageGen\Neo.Agents.GeminiImageGen.csproj", "{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -239,6 +241,18 @@ Global
 		{D4E5F6A7-B8C9-4D1E-A2F3-5C6D7E8F9A0B}.Release|x64.Build.0 = Release|Any CPU
 		{D4E5F6A7-B8C9-4D1E-A2F3-5C6D7E8F9A0B}.Release|x86.ActiveCfg = Release|Any CPU
 		{D4E5F6A7-B8C9-4D1E-A2F3-5C6D7E8F9A0B}.Release|x86.Build.0 = Release|Any CPU
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}.Debug|x64.Build.0 = Debug|Any CPU
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}.Debug|x86.Build.0 = Debug|Any CPU
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}.Release|x64.ActiveCfg = Release|Any CPU
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}.Release|x64.Build.0 = Release|Any CPU
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}.Release|x86.ActiveCfg = Release|Any CPU
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -254,5 +268,6 @@ Global
 		{F9C390C7-F038-47D3-B05A-18A1933CF173} = {60CDB5DA-AA5D-4DF7-C1B4-9768277FCE90}
 		{8A2B6F3E-C7D1-4E5A-9F08-1B3D5E7A9C2F} = {60CDB5DA-AA5D-4DF7-C1B4-9768277FCE90}
 		{D4E5F6A7-B8C9-4D1E-A2F3-5C6D7E8F9A0B} = {60CDB5DA-AA5D-4DF7-C1B4-9768277FCE90}
+		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795} = {60CDB5DA-AA5D-4DF7-C1B4-9768277FCE90}
 	EndGlobalSection
 EndGlobal

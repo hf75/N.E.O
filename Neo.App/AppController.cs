@@ -44,6 +44,7 @@ namespace Neo.App
         public UndoRedoManager _undoRedo = null!;
 
         public AppStatus CurrentStatus { get; private set; } = AppStatus.Idle;
+        private (CrashReason reason, ErrorMessage err)? _pendingCrash;
 
         private CancellationTokenSource _cancellationSource = new();
 
@@ -81,6 +82,7 @@ namespace Neo.App
 
         // AgentHelper.cs musste extra in der csproj Datei hinzugefügt werden damit es eine EmbeddedResource ist!
         public string? AgentHelperCode { get; set; } = null;
+        public string? ImageGenHelperCode { get; set; } = null;
         public Dictionary<string, string> PythonHelperCode { get; set; } = new();
 
         List<string> AdditionalFilesForExportCopy { get; set; } = new() { "appsettings.json" };
@@ -128,17 +130,23 @@ namespace Neo.App
 
             AgentHelperCode = EmbeddedResourceReader.GetEmbeddedResourceContent("AgentHelper.cs");
 
+            var geminiKeyForImageGen = Environment.GetEnvironmentVariable("GEMINI_API_KEY", EnvironmentVariableTarget.User);
+            if (!string.IsNullOrWhiteSpace(geminiKeyForImageGen))
+                ImageGenHelperCode = EmbeddedResourceReader.GetEmbeddedResourceContent("ImageGenHelper.cs");
+
             PythonHelperCode["PythonHost.cs"] = EmbeddedResourceReader.GetEmbeddedResourceContent("PythonHost.cs");
             PythonHelperCode["PythonModuleLoader.cs"] = EmbeddedResourceReader.GetEmbeddedResourceContent("PythonModuleLoader.cs");
 
             AdditionalDlls.Add("./Neo.Agents.Core.dll");
+            if (!string.IsNullOrWhiteSpace(geminiKeyForImageGen))
+                AdditionalDlls.Add("./Neo.Agents.GeminiImageGen.dll");
             AdditionalDlls.Add(GetAIQueryAgentDll(Settings.AIQueryProvider));
             DefaultNugets.Add(GetAIQueryNuGetPackage(Settings.AIQueryProvider));
 
             if (Settings.UsePython)
                 DefaultNugets.Add("pythonnet|default");
 
-            var systemMessage = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython);
+            var systemMessage = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython, ImageGenHelperCode != null);
 
             var openAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY", EnvironmentVariableTarget.User);
             if (!string.IsNullOrWhiteSpace(openAiKey))
@@ -296,6 +304,11 @@ namespace Neo.App
                 files["./agenthelpercode.cs"] = templated;
             }
 
+            if (!string.IsNullOrWhiteSpace(ImageGenHelperCode))
+            {
+                files["./imagegenhelpercode.cs"] = ImageGenHelperCode!;
+            }
+
             if (usePython)
             {
                 foreach (var c in PythonHelperCode)
@@ -378,7 +391,7 @@ namespace Neo.App
                 InitialCode = preserveState ? (AppState.LastCode ?? string.Empty) : GetUserControlBaseCode(),
                 InitialHistoryPrefix = preserveState ? string.Empty : "Code:\n\n",
                 AdditionalSourceFiles = additionalSourceFiles,
-                SystemMessageOverride = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython),
+                SystemMessageOverride = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython, ImageGenHelperCode != null),
             };
 
             _promptToDllSession = _promptToDllClient.CreateSession(sessionOptions);
@@ -494,6 +507,13 @@ namespace Neo.App
 
                 // Einfach nur "false" übergeben. Der Rest passiert automatisch.
                 await _view.SetUiBusyState(isBusy: false);
+
+                // Crash verarbeiten, der eintraf, während die App beschäftigt war.
+                if (_pendingCrash is { } pending)
+                {
+                    _pendingCrash = null;
+                    await HandleChildProcessCrashed(pending.reason, pending.err);
+                }
             }
         }
 
@@ -524,7 +544,7 @@ namespace Neo.App
 
         public void ReloadAgents()
         {
-            var systemMessage = AISystemMessages.GetSystemMessage(Settings!.UseAvalonia, Settings.UseReactUi, Settings.UsePython);
+            var systemMessage = AISystemMessages.GetSystemMessage(Settings!.UseAvalonia, Settings.UseReactUi, Settings.UsePython, ImageGenHelperCode != null);
 
             AvailableAgents.Clear();
             Claude = null;
@@ -1222,7 +1242,7 @@ namespace Neo.App
                         prompt += "\n\n" + LastErrorMsg;
 
                     string? completion = null;
-                    string systemMessage = AISystemMessages.GetSystemMessage(Settings!.UseAvalonia, Settings.UseReactUi, Settings.UsePython);
+                    string systemMessage = AISystemMessages.GetSystemMessage(Settings!.UseAvalonia, Settings.UseReactUi, Settings.UsePython, ImageGenHelperCode != null);
 
                     await ExecuteAIQuery(prompt,
                         systemMessage,
@@ -2031,6 +2051,7 @@ namespace Neo.App
                 // Wenn die App schon beschäftigt ist (z.B. beim Exportieren),
                 // kann sie nicht gleichzeitig reparieren. Logge das Problem.
                 Logger.LogMessage($"Child process crashed while app was busy ({CurrentStatus}). Recovery postponed.", BubbleType.CompletionError);
+                _pendingCrash = (reason, err);
                 return;
             }
 
