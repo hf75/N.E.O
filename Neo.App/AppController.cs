@@ -306,7 +306,9 @@ namespace Neo.App
 
             if (!string.IsNullOrWhiteSpace(ImageGenHelperCode))
             {
-                files["./imagegenhelpercode.cs"] = ImageGenHelperCode!;
+                var templated = ImageGenHelperCode!
+                    .Replace("IMAGEGEN_MODEL_PLACEHOLDER", Settings.ImageGenModel);
+                files["./imagegenhelpercode.cs"] = templated;
             }
 
             if (usePython)

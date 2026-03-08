@@ -24,6 +24,7 @@ namespace Neo.App
         private string _aiQueryModel = "claude-sonnet-4-5";
         private string _ollamaModel = "llama3.1:latest";
         private string _ollamaEndpoint = "http://localhost:11434/v1/";
+        private string _imageGenModel = "gemini-3.1-flash-image-preview";
         private string _lmStudioModel = "";
         private string _lmStudioEndpoint = "http://localhost:1234/v1/";
 
@@ -205,6 +206,19 @@ namespace Neo.App
                 if (_lmStudioEndpoint != value)
                 {
                     _lmStudioEndpoint = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string ImageGenModel
+        {
+            get { return _imageGenModel; }
+            set
+            {
+                if (_imageGenModel != value)
+                {
+                    _imageGenModel = value;
                     OnPropertyChanged();
                 }
             }

@@ -21,7 +21,7 @@ namespace Neo.App
             CancellationToken cancellationToken = default)
         {
             _imageAgent.SetOption("ApiKey", Environment.GetEnvironmentVariable("GEMINI_API_KEY", EnvironmentVariableTarget.Process));
-            _imageAgent.SetOption("Model", "gemini-3.1-flash-image-preview");
+            _imageAgent.SetOption("Model", "IMAGEGEN_MODEL_PLACEHOLDER");
 
             _imageAgent.SetInput("Prompt", prompt);
 
@@ -49,7 +49,7 @@ namespace Neo.App
             CancellationToken cancellationToken = default)
         {
             _imageAgent.SetOption("ApiKey", Environment.GetEnvironmentVariable("GEMINI_API_KEY", EnvironmentVariableTarget.Process));
-            _imageAgent.SetOption("Model", "gemini-3.1-flash-image-preview");
+            _imageAgent.SetOption("Model", "IMAGEGEN_MODEL_PLACEHOLDER");
 
             _imageAgent.SetInput("Prompt", prompt);
             _imageAgent.SetInput("ReferenceImage", referenceImage);

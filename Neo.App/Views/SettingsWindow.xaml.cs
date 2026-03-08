@@ -40,6 +40,7 @@ namespace Neo.App
                 OllamaEndpoint = loaded.OllamaEndpoint,
                 LmStudioModel = loaded.LmStudioModel,
                 LmStudioEndpoint = loaded.LmStudioEndpoint,
+                ImageGenModel = loaded.ImageGenModel,
             };
 
             this.DataContext = _workingCopy;
@@ -68,6 +69,9 @@ namespace Neo.App
                 RowGeminiModel.Visibility = Visibility.Visible;
                 SetComboBoxSingleItem(GeminiModelComboBox, _workingCopy.GeminiModel);
                 _availableProviders.Add("Gemini");
+
+                RowImageGenModel.Visibility = Visibility.Visible;
+                SetComboBoxSingleItem(ImageGenModelComboBox, _workingCopy.ImageGenModel);
             }
 
             // Ollama (local server, always show — no API key needed)
@@ -123,8 +127,12 @@ namespace Neo.App
                     () => ModelListService.FetchOpenAiModelsAsync(_openAiKey)));
 
             if (!string.IsNullOrWhiteSpace(_geminiKey))
+            {
                 tasks.Add(LoadModelsAsync(GeminiModelComboBox, _workingCopy.GeminiModel,
                     () => ModelListService.FetchGeminiModelsAsync(_geminiKey)));
+                tasks.Add(LoadModelsAsync(ImageGenModelComboBox, _workingCopy.ImageGenModel,
+                    () => ModelListService.FetchGeminiImageModelsAsync(_geminiKey)));
+            }
 
             // Ollama and LM Studio (local servers, fetch models from endpoint)
             tasks.Add(LoadModelsAsync(OllamaModelComboBox, _workingCopy.OllamaModel,
@@ -274,6 +282,8 @@ namespace Neo.App
                 _workingCopy.OpenAiModel = openAiModel;
             if (GeminiModelComboBox.SelectedItem is string geminiModel && !string.IsNullOrWhiteSpace(geminiModel))
                 _workingCopy.GeminiModel = geminiModel;
+            if (ImageGenModelComboBox.SelectedItem is string imageGenModel && !string.IsNullOrWhiteSpace(imageGenModel))
+                _workingCopy.ImageGenModel = imageGenModel;
 
             // Save Ollama/LM Studio selections
             var ollamaModel = OllamaModelComboBox.Text;
@@ -317,12 +327,14 @@ namespace Neo.App
             _workingCopy.OllamaEndpoint = "http://localhost:11434/v1/";
             _workingCopy.LmStudioModel = "";
             _workingCopy.LmStudioEndpoint = "http://localhost:1234/v1/";
+            _workingCopy.ImageGenModel = "gemini-3.1-flash-image-preview";
             _workingCopy.AIQueryProvider = "Claude";
             _workingCopy.AIQueryModel = "claude-sonnet-4-5";
 
             SetComboBoxSingleItem(ClaudeModelComboBox, _workingCopy.ClaudeModel);
             SetComboBoxSingleItem(OpenAiModelComboBox, _workingCopy.OpenAiModel);
             SetComboBoxSingleItem(GeminiModelComboBox, _workingCopy.GeminiModel);
+            SetComboBoxSingleItem(ImageGenModelComboBox, _workingCopy.ImageGenModel);
             SetComboBoxSingleItem(OllamaModelComboBox, _workingCopy.OllamaModel);
             OllamaEndpointTextBox.Text = _workingCopy.OllamaEndpoint;
             SetComboBoxSingleItem(LmStudioModelComboBox, _workingCopy.LmStudioModel);
