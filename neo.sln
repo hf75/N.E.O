@@ -43,6 +43,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.Agents.OpenAIWhisper", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.Agents.OpenAITTS", "Neo.Agents\Neo.Agents.OpenAITTS\Neo.Agents.OpenAITTS.csproj", "{8A6139F7-E95C-4B42-82D6-C19B5CCD2519}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.Agents.GeminiImageAnalysis", "Neo.Agents\Neo.Agents.GeminiImageAnalysis\Neo.Agents.GeminiImageAnalysis.csproj", "{71D1E990-7746-4A6B-95C5-1734D82BFC3C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -281,6 +283,18 @@ Global
 		{8A6139F7-E95C-4B42-82D6-C19B5CCD2519}.Release|x64.Build.0 = Release|Any CPU
 		{8A6139F7-E95C-4B42-82D6-C19B5CCD2519}.Release|x86.ActiveCfg = Release|Any CPU
 		{8A6139F7-E95C-4B42-82D6-C19B5CCD2519}.Release|x86.Build.0 = Release|Any CPU
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C}.Debug|x64.Build.0 = Debug|Any CPU
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C}.Debug|x86.Build.0 = Debug|Any CPU
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C}.Release|x64.ActiveCfg = Release|Any CPU
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C}.Release|x64.Build.0 = Release|Any CPU
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C}.Release|x86.ActiveCfg = Release|Any CPU
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -299,5 +313,6 @@ Global
 		{BFAAACFE-5B8D-4DE7-ACED-1D982B991795} = {60CDB5DA-AA5D-4DF7-C1B4-9768277FCE90}
 		{5BCFEB60-9A20-448C-ACAB-8D1363A2DD19} = {60CDB5DA-AA5D-4DF7-C1B4-9768277FCE90}
 		{8A6139F7-E95C-4B42-82D6-C19B5CCD2519} = {60CDB5DA-AA5D-4DF7-C1B4-9768277FCE90}
+		{71D1E990-7746-4A6B-95C5-1734D82BFC3C} = {60CDB5DA-AA5D-4DF7-C1B4-9768277FCE90}
 	EndGlobalSection
 EndGlobal

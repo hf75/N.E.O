@@ -70,6 +70,7 @@
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.OpenAI\Neo.Agents.OpenAI.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.OpenAIWhisper\Neo.Agents.OpenAIWhisper.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.OpenAITTS\Neo.Agents.OpenAITTS.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.GeminiImageAnalysis\Neo.Agents.GeminiImageAnalysis.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Ollama\Neo.Agents.Ollama.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.LmStudio\Neo.Agents.LmStudio.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.PowerShell\Neo.Agents.PowerShell.csproj" />
