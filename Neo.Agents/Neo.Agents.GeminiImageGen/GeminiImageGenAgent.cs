@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -10,7 +11,7 @@ namespace Neo.Agents
     /// Supports text-to-image and image editing (with reference image).
     /// Uses the Gemini REST API directly (responseModalities: IMAGE).
     /// </summary>
-    public class GeminiImageGenAgent : AgentBase
+    public class GeminiImageGenAgent : AgentBase, IAppIntegratedAgent
     {
         private const string BaseUrl = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -276,6 +277,87 @@ namespace Neo.Agents
 
         private static string Truncate(string value, int maxLength) =>
             value.Length <= maxLength ? value : value[..maxLength] + "...";
+
+        // ── IAppIntegratedAgent ────────────────────────────────────────
+
+        public string DisplayName => "Image Generation";
+        public string SettingsKey => "ImageGen";
+        public string? RequiredEnvVar => "GEMINI_API_KEY";
+        public string DefaultModel => "gemini-3.1-flash-image-preview";
+
+        public string? HelperTemplateCode =>
+            AgentResourceLoader.LoadEmbeddedResource(typeof(GeminiImageGenAgent), "ImageGenHelper.cs");
+
+        public IReadOnlyDictionary<string, string> TemplatePlaceholders { get; } =
+            new Dictionary<string, string> { ["IMAGEGEN_MODEL_PLACEHOLDER"] = "ImageGen" };
+
+        public string AgentDllName => "Neo.Agents.GeminiImageGen.dll";
+
+        public string? SystemMessageDocs =>
+            @"You also have access to AI image generation in the 'Neo.App' namespace:
+
+            // Generate an image from a text description. Returns PNG bytes.
+            // aspectRatio: '1:1', '16:9', '9:16', '4:3', '3:4' (optional)
+            // systemInstruction: style guidance e.g. 'photorealistic', 'watercolor painting' (optional)
+            public static async Task<byte[]> AIImageGen.GenerateImageAsync(string prompt, string? aspectRatio = null, string? systemInstruction = null, CancellationToken cancellationToken = default)
+
+            // Edit an existing image based on a text prompt. Returns modified PNG bytes.
+            public static async Task<byte[]> AIImageGen.EditImageAsync(string prompt, byte[] referenceImage, string referenceImageMimeType = ""image/png"", string? aspectRatio = null, string? systemInstruction = null, CancellationToken cancellationToken = default)
+
+            When the user asks you to generate, create, or display an image, ALWAYS use AIImageGen.GenerateImageAsync (or EditImageAsync for modifications).
+            Convert the returned byte[] to a BitmapImage via MemoryStream for display in an Image control.
+            Never use stock photo URLs, placeholder images, or web scraping for image generation — always use AIImageGen.
+            ";
+
+        public async Task<List<string>> FetchAvailableModelsAsync(string? apiKeyOrEndpoint)
+        {
+            if (string.IsNullOrWhiteSpace(apiKeyOrEndpoint))
+                return new List<string>();
+
+            try
+            {
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                var json = await http.GetStringAsync(
+                    $"https://generativelanguage.googleapis.com/v1beta/models?key={apiKeyOrEndpoint}");
+                using var doc = JsonDocument.Parse(json);
+
+                var models = new List<string>();
+                if (doc.RootElement.TryGetProperty("models", out var modelsArray))
+                {
+                    foreach (var item in modelsArray.EnumerateArray())
+                    {
+                        if (!item.TryGetProperty("name", out var name)) continue;
+                        var modelName = name.GetString()!;
+                        if (modelName.StartsWith("models/"))
+                            modelName = modelName.Substring("models/".Length);
+
+                        if (!modelName.Contains("image", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        if (item.TryGetProperty("supportedGenerationMethods", out var methods))
+                        {
+                            bool supportsGenerate = false;
+                            foreach (var method in methods.EnumerateArray())
+                            {
+                                if (method.GetString() == "generateContent")
+                                { supportsGenerate = true; break; }
+                            }
+                            if (!supportsGenerate) continue;
+                        }
+
+                        models.Add(modelName);
+                    }
+                }
+
+                models.Sort();
+                return models;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[GeminiImageGenAgent] Failed to fetch models: {ex.Message}");
+                return new List<string>();
+            }
+        }
 
         #region Gemini REST API DTOs
 

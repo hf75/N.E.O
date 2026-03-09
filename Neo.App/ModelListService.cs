@@ -129,59 +129,6 @@ namespace Neo.App
                 return new List<string>();
             }
         }
-        public static async Task<List<string>> FetchGeminiImageModelsAsync(string apiKey)
-        {
-            try
-            {
-                using var http = new HttpClient { Timeout = RequestTimeout };
-
-                var json = await http.GetStringAsync(
-                    $"https://generativelanguage.googleapis.com/v1beta/models?key={apiKey}");
-                using var doc = JsonDocument.Parse(json);
-
-                var models = new List<string>();
-                if (doc.RootElement.TryGetProperty("models", out var modelsArray))
-                {
-                    foreach (var item in modelsArray.EnumerateArray())
-                    {
-                        if (!item.TryGetProperty("name", out var name)) continue;
-                        var modelName = name.GetString()!;
-                        if (modelName.StartsWith("models/"))
-                            modelName = modelName.Substring("models/".Length);
-
-                        // Only include models with "image" in the name
-                        if (!modelName.Contains("image", StringComparison.OrdinalIgnoreCase))
-                            continue;
-
-                        // Must support generateContent
-                        if (item.TryGetProperty("supportedGenerationMethods", out var methods))
-                        {
-                            bool supportsGenerate = false;
-                            foreach (var method in methods.EnumerateArray())
-                            {
-                                if (method.GetString() == "generateContent")
-                                {
-                                    supportsGenerate = true;
-                                    break;
-                                }
-                            }
-                            if (!supportsGenerate) continue;
-                        }
-
-                        models.Add(modelName);
-                    }
-                }
-
-                models.Sort();
-                return models;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[ModelListService] Failed to fetch Gemini image models: {ex.Message}");
-                return new List<string>();
-            }
-        }
-
         public static async Task<List<string>> FetchOllamaModelsAsync(string endpoint)
         {
             try
@@ -240,16 +187,5 @@ namespace Neo.App
             }
         }
 
-        public static Task<List<string>> FetchOpenAiWhisperModelsAsync()
-        {
-            // The OpenAI transcription models are a known static set.
-            var models = new List<string>
-            {
-                "gpt-4o-mini-transcribe",
-                "gpt-4o-transcribe",
-                "whisper-1",
-            };
-            return Task.FromResult(models);
-        }
     }
 }

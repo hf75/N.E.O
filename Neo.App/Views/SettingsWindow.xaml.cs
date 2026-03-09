@@ -1,7 +1,11 @@
 using Neo.App;
+using Neo.Agents.Core;
 using System.Diagnostics;
+using System.IO;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using ComboBox = System.Windows.Controls.ComboBox;
 
@@ -17,6 +21,12 @@ namespace Neo.App
 
         // Maps display name → internal provider key
         private readonly List<string> _availableProviders = new();
+
+        // Auto-discovered plugin agents (ImageGen, STT, etc.)
+        private readonly List<IAppIntegratedAgent> _pluginAgents;
+
+        // Dynamically created ComboBoxes for plugin agent models, keyed by SettingsKey
+        private readonly Dictionary<string, ComboBox> _pluginComboBoxes = new();
 
         public SettingsWindow()
         {
@@ -42,6 +52,7 @@ namespace Neo.App
                 LmStudioEndpoint = loaded.LmStudioEndpoint,
                 ImageGenModel = loaded.ImageGenModel,
                 SpeechToTextModel = loaded.SpeechToTextModel,
+                PluginAgentModels = new Dictionary<string, string>(loaded.PluginAgentModels),
             };
 
             this.DataContext = _workingCopy;
@@ -63,9 +74,6 @@ namespace Neo.App
                 RowOpenAiModel.Visibility = Visibility.Visible;
                 SetComboBoxSingleItem(OpenAiModelComboBox, _workingCopy.OpenAiModel);
                 _availableProviders.Add("OpenAI");
-
-                RowSpeechToTextModel.Visibility = Visibility.Visible;
-                SetComboBoxSingleItem(SpeechToTextModelComboBox, _workingCopy.SpeechToTextModel);
             }
 
             if (!string.IsNullOrWhiteSpace(_geminiKey))
@@ -73,10 +81,11 @@ namespace Neo.App
                 RowGeminiModel.Visibility = Visibility.Visible;
                 SetComboBoxSingleItem(GeminiModelComboBox, _workingCopy.GeminiModel);
                 _availableProviders.Add("Gemini");
-
-                RowImageGenModel.Visibility = Visibility.Visible;
-                SetComboBoxSingleItem(ImageGenModelComboBox, _workingCopy.ImageGenModel);
             }
+
+            // Auto-discover plugin agents and build dynamic UI
+            _pluginAgents = DiscoverPluginAgents();
+            BuildPluginAgentUI();
 
             // Ollama (local server, always show — no API key needed)
             RowOllamaModel.Visibility = Visibility.Visible;
@@ -111,6 +120,81 @@ namespace Neo.App
             this.Loaded += SettingsWindow_Loaded;
         }
 
+        private static List<IAppIntegratedAgent> DiscoverPluginAgents()
+        {
+            // Force-load Neo.Agents.*.dll so lazy-loaded assemblies are available for scanning
+            var appDir = AppDomain.CurrentDomain.BaseDirectory;
+            foreach (var dllPath in Directory.GetFiles(appDir, "Neo.Agents.*.dll"))
+            {
+                var asmName = Path.GetFileNameWithoutExtension(dllPath);
+                if (AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == asmName))
+                    continue;
+                try { Assembly.LoadFrom(dllPath); }
+                catch { }
+            }
+
+            var agents = new List<IAppIntegratedAgent>();
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    foreach (var type in asm.GetTypes())
+                    {
+                        if (!typeof(IAppIntegratedAgent).IsAssignableFrom(type) ||
+                            type.IsAbstract || type.IsInterface)
+                            continue;
+
+                        if (Activator.CreateInstance(type) is IAppIntegratedAgent plugin)
+                        {
+                            if (plugin.RequiredEnvVar != null)
+                            {
+                                var key = Environment.GetEnvironmentVariable(
+                                    plugin.RequiredEnvVar, EnvironmentVariableTarget.User);
+                                if (string.IsNullOrWhiteSpace(key))
+                                    continue;
+                            }
+                            agents.Add(plugin);
+                        }
+                    }
+                }
+                catch { }
+            }
+            return agents;
+        }
+
+        private void BuildPluginAgentUI()
+        {
+            var panel = new StackPanel();
+
+            foreach (var plugin in _pluginAgents)
+            {
+                var label = new TextBlock
+                {
+                    Text = $"{plugin.DisplayName} Model:",
+                    Margin = new Thickness(0, 4, 0, 4)
+                };
+
+                var comboBox = new ComboBox
+                {
+                    Tag = plugin.SettingsKey
+                };
+                if (TryFindResource("RoundedComboBox") is Style roundedStyle)
+                    comboBox.Style = roundedStyle;
+
+                // Set initial value from PluginAgentModels or default
+                var currentModel = _workingCopy.PluginAgentModels.TryGetValue(plugin.SettingsKey, out var m)
+                    ? m : plugin.DefaultModel;
+                SetComboBoxSingleItem(comboBox, currentModel);
+
+                _pluginComboBoxes[plugin.SettingsKey] = comboBox;
+
+                panel.Children.Add(label);
+                panel.Children.Add(comboBox);
+            }
+
+            PluginAgentModelsPanel.Items.Add(panel);
+        }
+
         private static void SetComboBoxSingleItem(ComboBox comboBox, string item)
         {
             comboBox.ItemsSource = new List<string> { item };
@@ -130,16 +214,12 @@ namespace Neo.App
             {
                 tasks.Add(LoadModelsAsync(OpenAiModelComboBox, _workingCopy.OpenAiModel,
                     () => ModelListService.FetchOpenAiModelsAsync(_openAiKey)));
-                tasks.Add(LoadModelsAsync(SpeechToTextModelComboBox, _workingCopy.SpeechToTextModel,
-                    () => ModelListService.FetchOpenAiWhisperModelsAsync()));
             }
 
             if (!string.IsNullOrWhiteSpace(_geminiKey))
             {
                 tasks.Add(LoadModelsAsync(GeminiModelComboBox, _workingCopy.GeminiModel,
                     () => ModelListService.FetchGeminiModelsAsync(_geminiKey)));
-                tasks.Add(LoadModelsAsync(ImageGenModelComboBox, _workingCopy.ImageGenModel,
-                    () => ModelListService.FetchGeminiImageModelsAsync(_geminiKey)));
             }
 
             // Ollama and LM Studio (local servers, fetch models from endpoint)
@@ -147,6 +227,22 @@ namespace Neo.App
                 () => ModelListService.FetchOllamaModelsAsync(_workingCopy.OllamaEndpoint)));
             tasks.Add(LoadModelsAsync(LmStudioModelComboBox, _workingCopy.LmStudioModel,
                 () => ModelListService.FetchLmStudioModelsAsync(_workingCopy.LmStudioEndpoint)));
+
+            // Load plugin agent models in parallel
+            foreach (var plugin in _pluginAgents)
+            {
+                if (_pluginComboBoxes.TryGetValue(plugin.SettingsKey, out var comboBox))
+                {
+                    var currentModel = _workingCopy.PluginAgentModels.TryGetValue(plugin.SettingsKey, out var m)
+                        ? m : plugin.DefaultModel;
+                    var envVal = plugin.RequiredEnvVar != null
+                        ? Environment.GetEnvironmentVariable(plugin.RequiredEnvVar, EnvironmentVariableTarget.User)
+                        : null;
+                    var capturedPlugin = plugin;
+                    tasks.Add(LoadModelsAsync(comboBox, currentModel,
+                        () => capturedPlugin.FetchAvailableModelsAsync(envVal)));
+                }
+            }
 
             // Also load AIQuery model list for current provider
             tasks.Add(LoadAIQueryModelsAsync());
@@ -290,10 +386,16 @@ namespace Neo.App
                 _workingCopy.OpenAiModel = openAiModel;
             if (GeminiModelComboBox.SelectedItem is string geminiModel && !string.IsNullOrWhiteSpace(geminiModel))
                 _workingCopy.GeminiModel = geminiModel;
-            if (ImageGenModelComboBox.SelectedItem is string imageGenModel && !string.IsNullOrWhiteSpace(imageGenModel))
-                _workingCopy.ImageGenModel = imageGenModel;
-            if (SpeechToTextModelComboBox.SelectedItem is string sttModel && !string.IsNullOrWhiteSpace(sttModel))
-                _workingCopy.SpeechToTextModel = sttModel;
+
+            // Save plugin agent model selections
+            foreach (var plugin in _pluginAgents)
+            {
+                if (_pluginComboBoxes.TryGetValue(plugin.SettingsKey, out var comboBox))
+                {
+                    if (comboBox.SelectedItem is string model && !string.IsNullOrWhiteSpace(model))
+                        _workingCopy.PluginAgentModels[plugin.SettingsKey] = model;
+                }
+            }
 
             // Save Ollama/LM Studio selections
             var ollamaModel = OllamaModelComboBox.Text;
@@ -337,20 +439,24 @@ namespace Neo.App
             _workingCopy.OllamaEndpoint = "http://localhost:11434/v1/";
             _workingCopy.LmStudioModel = "";
             _workingCopy.LmStudioEndpoint = "http://localhost:1234/v1/";
-            _workingCopy.ImageGenModel = "gemini-3.1-flash-image-preview";
-            _workingCopy.SpeechToTextModel = "gpt-4o-mini-transcribe";
             _workingCopy.AIQueryProvider = "Claude";
             _workingCopy.AIQueryModel = "claude-sonnet-4-5";
 
             SetComboBoxSingleItem(ClaudeModelComboBox, _workingCopy.ClaudeModel);
             SetComboBoxSingleItem(OpenAiModelComboBox, _workingCopy.OpenAiModel);
             SetComboBoxSingleItem(GeminiModelComboBox, _workingCopy.GeminiModel);
-            SetComboBoxSingleItem(ImageGenModelComboBox, _workingCopy.ImageGenModel);
-            SetComboBoxSingleItem(SpeechToTextModelComboBox, _workingCopy.SpeechToTextModel);
             SetComboBoxSingleItem(OllamaModelComboBox, _workingCopy.OllamaModel);
             OllamaEndpointTextBox.Text = _workingCopy.OllamaEndpoint;
             SetComboBoxSingleItem(LmStudioModelComboBox, _workingCopy.LmStudioModel);
             LmStudioEndpointTextBox.Text = _workingCopy.LmStudioEndpoint;
+
+            // Reset plugin agent models to defaults
+            foreach (var plugin in _pluginAgents)
+            {
+                _workingCopy.PluginAgentModels[plugin.SettingsKey] = plugin.DefaultModel;
+                if (_pluginComboBoxes.TryGetValue(plugin.SettingsKey, out var comboBox))
+                    SetComboBoxSingleItem(comboBox, plugin.DefaultModel);
+            }
 
             AIQueryProviderComboBox.SelectedItem = _workingCopy.AIQueryProvider;
             SetComboBoxSingleItem(AIQueryModelComboBox, _workingCopy.AIQueryModel);

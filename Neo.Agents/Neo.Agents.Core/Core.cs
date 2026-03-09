@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -651,5 +653,90 @@ namespace Neo.Agents.Core
         /// </summary>
         protected StreamChunk FinalChunk(string name, object value) =>
             new StreamChunk(name, value, isFinal: true);
+    }
+
+    // ── Plugin Integration ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Interface for agents that carry their own Neo.App integration metadata.
+    /// Agents implementing this are auto-discovered by Neo.App at startup via reflection.
+    /// </summary>
+    public interface IAppIntegratedAgent
+    {
+        /// <summary>
+        /// Display name shown in Settings UI (e.g. "Image Generation", "Speech-to-Text").
+        /// </summary>
+        string DisplayName { get; }
+
+        /// <summary>
+        /// Unique key for settings storage (e.g. "ImageGen", "SpeechToText").
+        /// Used as dictionary key in SettingsModel.PluginAgentModels.
+        /// </summary>
+        string SettingsKey { get; }
+
+        /// <summary>
+        /// Name of the environment variable required for this agent (e.g. "GEMINI_API_KEY").
+        /// Null if no API key is needed (e.g. local models).
+        /// </summary>
+        string? RequiredEnvVar { get; }
+
+        /// <summary>
+        /// Default model name (e.g. "gemini-3.1-flash-image-preview").
+        /// </summary>
+        string DefaultModel { get; }
+
+        /// <summary>
+        /// The C# helper template source code that gets compiled into generated apps.
+        /// Contains placeholders that are replaced at compile time.
+        /// Null if this agent doesn't provide a helper template.
+        /// </summary>
+        string? HelperTemplateCode { get; }
+
+        /// <summary>
+        /// Dictionary of placeholder → settings-key mappings for template replacement.
+        /// E.g. { "IMAGEGEN_MODEL_PLACEHOLDER" => "ImageGen" } means replace the placeholder
+        /// with the model name from PluginAgentModels["ImageGen"].
+        /// </summary>
+        IReadOnlyDictionary<string, string> TemplatePlaceholders { get; }
+
+        /// <summary>
+        /// DLL file name that must be available for compilation (e.g. "Neo.Agents.GeminiImageGen.dll").
+        /// </summary>
+        string AgentDllName { get; }
+
+        /// <summary>
+        /// System message documentation snippet that describes the agent's API
+        /// for the AI code generator. Appended to the system prompt when this agent is active.
+        /// Null if no system message docs are needed.
+        /// </summary>
+        string? SystemMessageDocs { get; }
+
+        /// <summary>
+        /// Fetches the list of available models from the provider API.
+        /// Returns an empty list if the API is unreachable.
+        /// </summary>
+        Task<List<string>> FetchAvailableModelsAsync(string? apiKeyOrEndpoint);
+    }
+
+    /// <summary>
+    /// Utility for loading embedded resources from agent assemblies.
+    /// Used by IAppIntegratedAgent implementations to load their helper templates.
+    /// </summary>
+    public static class AgentResourceLoader
+    {
+        /// <summary>
+        /// Loads an embedded resource by file name from the assembly that contains the given type.
+        /// </summary>
+        public static string? LoadEmbeddedResource(Type agentType, string resourceFileName)
+        {
+            var asm = agentType.Assembly;
+            var resName = asm.GetManifestResourceNames()
+                .FirstOrDefault(n => n.EndsWith(resourceFileName, StringComparison.OrdinalIgnoreCase));
+            if (resName == null) return null;
+            using var stream = asm.GetManifestResourceStream(resName);
+            if (stream == null) return null;
+            using var reader = new System.IO.StreamReader(stream);
+            return reader.ReadToEnd();
+        }
     }
 }

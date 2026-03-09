@@ -17,9 +17,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <!-- Image Gen Model -->
-            <RowDefinition Height="Auto"/>
-            <!-- Speech-to-Text Model -->
+            <!-- Plugin Agent Models (auto-discovered: ImageGen, STT, etc.) -->
             <RowDefinition Height="Auto"/>
             <!-- Local models section (Ollama, LM Studio) -->
             <RowDefinition Height="Auto"/>
@@ -72,54 +70,47 @@
             <ComboBox x:Name="GeminiModelComboBox" Style="{StaticResource RoundedComboBox}"/>
         </StackPanel>
 
-        <StackPanel x:Name="RowImageGenModel" Grid.Row="10" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
-            <TextBlock Text="Image Generation Model:" Margin="0,0,0,4"/>
-            <ComboBox x:Name="ImageGenModelComboBox" Style="{StaticResource RoundedComboBox}"/>
-        </StackPanel>
-
-        <StackPanel x:Name="RowSpeechToTextModel" Grid.Row="11" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
-            <TextBlock Text="Speech-to-Text Model:" Margin="0,0,0,4"/>
-            <ComboBox x:Name="SpeechToTextModelComboBox" Style="{StaticResource RoundedComboBox}"/>
-        </StackPanel>
+        <!-- Plugin Agent Models (auto-discovered) -->
+        <ItemsControl x:Name="PluginAgentModelsPanel" Grid.Row="10" Grid.ColumnSpan="2" Margin="0,4,0,0"/>
 
         <!-- Local Models Section (Ollama, LM Studio) -->
-        <StackPanel x:Name="RowOllamaModel" Grid.Row="12" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
+        <StackPanel x:Name="RowOllamaModel" Grid.Row="11" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
             <TextBlock Text="Ollama Model:" Margin="0,0,0,4"/>
             <ComboBox x:Name="OllamaModelComboBox" Style="{StaticResource RoundedComboBox}" IsEditable="True"/>
         </StackPanel>
 
-        <StackPanel x:Name="RowOllamaEndpoint" Grid.Row="13" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
+        <StackPanel x:Name="RowOllamaEndpoint" Grid.Row="12" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
             <TextBlock Text="Ollama Endpoint:" Margin="0,0,0,4"/>
             <TextBox x:Name="OllamaEndpointTextBox" Style="{StaticResource RoundedTextBox}"/>
         </StackPanel>
 
-        <StackPanel x:Name="RowLmStudioModel" Grid.Row="14" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
+        <StackPanel x:Name="RowLmStudioModel" Grid.Row="13" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
             <TextBlock Text="LM Studio Model:" Margin="0,0,0,4"/>
             <ComboBox x:Name="LmStudioModelComboBox" Style="{StaticResource RoundedComboBox}" IsEditable="True"/>
         </StackPanel>
 
-        <StackPanel x:Name="RowLmStudioEndpoint" Grid.Row="15" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
+        <StackPanel x:Name="RowLmStudioEndpoint" Grid.Row="14" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
             <TextBlock Text="LM Studio Endpoint:" Margin="0,0,0,4"/>
             <TextBox x:Name="LmStudioEndpointTextBox" Style="{StaticResource RoundedTextBox}"/>
         </StackPanel>
 
         <!-- AI Query (embedded in generated apps) Section -->
-        <Border Grid.ColumnSpan="2" Grid.Row="16" Margin="0,12,0,4" BorderBrush="#DDD" BorderThickness="0,1,0,0"/>
+        <Border Grid.ColumnSpan="2" Grid.Row="15" Margin="0,12,0,4" BorderBrush="#DDD" BorderThickness="0,1,0,0"/>
 
-        <StackPanel x:Name="RowAIQueryProvider" Grid.Row="17" Grid.ColumnSpan="2" Margin="0,4,0,0">
+        <StackPanel x:Name="RowAIQueryProvider" Grid.Row="16" Grid.ColumnSpan="2" Margin="0,4,0,0">
             <TextBlock Text="AI Query Provider (embedded):" Margin="0,0,0,4"/>
             <ComboBox x:Name="AIQueryProviderComboBox" Style="{StaticResource RoundedComboBox}"
                       SelectionChanged="AIQueryProviderComboBox_SelectionChanged"/>
         </StackPanel>
 
-        <StackPanel x:Name="RowAIQueryModel" Grid.Row="18" Grid.ColumnSpan="2" Margin="0,4,0,0">
+        <StackPanel x:Name="RowAIQueryModel" Grid.Row="17" Grid.ColumnSpan="2" Margin="0,4,0,0">
             <TextBlock Text="AI Query Model (embedded):" Margin="0,0,0,4"/>
             <ComboBox x:Name="AIQueryModelComboBox" Style="{StaticResource RoundedComboBox}"/>
         </StackPanel>
 
-        <Border Grid.ColumnSpan="2" Grid.Row="19" Margin="0,12,0,12" BorderBrush="#DDD" BorderThickness="0,1,0,0"/>
+        <Border Grid.ColumnSpan="2" Grid.Row="18" Margin="0,12,0,12" BorderBrush="#DDD" BorderThickness="0,1,0,0"/>
 
-        <Grid Grid.ColumnSpan="2" Grid.Row="20">
+        <Grid Grid.ColumnSpan="2" Grid.Row="19">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"></ColumnDefinition>
                 <ColumnDefinition Width="*"></ColumnDefinition>

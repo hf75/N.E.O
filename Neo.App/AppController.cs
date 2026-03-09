@@ -82,9 +82,12 @@ namespace Neo.App
 
         // AgentHelper.cs musste extra in der csproj Datei hinzugefügt werden damit es eine EmbeddedResource ist!
         public string? AgentHelperCode { get; set; } = null;
-        public string? ImageGenHelperCode { get; set; } = null;
-        public string? SpeechToTextHelperCode { get; set; } = null;
         public Dictionary<string, string> PythonHelperCode { get; set; } = new();
+
+        /// <summary>
+        /// Auto-discovered plugin agents that implement IAppIntegratedAgent.
+        /// </summary>
+        public List<IAppIntegratedAgent> PluginAgents { get; private set; } = new();
 
         List<string> AdditionalFilesForExportCopy { get; set; } = new() { "appsettings.json" };
         public string? ExportIcoFullPath { get; set; } = null!;
@@ -131,29 +134,28 @@ namespace Neo.App
 
             AgentHelperCode = EmbeddedResourceReader.GetEmbeddedResourceContent("AgentHelper.cs");
 
-            var geminiKeyForImageGen = Environment.GetEnvironmentVariable("GEMINI_API_KEY", EnvironmentVariableTarget.User);
-            if (!string.IsNullOrWhiteSpace(geminiKeyForImageGen))
-                ImageGenHelperCode = EmbeddedResourceReader.GetEmbeddedResourceContent("ImageGenHelper.cs");
-
-            var openAiKeyForSTT = Environment.GetEnvironmentVariable("OPENAI_API_KEY", EnvironmentVariableTarget.User);
-            if (!string.IsNullOrWhiteSpace(openAiKeyForSTT))
-                SpeechToTextHelperCode = EmbeddedResourceReader.GetEmbeddedResourceContent("SpeechToTextHelper.cs");
-
             PythonHelperCode["PythonHost.cs"] = EmbeddedResourceReader.GetEmbeddedResourceContent("PythonHost.cs");
             PythonHelperCode["PythonModuleLoader.cs"] = EmbeddedResourceReader.GetEmbeddedResourceContent("PythonModuleLoader.cs");
 
+            // Auto-discover plugin agents (ImageGen, STT, etc.)
+            PluginAgents = DiscoverPluginAgents();
+
             AdditionalDlls.Add("./Neo.Agents.Core.dll");
-            if (!string.IsNullOrWhiteSpace(geminiKeyForImageGen))
-                AdditionalDlls.Add("./Neo.Agents.GeminiImageGen.dll");
-            if (!string.IsNullOrWhiteSpace(openAiKeyForSTT))
-                AdditionalDlls.Add("./Neo.Agents.OpenAIWhisper.dll");
+            foreach (var plugin in PluginAgents)
+            {
+                AdditionalDlls.Add($"./{plugin.AgentDllName}");
+
+                // Ensure default model is in settings
+                if (!Settings.PluginAgentModels.ContainsKey(plugin.SettingsKey))
+                    Settings.PluginAgentModels[plugin.SettingsKey] = plugin.DefaultModel;
+            }
             AdditionalDlls.Add(GetAIQueryAgentDll(Settings.AIQueryProvider));
             DefaultNugets.Add(GetAIQueryNuGetPackage(Settings.AIQueryProvider));
 
             if (Settings.UsePython)
                 DefaultNugets.Add("pythonnet|default");
 
-            var systemMessage = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython, ImageGenHelperCode != null, SpeechToTextHelperCode != null);
+            var systemMessage = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython, PluginAgents);
 
             var openAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY", EnvironmentVariableTarget.User);
             if (!string.IsNullOrWhiteSpace(openAiKey))
@@ -270,6 +272,54 @@ namespace Neo.App
             _undoRedo = new UndoRedoManager(AppState);
         }
 
+        private static List<IAppIntegratedAgent> DiscoverPluginAgents()
+        {
+            // .NET loads assemblies lazily — agent assemblies may not be in the AppDomain yet.
+            // Force-load all Neo.Agents.*.dll from the application directory before scanning.
+            var appDir = AppDomain.CurrentDomain.BaseDirectory;
+            foreach (var dllPath in Directory.GetFiles(appDir, "Neo.Agents.*.dll"))
+            {
+                var asmName = Path.GetFileNameWithoutExtension(dllPath);
+                if (AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == asmName))
+                    continue;
+
+                try { Assembly.LoadFrom(dllPath); }
+                catch { /* Ignore unloadable assemblies */ }
+            }
+
+            var agents = new List<IAppIntegratedAgent>();
+
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    foreach (var type in asm.GetTypes())
+                    {
+                        if (!typeof(IAppIntegratedAgent).IsAssignableFrom(type) ||
+                            type.IsAbstract || type.IsInterface)
+                            continue;
+
+                        if (Activator.CreateInstance(type) is IAppIntegratedAgent plugin)
+                        {
+                            if (plugin.RequiredEnvVar != null)
+                            {
+                                var key = Environment.GetEnvironmentVariable(
+                                    plugin.RequiredEnvVar, EnvironmentVariableTarget.User);
+                                if (string.IsNullOrWhiteSpace(key))
+                                    continue;
+                            }
+
+                            agents.Add(plugin);
+                        }
+                    }
+                }
+                catch { /* Assembly cannot be scanned — skip */ }
+            }
+
+            Debug.WriteLine($"[AppController] Discovered {agents.Count} plugin agent(s): {string.Join(", ", agents.Select(a => a.DisplayName))}");
+            return agents;
+        }
+
         private static (string agentClass, string envVar) GetAIQueryProviderInfo(string provider) => provider switch
         {
             "OpenAI" => ("OpenAiTextChatAgent", "OPENAI_API_KEY"),
@@ -311,18 +361,20 @@ namespace Neo.App
                 files["./agenthelpercode.cs"] = templated;
             }
 
-            if (!string.IsNullOrWhiteSpace(ImageGenHelperCode))
+            // Plugin agent templates (ImageGen, STT, etc.)
+            foreach (var plugin in PluginAgents)
             {
-                var templated = ImageGenHelperCode!
-                    .Replace("IMAGEGEN_MODEL_PLACEHOLDER", Settings.ImageGenModel);
-                files["./imagegenhelpercode.cs"] = templated;
-            }
+                if (string.IsNullOrWhiteSpace(plugin.HelperTemplateCode)) continue;
 
-            if (!string.IsNullOrWhiteSpace(SpeechToTextHelperCode))
-            {
-                var templated = SpeechToTextHelperCode!
-                    .Replace("STT_MODEL_PLACEHOLDER", Settings.SpeechToTextModel);
-                files["./speechtotexthelpercode.cs"] = templated;
+                var templated = plugin.HelperTemplateCode;
+                foreach (var (placeholder, settingsKey) in plugin.TemplatePlaceholders)
+                {
+                    var modelValue = Settings.PluginAgentModels.TryGetValue(settingsKey, out var m)
+                        ? m : plugin.DefaultModel;
+                    templated = templated.Replace(placeholder, modelValue);
+                }
+
+                files[$"./{plugin.SettingsKey.ToLowerInvariant()}helper.cs"] = templated;
             }
 
             if (usePython)
@@ -407,7 +459,7 @@ namespace Neo.App
                 InitialCode = preserveState ? (AppState.LastCode ?? string.Empty) : GetUserControlBaseCode(),
                 InitialHistoryPrefix = preserveState ? string.Empty : "Code:\n\n",
                 AdditionalSourceFiles = additionalSourceFiles,
-                SystemMessageOverride = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython, ImageGenHelperCode != null, SpeechToTextHelperCode != null),
+                SystemMessageOverride = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython, PluginAgents),
             };
 
             _promptToDllSession = _promptToDllClient.CreateSession(sessionOptions);
@@ -560,7 +612,7 @@ namespace Neo.App
 
         public void ReloadAgents()
         {
-            var systemMessage = AISystemMessages.GetSystemMessage(Settings!.UseAvalonia, Settings.UseReactUi, Settings.UsePython, ImageGenHelperCode != null, SpeechToTextHelperCode != null);
+            var systemMessage = AISystemMessages.GetSystemMessage(Settings!.UseAvalonia, Settings.UseReactUi, Settings.UsePython, PluginAgents);
 
             AvailableAgents.Clear();
             Claude = null;
@@ -1258,7 +1310,7 @@ namespace Neo.App
                         prompt += "\n\n" + LastErrorMsg;
 
                     string? completion = null;
-                    string systemMessage = AISystemMessages.GetSystemMessage(Settings!.UseAvalonia, Settings.UseReactUi, Settings.UsePython, ImageGenHelperCode != null, SpeechToTextHelperCode != null);
+                    string systemMessage = AISystemMessages.GetSystemMessage(Settings!.UseAvalonia, Settings.UseReactUi, Settings.UsePython, PluginAgents);
 
                     await ExecuteAIQuery(prompt,
                         systemMessage,

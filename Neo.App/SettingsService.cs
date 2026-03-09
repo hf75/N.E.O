@@ -238,6 +238,22 @@ namespace Neo.App
             }
         }
 
+        private Dictionary<string, string> _pluginAgentModels = new();
+
+        /// <summary>
+        /// Stores model selections for auto-discovered plugin agents.
+        /// Key = IAppIntegratedAgent.SettingsKey, Value = selected model name.
+        /// </summary>
+        public Dictionary<string, string> PluginAgentModels
+        {
+            get => _pluginAgentModels;
+            set
+            {
+                _pluginAgentModels = value ?? new();
+                OnPropertyChanged();
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         protected void OnPropertyChanged([CallerMemberName] string? propName = null)
@@ -291,6 +307,16 @@ namespace Neo.App
                 // Minimal-Validierung: sinnvolle Untergrenze
                 if (model.AiCodeGenerationAttempts < 1)
                     model.AiCodeGenerationAttempts = 5;
+
+                // Migration: old per-property model settings → PluginAgentModels dictionary
+                if (!model.PluginAgentModels.ContainsKey("ImageGen") &&
+                    !string.IsNullOrWhiteSpace(model.ImageGenModel))
+                    model.PluginAgentModels["ImageGen"] = model.ImageGenModel;
+
+                if (!model.PluginAgentModels.ContainsKey("SpeechToText") &&
+                    !string.IsNullOrWhiteSpace(model.SpeechToTextModel))
+                    model.PluginAgentModels["SpeechToText"] = model.SpeechToTextModel;
+
                 return model;
             }
             catch

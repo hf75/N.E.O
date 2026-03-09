@@ -4,12 +4,13 @@ using System.Linq;
 using System.Security.RightsManagement;
 using System.Text;
 using System.Threading.Tasks;
+using Neo.Agents.Core;
 
 namespace Neo.App
 {
     public static class AISystemMessages
     {
-        public static string GetSystemMessage(bool useAvalonia = false, bool useReact = false, bool usePython = false, bool useImageGen = false, bool useSpeechToText = false)
+        public static string GetSystemMessage(bool useAvalonia = false, bool useReact = false, bool usePython = false, IEnumerable<IAppIntegratedAgent>? pluginAgents = null)
         {
             if (useAvalonia == true && useReact == true)
                 throw new NotImplementedException("Avalonia and React cannot be used in conjunction, yet!");
@@ -26,11 +27,15 @@ namespace Neo.App
 
             sp += CommonCoreSystemMessage;
 
-            if (useImageGen)
-                sp += ImageGenSystemMessage;
-
-            if (useSpeechToText)
-                sp += SpeechToTextSystemMessage;
+            // Append system message docs from auto-discovered plugin agents
+            if (pluginAgents != null)
+            {
+                foreach (var plugin in pluginAgents)
+                {
+                    if (!string.IsNullOrWhiteSpace(plugin.SystemMessageDocs))
+                        sp += plugin.SystemMessageDocs;
+                }
+            }
 
             return sp;
         }
@@ -111,40 +116,6 @@ namespace Neo.App
 
             // Send a query to an LLM and get a text response
             public static async Task<string> AIQuery.ExecuteAIQuery(string prompt, string history, string systemMessage)
-            ";
-
-        private static string ImageGenSystemMessage =
-            @"You also have access to AI image generation in the 'Neo.App' namespace:
-
-            // Generate an image from a text description. Returns PNG bytes.
-            // aspectRatio: '1:1', '16:9', '9:16', '4:3', '3:4' (optional)
-            // systemInstruction: style guidance e.g. 'photorealistic', 'watercolor painting' (optional)
-            public static async Task<byte[]> AIImageGen.GenerateImageAsync(string prompt, string? aspectRatio = null, string? systemInstruction = null, CancellationToken cancellationToken = default)
-
-            // Edit an existing image based on a text prompt. Returns modified PNG bytes.
-            public static async Task<byte[]> AIImageGen.EditImageAsync(string prompt, byte[] referenceImage, string referenceImageMimeType = ""image/png"", string? aspectRatio = null, string? systemInstruction = null, CancellationToken cancellationToken = default)
-
-            When the user asks you to generate, create, or display an image, ALWAYS use AIImageGen.GenerateImageAsync (or EditImageAsync for modifications).
-            Convert the returned byte[] to a BitmapImage via MemoryStream for display in an Image control.
-            Never use stock photo URLs, placeholder images, or web scraping for image generation — always use AIImageGen.
-            ";
-
-        private static string SpeechToTextSystemMessage =
-            @"You also have access to AI speech-to-text transcription in the 'Neo.App' namespace:
-
-            // Transcribe audio to text (batch mode). Returns the transcribed text.
-            // audioFileName: file name with extension for format detection (e.g. 'recording.wav', 'memo.mp3')
-            // language: optional ISO-639-1 code (e.g. 'en', 'de') — auto-detected if omitted
-            // prompt: optional context hint to guide transcription vocabulary/style
-            public static async Task<string> AISpeechToText.TranscribeAsync(byte[] audioData, string audioFileName = ""audio.wav"", string? language = null, string? prompt = null, CancellationToken cancellationToken = default)
-
-            // Transcribe audio with streaming partial results. The callback receives the growing text as it is transcribed.
-            public static async Task<string> AISpeechToText.TranscribeStreamingAsync(byte[] audioData, Action<string> onPartialResult, string audioFileName = ""audio.wav"", string? language = null, string? prompt = null, CancellationToken cancellationToken = default)
-
-            Supported audio formats: mp3, mp4, wav, webm, ogg, flac, m4a (max 25 MB).
-            When the user asks to transcribe, convert, or recognize speech/audio, ALWAYS use AISpeechToText.
-            Use TranscribeStreamingAsync when real-time feedback is desired (e.g. updating a TextBox as speech is recognized).
-            For recording audio from a microphone, use NAudio (add NuGet package NAudio|default).
             ";
 
         private static string PatchReviewerSystemMessage =

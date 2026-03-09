@@ -12,7 +12,7 @@ namespace Neo.Agents
     /// when supported by the model (gpt-4o-transcribe, gpt-4o-mini-transcribe).
     /// Falls back to batch transcription for models without streaming (whisper-1).
     /// </summary>
-    public class OpenAIWhisperAgent : StreamingAgentBase
+    public class OpenAIWhisperAgent : StreamingAgentBase, IAppIntegratedAgent
     {
         private const string TranscriptionsUrl = "https://api.openai.com/v1/audio/transcriptions";
 
@@ -345,6 +345,49 @@ namespace Neo.Agents
 
         private static string Truncate(string value, int maxLength) =>
             value.Length <= maxLength ? value : value[..maxLength] + "...";
+
+        // ── IAppIntegratedAgent ────────────────────────────────────────
+
+        public string DisplayName => "Speech-to-Text";
+        public string SettingsKey => "SpeechToText";
+        public string? RequiredEnvVar => "OPENAI_API_KEY";
+        public string DefaultModel => "gpt-4o-mini-transcribe";
+
+        public string? HelperTemplateCode =>
+            AgentResourceLoader.LoadEmbeddedResource(typeof(OpenAIWhisperAgent), "SpeechToTextHelper.cs");
+
+        public IReadOnlyDictionary<string, string> TemplatePlaceholders { get; } =
+            new Dictionary<string, string> { ["STT_MODEL_PLACEHOLDER"] = "SpeechToText" };
+
+        public string AgentDllName => "Neo.Agents.OpenAIWhisper.dll";
+
+        public string? SystemMessageDocs =>
+            @"You also have access to AI speech-to-text transcription in the 'Neo.App' namespace:
+
+            // Transcribe audio to text (batch mode). Returns the transcribed text.
+            // audioFileName: file name with extension for format detection (e.g. 'recording.wav', 'memo.mp3')
+            // language: optional ISO-639-1 code (e.g. 'en', 'de') — auto-detected if omitted
+            // prompt: optional context hint to guide transcription vocabulary/style
+            public static async Task<string> AISpeechToText.TranscribeAsync(byte[] audioData, string audioFileName = ""audio.wav"", string? language = null, string? prompt = null, CancellationToken cancellationToken = default)
+
+            // Transcribe audio with streaming partial results. The callback receives the growing text as it is transcribed.
+            public static async Task<string> AISpeechToText.TranscribeStreamingAsync(byte[] audioData, Action<string> onPartialResult, string audioFileName = ""audio.wav"", string? language = null, string? prompt = null, CancellationToken cancellationToken = default)
+
+            Supported audio formats: mp3, mp4, wav, webm, ogg, flac, m4a (max 25 MB).
+            When the user asks to transcribe, convert, or recognize speech/audio, ALWAYS use AISpeechToText.
+            Use TranscribeStreamingAsync when real-time feedback is desired (e.g. updating a TextBox as speech is recognized).
+            For recording audio from a microphone, use NAudio (add NuGet package NAudio|default).
+            ";
+
+        public Task<List<string>> FetchAvailableModelsAsync(string? apiKeyOrEndpoint)
+        {
+            return Task.FromResult(new List<string>
+            {
+                "gpt-4o-mini-transcribe",
+                "gpt-4o-transcribe",
+                "whisper-1",
+            });
+        }
 
         #region OpenAI Whisper REST API DTOs
 
