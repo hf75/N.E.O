@@ -14,8 +14,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="IconLoader.cs" />
-    <Compile Remove="ImageGenHelper.cs" />
-    <Compile Remove="SpeechToTextHelper.cs" />
     <Compile Remove="PythonInterop\PythonHost.cs" />
     <Compile Remove="PythonInterop\PythonModuleLoader.cs" />
   </ItemGroup>
@@ -26,8 +24,6 @@
 
   <ItemGroup>
     <EmbeddedResource Include="AgentHelper.cs" />
-    <EmbeddedResource Include="ImageGenHelper.cs" />
-    <EmbeddedResource Include="SpeechToTextHelper.cs" />
     <EmbeddedResource Include="IconLoader.cs" />
     <EmbeddedResource Include="PythonInterop\PythonHost.cs" />
     <EmbeddedResource Include="PythonInterop\PythonModuleLoader.cs" />	  
@@ -73,6 +69,7 @@
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.NugetLoader\Neo.Agents.NugetLoader.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.OpenAI\Neo.Agents.OpenAI.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.OpenAIWhisper\Neo.Agents.OpenAIWhisper.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.OpenAITTS\Neo.Agents.OpenAITTS.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Ollama\Neo.Agents.Ollama.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.LmStudio\Neo.Agents.LmStudio.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.PowerShell\Neo.Agents.PowerShell.csproj" />
