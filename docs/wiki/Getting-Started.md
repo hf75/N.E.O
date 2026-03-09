@@ -11,8 +11,8 @@
 ## 1. Clone and Build
 
 ```bash
-git clone https://github.com/<your-username>/neo.git
-cd neo
+git clone https://github.com/hf75/N.E.O.git
+cd N.E.O
 dotnet build neo.sln
 ```
 

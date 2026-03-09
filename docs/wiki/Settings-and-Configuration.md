@@ -32,7 +32,6 @@ Endpoints can be customized in Settings.
 | Setting | Default | Description |
 |---------|---------|-------------|
 | AI code generation attempts | 5 | Max retry attempts if compilation fails |
-| Max agent steps | 10 | Maximum AI reasoning steps (1–25) |
 | Accept changes automatically | Off | Skip patch review and auto-apply AI changes |
 
 ### UI Framework

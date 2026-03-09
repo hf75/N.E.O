@@ -85,7 +85,7 @@ N.E.O. will create a fresh settings file with defaults.
 
 ## Still Having Issues?
 
-Open an issue on [GitHub](https://github.com/<your-username>/neo/issues) with:
+Open an issue on [GitHub](https://github.com/hf75/N.E.O/issues) with:
 - Your .NET SDK version (`dotnet --version`)
 - Your Windows version
 - The exact error message or screenshot
