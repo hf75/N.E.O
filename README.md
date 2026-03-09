@@ -11,7 +11,7 @@ Think of it as Claude Artifacts or ChatGPT Canvas — but for native .NET deskto
 N.E.O. is a .NET desktop application that lets you create small, ready-to-use utility programs and tools through natural language prompts. Need a quick file renamer, a JSON viewer, a color picker, or a custom calculator? Just describe it — N.E.O. uses AI (Claude, ChatGPT, Gemini, or local models like Ollama and LM Studio) to generate C# code, compiles it at runtime using Roslyn, and displays the result in a child process — all in seconds.
 
 **Key features:**
-- Generate WPF, Avalonia, or React (WebView2) user interfaces from text descriptions
+- Generate WPF, Avalonia, or React (WebView2) apps from text descriptions
 - Live compilation and hot-reload of generated code
 - Incremental updates through unified diff patches
 - Export WPF apps as native Windows executables
