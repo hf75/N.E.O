@@ -43,7 +43,10 @@ The solution is fully self-contained — all dependencies (including the agent l
 
 ```
 Neo.App (WPF Host)
-  |-- Neo.Agents (Claude / ChatGPT / Gemini / Ollama / LM Studio)
+  |-- Neo.Agents.Claude / OpenAI / Gemini / Ollama / LmStudio (AI code generation)
+  |-- Neo.Agents.GeminiImageGen (AI image generation)
+  |-- Neo.Agents.OpenAIWhisper (Speech-to-Text)
+  |-- Neo.Agents.OpenAITTS (Text-to-Speech)
   |-- Neo.AssemblyForge (Roslyn compilation pipeline)
   |-- Neo.IPC (Named Pipes with framed protocol)
   |-- Neo.PluginWindowWPF (WPF child process)
