@@ -51,6 +51,7 @@ On first launch, N.E.O. will prompt you to set up your keys if none are found. U
 ```bash
 git clone https://github.com/hf75/N.E.O.git
 cd N.E.O
+dotnet restore neo.sln
 dotnet build neo.sln
 ```
 
