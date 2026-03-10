@@ -23,6 +23,7 @@ N.E.O. is a .NET desktop application that lets you create small, ready-to-use ut
 - Branching undo/redo history
 - Visual designer mode (click-to-edit)
 - Optional sandboxed execution via Windows AppContainer
+- AI image generation, image analysis, speech-to-text, and text-to-speech as built-in capabilities
 - Optional Python integration via embedded Python 3.11
 
 ## Prerequisites
