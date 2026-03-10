@@ -28,6 +28,7 @@ namespace Neo.App
         private string _speechToTextModel = "gpt-4o-mini-transcribe";
         private string _lmStudioModel = "";
         private string _lmStudioEndpoint = "http://localhost:1234/v1/";
+        private string _exportBasePath = "";
 
         public int AiCodeGenerationAttempts
         {
@@ -233,6 +234,19 @@ namespace Neo.App
                 if (_speechToTextModel != value)
                 {
                     _speechToTextModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string ExportBasePath
+        {
+            get { return _exportBasePath; }
+            set
+            {
+                if (_exportBasePath != value)
+                {
+                    _exportBasePath = value;
                     OnPropertyChanged();
                 }
             }

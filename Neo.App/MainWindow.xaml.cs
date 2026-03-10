@@ -952,7 +952,7 @@ namespace Neo.App
         private async void Button_Click_Export(object sender, RoutedEventArgs e)
         {
             // Die UI-Logik (Dialog anzeigen) bleibt hier.
-            var dialog = new ProjectExportDialog(this);
+            var dialog = new ProjectExportDialog(this, _appController.Settings);
             dialog.Owner = this;
 
             if(_appController.Settings.UseAvalonia == true)

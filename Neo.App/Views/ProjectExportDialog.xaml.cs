@@ -25,11 +25,17 @@ namespace Neo.App
 
         private bool _isInitializing;
         private MainWindow _mainWindow;
+        private SettingsModel? _settings;
 
-        public ProjectExportDialog(MainWindow mainWindow)
+        public ProjectExportDialog(MainWindow mainWindow, SettingsModel? settings = null)
         {
             _isInitializing = true;
             InitializeComponent();
+
+            _settings = settings;
+            if (_settings != null && !string.IsNullOrWhiteSpace(_settings.ExportBasePath))
+                BasePathTextBox.Text = _settings.ExportBasePath;
+
             _isInitializing = false;
 
             _mainWindow = mainWindow;
@@ -95,6 +101,12 @@ namespace Neo.App
 
             BaseDirectory = BasePathTextBox.Text.Trim();
             ProjectName = ProjectNameTextBox.Text.Trim();
+
+            if (_settings != null)
+            {
+                _settings.ExportBasePath = BaseDirectory;
+                SettingsService.Save(_settings);
+            }
             SelectedCreationMode = (CreationModeComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString()
                                    ?? CreationModeComboBox.SelectedItem?.ToString();
             ExportIcoFullPath = ((string)(IconFileNameTextBlock.Content))?.Trim();
