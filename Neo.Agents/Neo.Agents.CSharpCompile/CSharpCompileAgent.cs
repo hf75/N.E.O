@@ -98,7 +98,14 @@ namespace Neo.Agents
                 var root = tree.GetCompilationUnitRoot();
 
                 var conflicting = root.Usings
-                    .Where(u => u.Name != null && declaredTypes.Contains(u.Name.ToString()))
+                    .Where(u =>
+                    {
+                        if (u.Name == null) return false;
+                        var name = u.Name.ToString();
+                        if (declaredTypes.Contains(name)) return true;
+                        var lastDot = name.LastIndexOf('.');
+                        return lastDot >= 0 && declaredTypes.Contains(name.Substring(lastDot + 1));
+                    })
                     .ToList();
 
                 if (conflicting.Count == 0)

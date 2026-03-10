@@ -18,7 +18,7 @@ namespace Neo.App
         private bool _useAvalonia = false;
         private bool _acceptAutomatic = false;
         private string _claudeModel = "claude-opus-4-6";
-        private string _openAiModel = "gpt-5.2";
+        private string _openAiModel = "gpt-5.4";
         private string _geminiModel = "gemini-3-pro-preview";
         private string _aiQueryProvider = "Claude";
         private string _aiQueryModel = "claude-sonnet-4-5";

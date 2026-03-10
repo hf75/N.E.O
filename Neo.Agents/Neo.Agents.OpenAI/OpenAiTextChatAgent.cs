@@ -34,7 +34,7 @@ namespace Neo.Agents
                 description: "Dein OpenAI API Key (Pflicht)."));
 
             metadata.Options.Add(new Option<string>(
-                name: "Model", isRequired: true, defaultValue: "gpt-4o",
+                name: "Model", isRequired: true, defaultValue: "gpt-5.4",
                 description: "Das zu verwendende OpenAI-Modell (z.B. gpt-4o, gpt-4.1)."));
 
             metadata.Options.Add(new Option<float>(
