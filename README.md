@@ -33,9 +33,9 @@ N.E.O. reads API keys from **user environment variables**. Set at least one:
 
 | Provider | Environment Variable | Get your key |
 |----------|---------------------|--------------|
-| Anthropic Claude | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
+| Anthropic Claude (recommended) | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
+| Google Gemini (recommended) | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
 | OpenAI / ChatGPT | `OPENAI_API_KEY` | [platform.openai.com](https://platform.openai.com/api-keys) |
-| Google Gemini | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
 
 **Local models** (no key required): [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai) — just start the server.
 
@@ -61,7 +61,7 @@ The solution is fully self-contained — all dependencies (including the agent l
 
 ```
 Neo.App (WPF Host)
-  |-- Neo.Agents.Claude / OpenAI / Gemini / Ollama / LmStudio (AI code generation — Claude and Gemini recommended)
+  |-- Neo.Agents.Claude / OpenAI / Gemini / Ollama / LmStudio (AI code generation)
   |-- Neo.Agents.GeminiImageGen (AI image generation)
   |-- Neo.Agents.OpenAIWhisper (Speech-to-Text)
   |-- Neo.Agents.OpenAITTS (Text-to-Speech)
