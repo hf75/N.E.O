@@ -10,7 +10,7 @@ Think of it as Claude Artifacts or ChatGPT Canvas — but for native .NET deskto
 
 > *"Build an app that captures the system's audio output in real time via WASAPI — e.g. while a YouTube video is playing — and generates a spectacular, visually stunning live animation for a techno club. The animation should react fluidly to every aspect of the audio signal (frequency, volume, bass, beats) and create maximum visual overload. The animation must respond to the music in real time."*
 
-This produces a GPU-accelerated, real-time audio visualizer with FFT analysis — something no web app can do, because browsers have no access to system audio loopback. N.E.O. generates, compiles, and runs it in seconds.
+This produces a GPU-accelerated, real-time audio visualizer with FFT analysis — something no web app can do, because browsers have no access to system audio loopback. N.E.O. generates, compiles, and runs it.
 
 ## What is N.E.O.?
 
