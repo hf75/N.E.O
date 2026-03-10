@@ -4,7 +4,7 @@
 
 ## What is N.E.O.?
 
-N.E.O. is a .NET desktop application that lets you create desktop apps through natural language prompts. It uses AI (Claude, ChatGPT, Gemini, or local models) to generate C# code, compiles it at runtime using Roslyn, and displays the result in a sandboxed child process — all in seconds.
+N.E.O. is a .NET desktop application that lets you create desktop apps through natural language prompts. It uses AI (Claude, ChatGPT, Gemini, or local models) to generate C# code, compiles it at runtime using Roslyn, and displays the result in a sandboxed child process.
 
 ## Quick Links
 
