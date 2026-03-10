@@ -1,13 +1,13 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Neo.Agents.Core;
-using OpenAI.Chat;
-using OpenAI;
-using System.ClientModel;
-using System.ClientModel.Primitives;
 
 namespace Neo.Agents
 {
@@ -17,16 +17,10 @@ namespace Neo.Agents
     /// </summary>
     public class OpenAiTextChatAgent : AgentBase
     {
-        private ChatClient? _chatClient;
+        private const string ApiUrl = "https://api.openai.com/v1/chat/completions";
 
-        /// <summary>
-        /// Name des Agenten
-        /// </summary>
         public override string Name => "OpenAiTextChatAgent";
 
-        /// <summary>
-        /// Hier legen wir fest, welche Optionen, Inputs und Outputs der Agent hat.
-        /// </summary>
         protected override AgentMetadata CreateMetadata()
         {
             var metadata = new AgentMetadata
@@ -35,126 +29,69 @@ namespace Neo.Agents
                 Description = "Agent, der das OpenAI Chat-Interface nutzt, um JSON im gewünschten Schema zu generieren."
             };
 
-            // -- Optionen -----------------------------------
             metadata.Options.Add(new Option<string>(
-                name: "ApiKey",
-                isRequired: true,
-                defaultValue: null!,
-                description: "Dein OpenAI API Key (Pflicht)."
-            ));
+                name: "ApiKey", isRequired: true, defaultValue: null!,
+                description: "Dein OpenAI API Key (Pflicht)."));
 
             metadata.Options.Add(new Option<string>(
-                name: "Model",
-                isRequired: true,
-                defaultValue: "gpt-4o",
-                description: "Das zu verwendende OpenAI-Modell (z.B. gpt-3.5-turbo, gpt-4o)."
-            ));
+                name: "Model", isRequired: true, defaultValue: "gpt-4o",
+                description: "Das zu verwendende OpenAI-Modell (z.B. gpt-4o, gpt-4.1)."));
 
             metadata.Options.Add(new Option<float>(
-                name: "Temperature",
-                isRequired: false,
-                defaultValue: 0.0f,
-                description: "Sampling-Temperature (z.B. 0.7)."
-            ));
+                name: "Temperature", isRequired: false, defaultValue: 0.0f,
+                description: "Sampling-Temperature."));
 
             metadata.Options.Add(new Option<float>(
-                name: "TopP",
-                isRequired: false,
-                defaultValue: 0.9f,
-                description: "Top-P für nucleus sampling."
-            ));
+                name: "TopP", isRequired: false, defaultValue: 0.9f,
+                description: "Top-P für nucleus sampling."));
 
             metadata.Options.Add(new Option<int>(
-                name: "TimeoutSeconds",
-                isRequired: false,
-                defaultValue: 600,
-                description: "Timeout fuer den API-Request in Sekunden (0 = unendlich)."
-            ));
-
-            // -- Eingaben ------------------------------------
-            metadata.InputParameters.Add(new InputParameter<string>(
-                name: "SystemMessage",
-                isRequired: true,
-                description: "System-Instruction für das Chat-Model."
-            ));
+                name: "TimeoutSeconds", isRequired: false, defaultValue: 600,
+                description: "Timeout fuer den API-Request in Sekunden (0 = unendlich)."));
 
             metadata.InputParameters.Add(new InputParameter<string>(
-                name: "History",
-                isRequired: false,
-                description: "Bisherige Unterhaltung bzw. letztes Assistant-Statement."
-            ));
+                name: "SystemMessage", isRequired: true,
+                description: "System-Instruction für das Chat-Model."));
 
             metadata.InputParameters.Add(new InputParameter<string>(
-                name: "Prompt",
-                isRequired: true,
-                description: "User-Eingabe oder Frage, die an das OpenAI-Model gesendet wird."
-            ));
+                name: "History", isRequired: false,
+                description: "Bisherige Unterhaltung bzw. letztes Assistant-Statement."));
 
             metadata.InputParameters.Add(new InputParameter<string>(
-                name: "JsonSchema",
-                isRequired: true,
-                description: "Das JSON-Schema, das die Antwort des Modells strukturieren soll."
-            ));
+                name: "Prompt", isRequired: true,
+                description: "User-Eingabe oder Frage, die an das OpenAI-Model gesendet wird."));
 
-            // -- Ausgaben ------------------------------------
+            metadata.InputParameters.Add(new InputParameter<string>(
+                name: "JsonSchema", isRequired: true,
+                description: "Das JSON-Schema, das die Antwort des Modells strukturieren soll."));
+
             metadata.OutputParameters.Add(new OutputParameter<string>(
-                name: "Result",
-                isAlwaysProvided: true,
-                description: "Die rohe JSON-Antwort des Modells (passt zum übergebenen Schema)."
-            ));
+                name: "Result", isAlwaysProvided: true,
+                description: "Die rohe JSON-Antwort des Modells (passt zum übergebenen Schema)."));
 
             return metadata;
         }
 
-        /// <summary>
-        /// Überprüfen, ob alle Pflichtfelder gesetzt sind.
-        /// </summary>
         public override void ValidateOptionsAndInputs()
         {
-            var apiKey = GetOption<string>("ApiKey");
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
+            if (string.IsNullOrWhiteSpace(GetOption<string>("ApiKey")))
                 throw new ArgumentException("Die Option 'ApiKey' darf nicht leer sein.");
-            }
-
-            var model = GetOption<string>("Model");
-            if (string.IsNullOrWhiteSpace(model))
-            {
+            if (string.IsNullOrWhiteSpace(GetOption<string>("Model")))
                 throw new ArgumentException("Die Option 'Model' darf nicht leer sein.");
-            }
-
-            var systemMsg = GetInput<string>("SystemMessage");
-            if (string.IsNullOrWhiteSpace(systemMsg))
-            {
+            if (string.IsNullOrWhiteSpace(GetInput<string>("SystemMessage")))
                 throw new ArgumentException("Der Input 'SystemMessage' darf nicht leer sein.");
-            }
-
-            var prompt = GetInput<string>("Prompt");
-            if (string.IsNullOrWhiteSpace(prompt))
-            {
+            if (string.IsNullOrWhiteSpace(GetInput<string>("Prompt")))
                 throw new ArgumentException("Der Input 'Prompt' darf nicht leer sein.");
-            }
-
-            var jsonSchema = GetInput<string>("JsonSchema");
-            if (string.IsNullOrWhiteSpace(jsonSchema))
-            {
+            if (string.IsNullOrWhiteSpace(GetInput<string>("JsonSchema")))
                 throw new ArgumentException("Der Input 'JsonSchema' darf nicht leer sein.");
-            }
         }
 
-        /// <summary>
-        /// Führt die eigentliche Logik des Agenten aus: 
-        /// Sendet die Anfrage an OpenAI und liefert das Ergebnis als JSON-String zurück.
-        /// </summary>
         public override async Task ExecuteAsync(CancellationToken? cancellationToken = null)
         {
-            // Erst Optionen/Inputs prüfen
             ValidateOptionsAndInputs();
 
             var apiKey = GetOption<string>("ApiKey");
             var model = GetOption<string>("Model");
-            var temperature = GetOption<float>("Temperature");
-            var topP = GetOption<float>("TopP");
             var timeoutSeconds = GetOption<int>("TimeoutSeconds");
 
             var systemMessage = GetInput<string>("SystemMessage");
@@ -162,57 +99,118 @@ namespace Neo.Agents
             var prompt = GetInput<string>("Prompt");
             var jsonSchema = GetInput<string>("JsonSchema");
 
-            if (timeoutSeconds < 0)
-            {
-                throw new ArgumentException("Die Option 'TimeoutSeconds' darf nicht negativ sein.");
-            }
-
             var timeout = timeoutSeconds == 0
                 ? System.Threading.Timeout.InfiniteTimeSpan
                 : TimeSpan.FromSeconds(timeoutSeconds);
 
-            // ChatClient initialisieren (mit konfigurierbarem Timeout)
-            var clientOptions = new OpenAIClientOptions
+            var ct = cancellationToken ?? CancellationToken.None;
+
+            using var httpClient = new HttpClient { Timeout = timeout };
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+            var messages = new List<ApiMessage>
             {
-                NetworkTimeout = timeout,
-                Transport = new HttpClientPipelineTransport(new HttpClient { Timeout = timeout })
+                new() { Role = "system", Content = systemMessage },
+                new() { Role = "assistant", Content = history },
+                new() { Role = "user", Content = prompt }
             };
 
-            _chatClient = new ChatClient(model: model, credential: new ApiKeyCredential(apiKey), options: clientOptions);
-
-            // Nachrichten aufbauen
-            List<ChatMessage> messages = new()
+            var request = new ApiRequest
             {
-                new SystemChatMessage(systemMessage),
-                new AssistantChatMessage(history),
-                new UserChatMessage(prompt)
+                Model = model,
+                MaxCompletionTokens = 4096 * 8,
+                Messages = messages,
+                ResponseFormat = new ApiResponseFormat
+                {
+                    Type = "json_schema",
+                    JsonSchema = new ApiJsonSchemaFormat
+                    {
+                        Name = "user_defined_schema",
+                        Strict = true,
+                        Schema = JsonNode.Parse(jsonSchema)
+                    }
+                }
             };
 
-            // Optionen für das Chat-Completion
-            ChatCompletionOptions options = new()
-            {   
-                //ReasoningEffortLevel = ChatReasoningEffortLevel.High,
-                MaxOutputTokenCount = 4096*8,
-                //Temperature = temperature,
-                //TopP = topP,
-                ResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
-                    jsonSchemaFormatName: "user_defined_schema",
-                    jsonSchema: BinaryData.FromBytes(System.Text.Encoding.UTF8.GetBytes(jsonSchema)),
-                    jsonSchemaIsStrict: true
-                )
-            };
+            var response = await httpClient.PostAsJsonAsync(ApiUrl, request, ct);
+            var content = await response.Content.ReadAsStringAsync(ct);
 
-            ChatCompletion completion;
-            if( cancellationToken == null )
-                completion = await _chatClient.CompleteChatAsync(messages, options);
-            else
-                completion = await _chatClient.CompleteChatAsync(messages, options, cancellationToken.GetValueOrDefault());
+            if (!response.IsSuccessStatusCode)
+                throw new HttpRequestException($"OpenAI API error ({response.StatusCode}): {Truncate(content, 500)}");
 
-            // Hier nehmen wir die erste Antwort als JSON
-            string rawJsonResponse = completion.Content[0].Text;
+            var result = JsonSerializer.Deserialize<ApiResponse>(content);
+            var text = result?.Choices?.FirstOrDefault()?.Message?.Content;
 
-            // Raw JSON in den Output legen
-            SetOutput("Result", rawJsonResponse);
+            if (string.IsNullOrWhiteSpace(text))
+                throw new InvalidOperationException("No response from OpenAI API.");
+
+            SetOutput("Result", text);
         }
+
+        private static string Truncate(string value, int maxLength) =>
+            value.Length <= maxLength ? value : value[..maxLength] + "...";
+
+        #region OpenAI REST DTOs
+
+        private class ApiRequest
+        {
+            [JsonPropertyName("model")]
+            public string Model { get; set; } = "";
+
+            [JsonPropertyName("max_completion_tokens")]
+            public int MaxCompletionTokens { get; set; }
+
+            [JsonPropertyName("messages")]
+            public List<ApiMessage> Messages { get; set; } = [];
+
+            [JsonPropertyName("response_format")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public ApiResponseFormat? ResponseFormat { get; set; }
+        }
+
+        private class ApiMessage
+        {
+            [JsonPropertyName("role")]
+            public string Role { get; set; } = "";
+
+            [JsonPropertyName("content")]
+            public string Content { get; set; } = "";
+        }
+
+        private class ApiResponseFormat
+        {
+            [JsonPropertyName("type")]
+            public string Type { get; set; } = "";
+
+            [JsonPropertyName("json_schema")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public ApiJsonSchemaFormat? JsonSchema { get; set; }
+        }
+
+        private class ApiJsonSchemaFormat
+        {
+            [JsonPropertyName("name")]
+            public string Name { get; set; } = "";
+
+            [JsonPropertyName("strict")]
+            public bool Strict { get; set; }
+
+            [JsonPropertyName("schema")]
+            public JsonNode? Schema { get; set; }
+        }
+
+        private class ApiResponse
+        {
+            [JsonPropertyName("choices")]
+            public List<ApiChoice>? Choices { get; set; }
+        }
+
+        private class ApiChoice
+        {
+            [JsonPropertyName("message")]
+            public ApiMessage? Message { get; set; }
+        }
+
+        #endregion
     }
 }

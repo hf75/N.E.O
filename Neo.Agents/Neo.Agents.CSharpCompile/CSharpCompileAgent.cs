@@ -69,6 +69,50 @@ namespace Neo.Agents
 
             return newRoot.NormalizeWhitespace().ToFullString();
         }
+
+        /// <summary>
+        /// Collects all top-level type names across all code files and removes
+        /// any "using X;" directive where X matches a declared type name.
+        /// This prevents CS0138 errors when a using directive targets a type
+        /// instead of a namespace (e.g. "using App;" when class App exists).
+        /// </summary>
+        public static List<string> RemoveConflictingUsings(List<string> codeFiles)
+        {
+            // 1. Collect all declared type names across all files
+            var declaredTypes = new HashSet<string>();
+            foreach (var code in codeFiles)
+            {
+                var tree = CSharpSyntaxTree.ParseText(code);
+                var root = tree.GetCompilationUnitRoot();
+                foreach (var typeDecl in root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
+                {
+                    declaredTypes.Add(typeDecl.Identifier.Text);
+                }
+            }
+
+            // 2. Remove conflicting using directives from each file
+            var result = new List<string>(codeFiles.Count);
+            foreach (var code in codeFiles)
+            {
+                var tree = CSharpSyntaxTree.ParseText(code);
+                var root = tree.GetCompilationUnitRoot();
+
+                var conflicting = root.Usings
+                    .Where(u => u.Name != null && declaredTypes.Contains(u.Name.ToString()))
+                    .ToList();
+
+                if (conflicting.Count == 0)
+                {
+                    result.Add(code);
+                    continue;
+                }
+
+                var newRoot = root.RemoveNodes(conflicting, SyntaxRemoveOptions.KeepNoTrivia);
+                result.Add(newRoot!.NormalizeWhitespace().ToFullString());
+            }
+
+            return result;
+        }
     }
 
     public class CSharpCompileAgent : AgentBase
@@ -237,6 +281,11 @@ namespace Neo.Agents
                 {
                     code[i] = NamespaceFixer.FixNamespace(code[i], forceNamespace);
                 }
+
+                // After namespace forcing, remove using directives that collide with
+                // type names defined across all compilation units (e.g. "using App;"
+                // when a class "App" exists). These cause CS0138.
+                code = NamespaceFixer.RemoveConflictingUsings(code);
             }
 
             List<SyntaxTree> syntaxTrees = new List<SyntaxTree>();

@@ -331,11 +331,8 @@ namespace Neo.App
 
         private static string GetAIQueryNuGetPackage(string provider) => provider switch
         {
-            "OpenAI" => "OpenAI|2.3.0",
             "Gemini" => "Google_GenerativeAI|3.6.1",
-            "Ollama" => "OpenAI|2.3.0",
-            "LM Studio" => "OpenAI|2.3.0",
-            _ => "Anthropic.SDK|5.8.0",
+            _ => "",  // Claude, OpenAI, Ollama, LM Studio use pure REST — no NuGet SDK needed
         };
 
         private static string GetAIQueryAgentDll(string provider) => provider switch

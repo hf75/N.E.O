@@ -1,18 +1,20 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Net.Http;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Neo.Agents.Core;
-using Anthropic.SDK;
-using Anthropic.SDK.Common;
-using Anthropic.SDK.Messaging;
 
 namespace Neo.Agents
 {
     public class AnthropicTextChatAgent : AgentBase
     {
+        private const string ApiUrl = "https://api.anthropic.com/v1/messages";
+        private const string ApiVersion = "2023-06-01";
+
         public override string Name => "AnthropicTextChatAgent";
 
         protected override AgentMetadata CreateMetadata()
@@ -66,7 +68,6 @@ namespace Neo.Agents
             var apiKey = GetOption<string>("ApiKey");
             var model = GetOption<string>("Model");
             var temperature = GetOption<float>("Temperature");
-            var topP = GetOption<float>("TopP");
             var timeoutSeconds = GetOption<int>("TimeoutSeconds");
 
             var systemMessage = GetInput<string>("SystemMessage");
@@ -74,76 +75,169 @@ namespace Neo.Agents
             var prompt = GetInput<string>("Prompt");
             var jsonSchema = GetInput<string>("JsonSchema");
 
-            if (timeoutSeconds < 0)
-            {
-                throw new ArgumentException("Die Option 'TimeoutSeconds' darf nicht negativ sein.");
-            }
-
             var timeout = timeoutSeconds == 0
                 ? System.Threading.Timeout.InfiniteTimeSpan
                 : TimeSpan.FromSeconds(timeoutSeconds);
 
+            var ct = cancellationToken ?? CancellationToken.None;
+
             using var httpClient = new HttpClient { Timeout = timeout };
-            using var anthropicClient = new AnthropicClient(new APIAuthentication(apiKey), httpClient, null);
+            httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
+            httpClient.DefaultRequestHeaders.Add("anthropic-version", ApiVersion);
 
-            var messages = new List<Message>();
-            if (!string.IsNullOrEmpty(systemMessage))
-                messages.Add(new Message(RoleType.Assistant, systemMessage));
+            // Build messages
+            var messages = new List<ApiMessage>();
             if (!string.IsNullOrEmpty(history))
-                messages.Add(new Message(RoleType.Assistant, history));
-            if (!string.IsNullOrEmpty(prompt))
-                messages.Add(new Message(RoleType.User, prompt));
+                messages.Add(new ApiMessage { Role = "assistant", Content = history });
+            messages.Add(new ApiMessage { Role = "user", Content = prompt });
 
-            if ( !string.IsNullOrEmpty(jsonSchema) )
+            string rawJsonResponse;
+
+            if (!string.IsNullOrEmpty(jsonSchema))
             {
-                var tools = new List<Anthropic.SDK.Common.Tool>
+                // Tool Use mode for structured JSON output
+                var request = new ApiRequest
                 {
-                    new Function("record_summary", "Generate JSON output based on the given schema.",
-                        JsonNode.Parse(jsonSchema))
-                };
-
-                var toolChoice = new ToolChoice()
-                {
-                    Type = ToolChoiceType.Tool,
-                    Name = "record_summary"
-                };
-
-                var parameters = new MessageParameters
-                {
-                    Messages = messages,
-                    MaxTokens = 64000,
                     Model = model,
-                    Temperature = (decimal)temperature,
-                    Tools = tools,
-                    ToolChoice = toolChoice,
+                    MaxTokens = 64000,
+                    System = systemMessage,
+                    Temperature = temperature,
+                    Messages = messages,
+                    Tools = [new ApiTool
+                    {
+                        Name = "record_summary",
+                        Description = "Generate JSON output based on the given schema.",
+                        InputSchema = JsonNode.Parse(jsonSchema)
+                    }],
+                    ToolChoice = new ApiToolChoice
+                    {
+                        Type = "tool",
+                        Name = "record_summary"
+                    }
                 };
 
-                MessageResponse result;
+                var response = await httpClient.PostAsJsonAsync(ApiUrl, request, ct);
+                var content = await response.Content.ReadAsStringAsync(ct);
 
-                if( cancellationToken == null )
-                    result = await anthropicClient.Messages.GetClaudeMessageAsync(parameters);
-                else
-                    result = await anthropicClient.Messages.GetClaudeMessageAsync( parameters, cancellationToken.GetValueOrDefault() );
+                if (!response.IsSuccessStatusCode)
+                    throw new HttpRequestException($"Anthropic API error ({response.StatusCode}): {Truncate(content, 500)}");
 
-                var toolResult = result.Content.OfType<ToolUseContent>().First();
-                var rawJsonResponse = toolResult.Input.ToJsonString();
-
-                SetOutput("Result", rawJsonResponse);
+                var result = JsonSerializer.Deserialize<ApiResponse>(content);
+                var toolUse = result?.Content?.FirstOrDefault(c => c.Type == "tool_use");
+                rawJsonResponse = toolUse?.Input?.ToJsonString()
+                    ?? throw new InvalidOperationException("No tool_use response from Anthropic API.");
             }
             else
             {
-                var parameters = new MessageParameters
+                // Plain text mode
+                var request = new ApiRequest
                 {
-                    Messages = messages,
-                    MaxTokens = 64000,
                     Model = model,
-                    Temperature = (decimal)temperature,
+                    MaxTokens = 64000,
+                    System = systemMessage,
+                    Temperature = temperature,
+                    Messages = messages
                 };
 
-                var result = await anthropicClient.Messages.GetClaudeMessageAsync(parameters);
+                var response = await httpClient.PostAsJsonAsync(ApiUrl, request, ct);
+                var content = await response.Content.ReadAsStringAsync(ct);
 
-                SetOutput("Result", result.Message.ToString());
+                if (!response.IsSuccessStatusCode)
+                    throw new HttpRequestException($"Anthropic API error ({response.StatusCode}): {Truncate(content, 500)}");
+
+                var result = JsonSerializer.Deserialize<ApiResponse>(content);
+                var textBlock = result?.Content?.FirstOrDefault(c => c.Type == "text");
+                rawJsonResponse = textBlock?.Text
+                    ?? throw new InvalidOperationException("No text response from Anthropic API.");
             }
+
+            SetOutput("Result", rawJsonResponse);
         }
+
+        private static string Truncate(string value, int maxLength) =>
+            value.Length <= maxLength ? value : value[..maxLength] + "...";
+
+        #region Anthropic REST DTOs
+
+        private class ApiRequest
+        {
+            [JsonPropertyName("model")]
+            public string Model { get; set; } = "";
+
+            [JsonPropertyName("max_tokens")]
+            public int MaxTokens { get; set; }
+
+            [JsonPropertyName("system")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string? System { get; set; }
+
+            [JsonPropertyName("temperature")]
+            public float Temperature { get; set; }
+
+            [JsonPropertyName("messages")]
+            public List<ApiMessage> Messages { get; set; } = [];
+
+            [JsonPropertyName("tools")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public List<ApiTool>? Tools { get; set; }
+
+            [JsonPropertyName("tool_choice")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public ApiToolChoice? ToolChoice { get; set; }
+        }
+
+        private class ApiMessage
+        {
+            [JsonPropertyName("role")]
+            public string Role { get; set; } = "";
+
+            [JsonPropertyName("content")]
+            public string Content { get; set; } = "";
+        }
+
+        private class ApiTool
+        {
+            [JsonPropertyName("name")]
+            public string Name { get; set; } = "";
+
+            [JsonPropertyName("description")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string? Description { get; set; }
+
+            [JsonPropertyName("input_schema")]
+            public JsonNode? InputSchema { get; set; }
+        }
+
+        private class ApiToolChoice
+        {
+            [JsonPropertyName("type")]
+            public string Type { get; set; } = "";
+
+            [JsonPropertyName("name")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string? Name { get; set; }
+        }
+
+        private class ApiResponse
+        {
+            [JsonPropertyName("content")]
+            public List<ApiContentBlock>? Content { get; set; }
+        }
+
+        private class ApiContentBlock
+        {
+            [JsonPropertyName("type")]
+            public string Type { get; set; } = "";
+
+            [JsonPropertyName("text")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string? Text { get; set; }
+
+            [JsonPropertyName("input")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public JsonNode? Input { get; set; }
+        }
+
+        #endregion
     }
 }

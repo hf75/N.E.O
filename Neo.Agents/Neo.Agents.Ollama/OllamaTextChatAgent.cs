@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Neo.Agents.Core;
-using OpenAI.Chat;
-using OpenAI;
-using System.ClientModel;
-using System.ClientModel.Primitives;
 
 namespace Neo.Agents
 {
@@ -17,8 +17,6 @@ namespace Neo.Agents
     /// </summary>
     public class OllamaTextChatAgent : AgentBase
     {
-        private ChatClient? _chatClient;
-
         public override string Name => "OllamaTextChatAgent";
 
         protected override AgentMetadata CreateMetadata()
@@ -30,105 +28,62 @@ namespace Neo.Agents
             };
 
             metadata.Options.Add(new Option<string>(
-                name: "Endpoint",
-                isRequired: false,
-                defaultValue: "http://localhost:11434/v1/",
-                description: "Die Ollama-Server-URL (Standard: http://localhost:11434/v1/)."
-            ));
+                name: "Endpoint", isRequired: false, defaultValue: "http://localhost:11434/v1/",
+                description: "Die Ollama-Server-URL (Standard: http://localhost:11434/v1/)."));
 
             metadata.Options.Add(new Option<string>(
-                name: "ApiKey",
-                isRequired: false,
-                defaultValue: "ollama",
-                description: "API-Key (bei Ollama in der Regel nicht benötigt)."
-            ));
+                name: "ApiKey", isRequired: false, defaultValue: "ollama",
+                description: "API-Key (bei Ollama in der Regel nicht benötigt)."));
 
             metadata.Options.Add(new Option<string>(
-                name: "Model",
-                isRequired: true,
-                defaultValue: "llama3.1:latest",
-                description: "Das zu verwendende Ollama-Modell (z.B. llama3.1:latest, codellama)."
-            ));
+                name: "Model", isRequired: true, defaultValue: "llama3.1:latest",
+                description: "Das zu verwendende Ollama-Modell (z.B. llama3.1:latest, codellama)."));
 
             metadata.Options.Add(new Option<float>(
-                name: "Temperature",
-                isRequired: false,
-                defaultValue: 0.0f,
-                description: "Sampling-Temperature (z.B. 0.7)."
-            ));
+                name: "Temperature", isRequired: false, defaultValue: 0.0f,
+                description: "Sampling-Temperature (z.B. 0.7)."));
 
             metadata.Options.Add(new Option<float>(
-                name: "TopP",
-                isRequired: false,
-                defaultValue: 0.9f,
-                description: "Top-P für nucleus sampling."
-            ));
+                name: "TopP", isRequired: false, defaultValue: 0.9f,
+                description: "Top-P für nucleus sampling."));
 
             metadata.Options.Add(new Option<int>(
-                name: "TimeoutSeconds",
-                isRequired: false,
-                defaultValue: 600,
-                description: "Timeout fuer den API-Request in Sekunden (0 = unendlich)."
-            ));
+                name: "TimeoutSeconds", isRequired: false, defaultValue: 600,
+                description: "Timeout fuer den API-Request in Sekunden (0 = unendlich)."));
 
             metadata.InputParameters.Add(new InputParameter<string>(
-                name: "SystemMessage",
-                isRequired: true,
-                description: "System-Instruction für das Chat-Model."
-            ));
+                name: "SystemMessage", isRequired: true,
+                description: "System-Instruction für das Chat-Model."));
 
             metadata.InputParameters.Add(new InputParameter<string>(
-                name: "History",
-                isRequired: false,
-                description: "Bisherige Unterhaltung bzw. letztes Assistant-Statement."
-            ));
+                name: "History", isRequired: false,
+                description: "Bisherige Unterhaltung bzw. letztes Assistant-Statement."));
 
             metadata.InputParameters.Add(new InputParameter<string>(
-                name: "Prompt",
-                isRequired: true,
-                description: "User-Eingabe oder Frage, die an das Modell gesendet wird."
-            ));
+                name: "Prompt", isRequired: true,
+                description: "User-Eingabe oder Frage, die an das Modell gesendet wird."));
 
             metadata.InputParameters.Add(new InputParameter<string>(
-                name: "JsonSchema",
-                isRequired: true,
-                description: "Das JSON-Schema, das die Antwort des Modells strukturieren soll."
-            ));
+                name: "JsonSchema", isRequired: true,
+                description: "Das JSON-Schema, das die Antwort des Modells strukturieren soll."));
 
             metadata.OutputParameters.Add(new OutputParameter<string>(
-                name: "Result",
-                isAlwaysProvided: true,
-                description: "Die rohe JSON-Antwort des Modells (passt zum übergebenen Schema)."
-            ));
+                name: "Result", isAlwaysProvided: true,
+                description: "Die rohe JSON-Antwort des Modells (passt zum übergebenen Schema)."));
 
             return metadata;
         }
 
         public override void ValidateOptionsAndInputs()
         {
-            var model = GetOption<string>("Model");
-            if (string.IsNullOrWhiteSpace(model))
-            {
+            if (string.IsNullOrWhiteSpace(GetOption<string>("Model")))
                 throw new ArgumentException("Die Option 'Model' darf nicht leer sein.");
-            }
-
-            var systemMsg = GetInput<string>("SystemMessage");
-            if (string.IsNullOrWhiteSpace(systemMsg))
-            {
+            if (string.IsNullOrWhiteSpace(GetInput<string>("SystemMessage")))
                 throw new ArgumentException("Der Input 'SystemMessage' darf nicht leer sein.");
-            }
-
-            var prompt = GetInput<string>("Prompt");
-            if (string.IsNullOrWhiteSpace(prompt))
-            {
+            if (string.IsNullOrWhiteSpace(GetInput<string>("Prompt")))
                 throw new ArgumentException("Der Input 'Prompt' darf nicht leer sein.");
-            }
-
-            var jsonSchema = GetInput<string>("JsonSchema");
-            if (string.IsNullOrWhiteSpace(jsonSchema))
-            {
+            if (string.IsNullOrWhiteSpace(GetInput<string>("JsonSchema")))
                 throw new ArgumentException("Der Input 'JsonSchema' darf nicht leer sein.");
-            }
         }
 
         public override async Task ExecuteAsync(CancellationToken? cancellationToken = null)
@@ -138,8 +93,6 @@ namespace Neo.Agents
             var endpoint = GetOption<string>("Endpoint") ?? "http://localhost:11434/v1/";
             var apiKey = GetOption<string>("ApiKey");
             var model = GetOption<string>("Model");
-            var temperature = GetOption<float>("Temperature");
-            var topP = GetOption<float>("TopP");
             var timeoutSeconds = GetOption<int>("TimeoutSeconds");
 
             if (string.IsNullOrWhiteSpace(apiKey)) apiKey = "ollama";
@@ -149,23 +102,11 @@ namespace Neo.Agents
             var prompt = GetInput<string>("Prompt");
             var jsonSchema = GetInput<string>("JsonSchema");
 
-            if (timeoutSeconds < 0)
-            {
-                throw new ArgumentException("Die Option 'TimeoutSeconds' darf nicht negativ sein.");
-            }
-
             var timeout = timeoutSeconds == 0
                 ? System.Threading.Timeout.InfiniteTimeSpan
                 : TimeSpan.FromSeconds(timeoutSeconds);
 
-            var clientOptions = new OpenAIClientOptions
-            {
-                NetworkTimeout = timeout,
-                Endpoint = new Uri(endpoint),
-                Transport = new HttpClientPipelineTransport(new HttpClient { Timeout = timeout })
-            };
-
-            _chatClient = new ChatClient(model: model, credential: new ApiKeyCredential(apiKey), options: clientOptions);
+            var ct = cancellationToken ?? CancellationToken.None;
 
             // JSON-Schema im Prompt anhängen (lokale Modelle unterstützen kein strict JSON schema)
             var finalPrompt = new StringBuilder();
@@ -175,31 +116,41 @@ namespace Neo.Agents
                 "Do NOT output the JSON schema itself, any explanation, or a description of the structure—output ONLY a JSON object that can be directly deserialized.");
             finalPrompt.AppendLine(jsonSchema);
 
-            List<ChatMessage> messages = new()
+            var url = endpoint.TrimEnd('/') + "/chat/completions";
+
+            using var httpClient = new HttpClient { Timeout = timeout };
+            httpClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+            var messages = new List<ApiMessage>
             {
-                new SystemChatMessage(systemMessage),
-                new AssistantChatMessage(history),
-                new UserChatMessage(finalPrompt.ToString())
+                new() { Role = "system", Content = systemMessage },
+                new() { Role = "assistant", Content = history },
+                new() { Role = "user", Content = finalPrompt.ToString() }
             };
 
-            ChatCompletionOptions options = new()
+            var request = new ApiRequest
             {
-                MaxOutputTokenCount = 4096 * 8,
-                ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+                Model = model,
+                MaxTokens = 4096 * 8,
+                Messages = messages,
+                ResponseFormat = new ApiResponseFormat { Type = "json_object" }
             };
 
-            ChatCompletion completion;
-            if (cancellationToken == null)
-                completion = await _chatClient.CompleteChatAsync(messages, options);
-            else
-                completion = await _chatClient.CompleteChatAsync(messages, options, cancellationToken.GetValueOrDefault());
+            var response = await httpClient.PostAsJsonAsync(url, request, ct);
+            var content = await response.Content.ReadAsStringAsync(ct);
 
-            string rawJsonResponse = completion.Content[0].Text;
+            if (!response.IsSuccessStatusCode)
+                throw new HttpRequestException($"Ollama API error ({response.StatusCode}): {Truncate(content, 500)}");
+
+            var result = JsonSerializer.Deserialize<ApiResponse>(content);
+            var text = result?.Choices?.FirstOrDefault()?.Message?.Content;
+
+            if (string.IsNullOrWhiteSpace(text))
+                throw new InvalidOperationException("No response from Ollama API.");
 
             // Markdown-Fences entfernen (lokale Modelle packen JSON manchmal in ```)
-            string cleanedJson = StripMarkdownFences(rawJsonResponse);
-
-            SetOutput("Result", cleanedJson);
+            SetOutput("Result", StripMarkdownFences(text));
         }
 
         private static string StripMarkdownFences(string text)
@@ -213,5 +164,55 @@ namespace Neo.Agents
                 result = result.Substring(0, result.Length - 3);
             return result.Trim();
         }
+
+        private static string Truncate(string value, int maxLength) =>
+            value.Length <= maxLength ? value : value[..maxLength] + "...";
+
+        #region OpenAI-compatible REST DTOs
+
+        private class ApiRequest
+        {
+            [JsonPropertyName("model")]
+            public string Model { get; set; } = "";
+
+            [JsonPropertyName("max_tokens")]
+            public int MaxTokens { get; set; }
+
+            [JsonPropertyName("messages")]
+            public List<ApiMessage> Messages { get; set; } = [];
+
+            [JsonPropertyName("response_format")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public ApiResponseFormat? ResponseFormat { get; set; }
+        }
+
+        private class ApiMessage
+        {
+            [JsonPropertyName("role")]
+            public string Role { get; set; } = "";
+
+            [JsonPropertyName("content")]
+            public string Content { get; set; } = "";
+        }
+
+        private class ApiResponseFormat
+        {
+            [JsonPropertyName("type")]
+            public string Type { get; set; } = "";
+        }
+
+        private class ApiResponse
+        {
+            [JsonPropertyName("choices")]
+            public List<ApiChoice>? Choices { get; set; }
+        }
+
+        private class ApiChoice
+        {
+            [JsonPropertyName("message")]
+            public ApiMessage? Message { get; set; }
+        }
+
+        #endregion
     }
 }
