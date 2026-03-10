@@ -25,9 +25,26 @@ N.E.O. is a .NET desktop application that lets you create small, ready-to-use ut
 
 - [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) or later (change `NeoNetMajor` in `Directory.Build.props` to match your version)
 - Windows 10/11 (the host application is WPF-based)
-- At least one AI provider:
-  - **Cloud:** [Anthropic Claude](https://console.anthropic.com/settings/keys), [OpenAI](https://platform.openai.com/api-keys), or [Google Gemini](https://aistudio.google.com/apikey) (API key required)
-  - **Local:** [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai) (no key required)
+- At least one AI provider (see API Keys below)
+
+## API Keys
+
+N.E.O. reads API keys from **user environment variables**. Set at least one:
+
+| Provider | Environment Variable | Get your key |
+|----------|---------------------|--------------|
+| Anthropic Claude | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
+| OpenAI / ChatGPT | `OPENAI_API_KEY` | [platform.openai.com](https://platform.openai.com/api-keys) |
+| Google Gemini | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
+
+**Local models** (no key required): [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai) — just start the server.
+
+Example (Windows PowerShell):
+```powershell
+[Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-...", "User")
+```
+
+On first launch, N.E.O. will prompt you to set up your keys if none are found. Use **Ctrl+1** to cycle through available AI providers at any time.
 
 ## Building
 
