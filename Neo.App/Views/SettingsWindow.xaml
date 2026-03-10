@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Settings"
         WindowStartupLocation="CenterOwner" FontFamily="Segoe UI Semilight"
-        ResizeMode="NoResize" SizeToContent="Height" Width="450">
+        ResizeMode="NoResize" SizeToContent="Height" MaxHeight="700" Width="450">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -127,4 +128,5 @@
             </Button>
         </Grid>
     </Grid>
+    </ScrollViewer>
 </Window>

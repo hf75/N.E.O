@@ -1164,7 +1164,13 @@ namespace Neo.App
             _allowChildIsVisible = true;
 
             if (_childHwnd != IntPtr.Zero)
-                NativeMethods.ShowWindow(_childHwnd, NativeMethods.SW_SHOW);
+            {
+                // UpdatePosition calls ShowWindow(SW_SHOWNOACTIVATE) and fixes z-order.
+                // Without this, the window may appear behind the parent after HideChild/ShowChild
+                // because SW_SHOW alone does not change z-order.
+                UpdatePosition(true);
+                UpdatePosition(false);
+            }
         }
 
         public void ChildNoTopmost()
