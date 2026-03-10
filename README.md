@@ -10,8 +10,6 @@ Think of it as Claude Artifacts or ChatGPT Canvas — but for native .NET deskto
 
 > *"Build an app that captures the system's audio output in real time via WASAPI — e.g. while a YouTube video is playing — and generates a spectacular, visually stunning live animation for a techno club. The animation should react fluidly to every aspect of the audio signal (frequency, volume, bass, beats) and create maximum visual overload. The animation must respond to the music in real time."*
 
-This produces a GPU-accelerated, real-time audio visualizer with FFT analysis — something no web app can do, because browsers have no access to system audio loopback. N.E.O. generates, compiles, and runs it.
-
 ## What is N.E.O.?
 
 N.E.O. is a .NET desktop application that lets you create small, ready-to-use utility programs and tools through natural language prompts. Need a quick file renamer, a JSON viewer, a color picker, or a custom calculator? Just describe it — N.E.O. uses AI (Claude, ChatGPT, Gemini, or local models like Ollama and LM Studio) to generate C# code, compiles it at runtime using Roslyn, and displays the result in a child process.
