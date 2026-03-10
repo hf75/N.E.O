@@ -61,7 +61,7 @@ The solution is fully self-contained — all dependencies (including the agent l
 
 ```
 Neo.App (WPF Host)
-  |-- Neo.Agents.Claude / OpenAI / Gemini / Ollama / LmStudio (AI code generation)
+  |-- Neo.Agents.Claude / OpenAI / Gemini / Ollama / LmStudio (AI code generation — Claude and Gemini recommended)
   |-- Neo.Agents.GeminiImageGen (AI image generation)
   |-- Neo.Agents.OpenAIWhisper (Speech-to-Text)
   |-- Neo.Agents.OpenAITTS (Text-to-Speech)
