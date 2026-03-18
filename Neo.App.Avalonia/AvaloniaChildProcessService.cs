@@ -306,8 +306,28 @@ namespace Neo.App
 
         public void UpdatePosition(bool useTopMostTrick = false)
         {
-            // Child runs as an independent window on all platforms.
-            // No HWND manipulation — consistent cross-platform behavior.
+            // Send parent bounds to child via IPC for magnetic docking
+            SendParentBoundsAsync().ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnFaulted);
+        }
+
+        private async Task SendParentBoundsAsync()
+        {
+            if (_messenger == null || _pipeStream == null || !_pipeStream.IsConnected) return;
+
+            try
+            {
+                var pos = _mainWindow.Position;
+                var msg = new ParentWindowBoundsMessage(
+                    pos.X, pos.Y,
+                    _mainWindow.Width, _mainWindow.Height,
+                    _mainWindow.WindowState != global::Avalonia.Controls.WindowState.Minimized);
+
+                await SafeSendControlAsync(new IpcEnvelope(
+                    IpcTypes.ParentWindowBounds,
+                    "",
+                    Json.ToJson(msg)));
+            }
+            catch { /* best-effort positioning */ }
         }
 
         public async Task<bool> DisplayControlAsync(string mainDllPath, IEnumerable<string> nugetDlls, IEnumerable<string> additionalDlls)
@@ -375,7 +395,13 @@ namespace Neo.App
             _crossplatformSettings = settings;
         }
 
-        public void NotifyParentWindowStateChanged(HostWindowState newState) { }
+        public void NotifyParentWindowStateChanged(HostWindowState newState)
+        {
+            if (newState == HostWindowState.Minimized)
+                SendVisibilityAsync(false).ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnFaulted);
+            else if (_allowChildVisible)
+                UpdatePosition();
+        }
 
         public async Task SetCursorVisibilityAsync(bool isVisible)
         {
@@ -415,11 +441,26 @@ namespace Neo.App
         public void HideChild()
         {
             _allowChildVisible = false;
+            SendVisibilityAsync(false).ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnFaulted);
         }
 
         public void ShowChild()
         {
             _allowChildVisible = true;
+            SendVisibilityAsync(true).ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnFaulted);
+            UpdatePosition();
+        }
+
+        private async Task SendVisibilityAsync(bool visible)
+        {
+            if (_messenger == null || _pipeStream == null || !_pipeStream.IsConnected) return;
+            try
+            {
+                var msg = new ParentWindowBoundsMessage(0, 0, 0, 0, visible);
+                await SafeSendControlAsync(new IpcEnvelope(
+                    IpcTypes.ParentWindowBounds, "", Json.ToJson(msg)));
+            }
+            catch { }
         }
 
         private async Task DisposeChildAsync()

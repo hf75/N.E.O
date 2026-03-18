@@ -355,6 +355,35 @@ namespace Neo.PluginWindowAvalonia
                         break;
                     }
 
+                case IpcTypes.ParentWindowBounds:
+                    {
+                        var bounds = Json.FromJson<ParentWindowBoundsMessage>(env.PayloadJson);
+                        if (bounds != null)
+                        {
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                if (!bounds.IsVisible)
+                                {
+                                    MainWin.Hide();
+                                }
+                                else
+                                {
+                                    // Dock to the right edge of parent, same height
+                                    int dockX = (int)(bounds.X + bounds.Width + 8); // 8px gap
+                                    int dockY = (int)bounds.Y;
+                                    int dockH = (int)bounds.Height;
+
+                                    MainWin.Position = new PixelPoint(dockX, dockY);
+                                    MainWin.Height = dockH;
+
+                                    if (!MainWin.IsVisible)
+                                        MainWin.Show();
+                                }
+                            });
+                        }
+                        break;
+                    }
+
                 case IpcTypes.UnloadControl:
                     {
                         await Dispatcher.UIThread.InvokeAsync(() =>

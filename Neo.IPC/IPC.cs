@@ -46,6 +46,7 @@ namespace Neo.IPC
         public const string SetDesignerMode = "SetDesignerMode";
         public const string DesignerSelection = "DesignerSelection";
         public const string UnloadControl = "UnloadControl";
+        public const string ParentWindowBounds = "ParentWindowBounds";
     }
 
     public enum LogLevel
@@ -94,6 +95,9 @@ namespace Neo.IPC
     public record NotifyFirstChildVisibility(int unused);
 
     public record SetDesignerModeMessage(bool Enabled);
+
+    /// <summary>Parent window screen bounds, sent to child for magnetic docking.</summary>
+    public record ParentWindowBoundsMessage(double X, double Y, double Width, double Height, bool IsVisible);
 
     public record DesignerSelectionMessage(
         string DesignId,

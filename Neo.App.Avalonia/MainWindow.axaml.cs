@@ -66,6 +66,10 @@ namespace Neo.App
                 }
             };
 
+            // Magnetic docking: send parent bounds to child on move/resize
+            this.PositionChanged += (s, e) => _appController?.ChildProcessService?.UpdatePosition();
+            this.SizeChanged += (s, e) => _appController?.ChildProcessService?.UpdatePosition();
+
         }
 
         private async void MainWindow_Closing(object? sender, WindowClosingEventArgs e)
