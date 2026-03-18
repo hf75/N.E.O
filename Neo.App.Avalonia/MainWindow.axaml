@@ -75,21 +75,22 @@
             <!-- Options Hub -->
             <StackPanel Grid.Row="1" Orientation="Horizontal" Name="optionsHub">
                 <!-- Import Button -->
-                <Button ToolTip.Tip="Import" Margin="8,0,0,0"
-                        Content="Import" Classes="minimalist"
-                        Click="Button_Click_Import" Width="NaN" Padding="4,2"/>
+                <Button ToolTip.Tip="Import" Margin="8,0,0,0" Classes="minimalist"
+                        Click="Button_Click_Import">
+                    <PathIcon Width="14" Height="14" Data="M12 2v8.586l2.293-2.293 1.414 1.414L11 14.414 6.293 9.707l1.414-1.414L10 10.586V2h2ZM2 18v-4h2v4h16v-4h2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z"/>
+                </Button>
 
                 <!-- Export Button -->
-                <Button ToolTip.Tip="Export" Margin="8,0,0,0"
-                        Content="Export" Classes="minimalist"
-                        Click="Button_Click_Export" Width="NaN" Padding="4,2"/>
+                <Button ToolTip.Tip="Export" Margin="8,0,0,0" Classes="minimalist"
+                        Click="Button_Click_Export">
+                    <PathIcon Width="14" Height="14" Data="M12 16V7.414l2.293 2.293 1.414-1.414L11 3.586 6.293 8.293l1.414 1.414L10 7.414V16h2ZM2 18v-4h2v4h16v-4h2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z"/>
+                </Button>
 
                 <!-- Sandbox Hub -->
                 <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
                     <ToggleButton x:Name="BtnSandboxHub" ToolTip.Tip="Sandbox Controls"
-                                  IsChecked="False" Classes="options">
-                        <TextBlock Text="S" FontSize="12"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                  IsChecked="False" Classes="minimalist">
+                        <PathIcon Width="14" Height="14" Data="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4Zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8Z"/>
                     </ToggleButton>
 
                     <StackPanel x:Name="SandboxOrbit" Orientation="Horizontal"
@@ -97,54 +98,52 @@
                         <ToggleButton x:Name="BtnSandboxToggle" Margin="2,0,2,0"
                                       Classes="minimalist" ToolTip.Tip="Secure Mode (Sandbox)"
                                       Click="BtnSandboxToggle_Click">
-                            <TextBlock Text="L" FontSize="12"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <PathIcon Width="14" Height="14" Data="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2ZM12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2Zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2Z"/>
                         </ToggleButton>
                         <ToggleButton IsEnabled="False" x:Name="BtnInternetToggle" Margin="0,0,2,0"
                                       Classes="minimalist" ToolTip.Tip="Allow Internet"
                                       Click="BtnInternetToggle_Click">
-                            <TextBlock Text="N" FontSize="12"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <PathIcon Width="14" Height="14" Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93Zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39Z"/>
                         </ToggleButton>
                         <ToggleButton IsEnabled="False" x:Name="BtnFolderAccess" Margin="0,0,2,0"
                                       Classes="minimalist" ToolTip.Tip="Grant Folder Access"
                                       Click="BtnFolderAccess_Click">
-                            <TextBlock Text="F" FontSize="12"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <PathIcon Width="14" Height="14" Data="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2Z"/>
                         </ToggleButton>
                     </StackPanel>
                 </StackPanel>
 
                 <!-- Settings Button -->
-                <Button ToolTip.Tip="Settings" Margin="8,0,0,0"
-                        Content="Set" Classes="minimalist"
-                        Click="Button_Click_Settings" Width="NaN" Padding="4,2"/>
+                <Button ToolTip.Tip="Settings" Margin="8,0,0,0" Classes="minimalist"
+                        Click="Button_Click_Settings">
+                    <PathIcon Width="14" Height="14" Data="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z"/>
+                </Button>
 
                 <!-- Designer Mode -->
                 <ToggleButton x:Name="BtnDesignerMode" Margin="8,0,0,0"
                               Classes="minimalist" ToolTip.Tip="Designer Mode (Click-to-Edit)"
                               Click="BtnDesignerMode_Click">
-                    <TextBlock Text="D" FontSize="12"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <PathIcon Width="14" Height="14" Data="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25ZM20.71 7.04a1.001 1.001 0 0 0 0-1.41l-2.34-2.34a1.001 1.001 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/>
                 </ToggleButton>
 
                 <!-- Code Editor Toggle -->
                 <ToggleButton x:Name="BtnCodeEditor" Margin="8,0,0,0"
                               Classes="minimalist" ToolTip.Tip="Code Editor (Ctrl+Shift+C)"
                               Click="BtnCodeEditor_Click">
-                    <TextBlock Text="C" FontSize="12"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <PathIcon Width="14" Height="14" Data="M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4Zm5.2 0L19.2 12l-4.6-4.6L16 6l6 6-6 6-1.4-1.4Z"/>
                 </ToggleButton>
 
                 <!-- History Rails Button -->
-                <Button ToolTip.Tip="History" Margin="8,0,0,0"
-                        Content="H" Classes="minimalist"
-                        Click="Button_Click_HistoryRails"/>
+                <Button ToolTip.Tip="History" Margin="8,0,0,0" Classes="minimalist"
+                        Click="Button_Click_HistoryRails">
+                    <PathIcon Width="14" Height="14" Data="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18Zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12Z"/>
+                </Button>
 
                 <!-- Clear Button -->
-                <Button ToolTip.Tip="Clear" Margin="8,0,0,0"
-                        Content="X" Classes="minimalist"
-                        Click="Button_Click_Clear"/>
+                <Button ToolTip.Tip="Clear" Margin="8,0,0,0" Classes="minimalist"
+                        Click="Button_Click_Clear">
+                    <PathIcon Width="14" Height="14" Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z"/>
+                </Button>
             </StackPanel>
 
             <!-- Dynamic Content Area (right panel) -->
