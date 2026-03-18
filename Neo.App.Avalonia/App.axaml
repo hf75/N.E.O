@@ -1,0 +1,183 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Neo.App.Avalonia.App"
+             RequestedThemeVariant="Light">
+
+    <Application.Styles>
+        <FluentTheme />
+
+        <!-- =============================================================== -->
+        <!-- GLOBAL STYLES (ported from WPF App.xaml)                        -->
+        <!-- =============================================================== -->
+
+        <!-- Rounded Button -->
+        <Style Selector="Button.rounded">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="BorderBrush" Value="Gray"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="CornerRadius" Value="12"/>
+        </Style>
+        <Style Selector="Button.rounded:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="LightGray"/>
+        </Style>
+        <Style Selector="Button.rounded:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="LightGray"/>
+        </Style>
+        <Style Selector="Button.rounded:disabled">
+            <Setter Property="Opacity" Value="0.5"/>
+        </Style>
+
+        <!-- Rounded Orange Button -->
+        <Style Selector="Button.orange">
+            <Setter Property="Background" Value="Orange"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="DarkOrange"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="CornerRadius" Value="12"/>
+        </Style>
+        <Style Selector="Button.orange:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#FFA500"/>
+        </Style>
+        <Style Selector="Button.orange:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#FF8C00"/>
+        </Style>
+        <Style Selector="Button.orange:disabled">
+            <Setter Property="Opacity" Value="0.5"/>
+        </Style>
+
+        <!-- Rounded TextBox -->
+        <Style Selector="TextBox.rounded">
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="BorderBrush" Value="Gray"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4,2,4,2"/>
+        </Style>
+        <Style Selector="TextBox.rounded:focus">
+            <Setter Property="BorderBrush" Value="#4A90E2"/>
+        </Style>
+        <Style Selector="TextBox.rounded:pointerover">
+            <Setter Property="BorderBrush" Value="#9AA7B2"/>
+        </Style>
+
+        <!-- Rounded ComboBox -->
+        <Style Selector="ComboBox.rounded">
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="BorderBrush" Value="Gray"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4,2,4,2"/>
+            <Setter Property="MinHeight" Value="32"/>
+        </Style>
+
+        <!-- Rounded CheckBox -->
+        <Style Selector="CheckBox.rounded">
+            <Setter Property="Foreground" Value="Black"/>
+        </Style>
+
+        <!-- Minimalist Button (small round icon buttons) -->
+        <Style Selector="Button.minimalist">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="CornerRadius" Value="12"/>
+        </Style>
+        <Style Selector="Button.minimalist:pointerover /template/ ContentPresenter">
+            <Setter Property="BorderBrush" Value="#AAAAAA"/>
+        </Style>
+        <Style Selector="Button.minimalist:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#F0F0F0"/>
+        </Style>
+
+        <!-- Minimalist Popup Button -->
+        <Style Selector="Button.popup">
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+        <Style Selector="Button.popup:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#F5F5F5"/>
+        </Style>
+        <Style Selector="Button.popup:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#E0E0E0"/>
+        </Style>
+
+        <!-- Minimalist ToggleButton -->
+        <Style Selector="ToggleButton.minimalist">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="CornerRadius" Value="12"/>
+        </Style>
+        <Style Selector="ToggleButton.minimalist:pointerover /template/ ContentPresenter">
+            <Setter Property="BorderBrush" Value="#AAAAAA"/>
+        </Style>
+        <Style Selector="ToggleButton.minimalist:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="#E6F5E6"/>
+            <Setter Property="BorderBrush" Value="#70AD70"/>
+        </Style>
+
+        <!-- Options ToggleButton (no checked highlight) -->
+        <Style Selector="ToggleButton.options">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="CornerRadius" Value="12"/>
+        </Style>
+        <Style Selector="ToggleButton.options:pointerover /template/ ContentPresenter">
+            <Setter Property="BorderBrush" Value="#AAAAAA"/>
+        </Style>
+
+        <!-- Rounded PasswordBox (TextBox with PasswordChar) -->
+        <Style Selector="TextBox.password">
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="BorderBrush" Value="Gray"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4,2,4,2"/>
+        </Style>
+        <Style Selector="TextBox.password:focus">
+            <Setter Property="BorderBrush" Value="#4A90E2"/>
+        </Style>
+
+        <!-- Rounded Label (TextBlock in a Border) -->
+        <Style Selector="Border.roundedLabel">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="Gray"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="8,4"/>
+        </Style>
+
+    </Application.Styles>
+
+    <Application.Resources>
+        <!-- Color resources -->
+        <SolidColorBrush x:Key="InputBackground" Color="White"/>
+        <SolidColorBrush x:Key="InputBorderBrush" Color="Gray"/>
+        <SolidColorBrush x:Key="InputHoverBorder" Color="#9AA7B2"/>
+        <SolidColorBrush x:Key="InputFocusBorder" Color="#4A90E2"/>
+    </Application.Resources>
+</Application>

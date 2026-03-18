@@ -1,0 +1,146 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Neo.App.AiWaitIndicator"
+             Width="400" Height="400"
+             Background="Transparent">
+
+    <UserControl.Styles>
+        <!-- Blob 1 animation -->
+        <Style Selector="Ellipse.blob1">
+            <Style.Animations>
+                <Animation Duration="0:0:3.3" IterationCount="INFINITE" PlaybackDirection="Alternate"
+                           Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.5"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="0.8"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <!-- Blob 2 animation -->
+        <Style Selector="Ellipse.blob2">
+            <Style.Animations>
+                <Animation Duration="0:0:2.5" IterationCount="INFINITE" PlaybackDirection="Alternate"
+                           Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.4"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="0.7"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <!-- Blob 3 animation -->
+        <Style Selector="Ellipse.blob3">
+            <Style.Animations>
+                <Animation Duration="0:0:2.9" IterationCount="INFINITE" PlaybackDirection="Alternate"
+                           Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.35"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="0.65"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <!-- Blob 4 animation -->
+        <Style Selector="Ellipse.blob4">
+            <Style.Animations>
+                <Animation Duration="0:0:1.9" IterationCount="INFINITE" PlaybackDirection="Alternate"
+                           Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.3"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="0.6"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </UserControl.Styles>
+
+    <Viewbox>
+        <Grid Width="320" Height="320" Background="Transparent">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Blob area -->
+            <Grid Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center"
+                  ClipToBounds="False">
+
+                <!-- Blob 1: light grey -->
+                <Ellipse Classes="blob1" Width="150" Height="150"
+                         IsHitTestVisible="False" Margin="-20,-18,0,0">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Color="#C0C0C0" Offset="0.0"/>
+                            <GradientStop Color="#909090" Offset="0.6"/>
+                            <GradientStop Color="Transparent" Offset="1.0"/>
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+
+                <!-- Blob 2: medium grey -->
+                <Ellipse Classes="blob2" Width="140" Height="140"
+                         IsHitTestVisible="False" Margin="18,20,0,0">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Color="#8A8A8A" Offset="0.0"/>
+                            <GradientStop Color="#606060" Offset="0.6"/>
+                            <GradientStop Color="Transparent" Offset="1.0"/>
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+
+                <!-- Blob 3: dark grey -->
+                <Ellipse Classes="blob3" Width="125" Height="125"
+                         IsHitTestVisible="False" Margin="16,-22,0,0">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Color="#666666" Offset="0.0"/>
+                            <GradientStop Color="#404040" Offset="0.6"/>
+                            <GradientStop Color="Transparent" Offset="1.0"/>
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+
+                <!-- Blob 4: lightest grey -->
+                <Ellipse Classes="blob4" Width="100" Height="100"
+                         IsHitTestVisible="False" Margin="-16,16,0,0">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Color="#D0D0D0" Offset="0.0"/>
+                            <GradientStop Color="#A0A0A0" Offset="0.6"/>
+                            <GradientStop Color="Transparent" Offset="1.0"/>
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+            </Grid>
+
+            <!-- Timer display -->
+            <TextBlock x:Name="TimerText"
+                       Grid.Row="0"
+                       Text="00:00.00"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       FontFamily="Consolas" FontSize="28" FontWeight="Bold"
+                       Foreground="#1E1E2E"/>
+
+            <!-- Status text -->
+            <StackPanel Grid.Row="1" Margin="0,20,0,8" HorizontalAlignment="Center">
+                <TextBlock x:Name="StatusTextBlock"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           Foreground="#444444" FontFamily="Inter, Segoe UI, sans-serif"
+                           FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Grid>
+    </Viewbox>
+</UserControl>

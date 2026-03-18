@@ -1,0 +1,116 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Neo.App.Views.ApiKeySetupWindow"
+        Title="N.E.O. -- Setup"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Inter, Segoe UI, sans-serif"
+        CanResize="False"
+        SizeToContent="Height" Width="480"
+        Background="White">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="Welcome to N.E.O." FontSize="22" FontWeight="SemiBold"
+                   HorizontalAlignment="Center" Margin="0,0,0,4"/>
+        <TextBlock Grid.Row="1" Text="To get started, enter at least one API key."
+                   FontSize="13" Foreground="#666" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+
+        <!-- Anthropic Claude -->
+        <StackPanel Grid.Row="2" Margin="0,0,0,12">
+            <DockPanel>
+                <TextBlock Text="Anthropic Claude" FontSize="13" FontWeight="SemiBold"
+                           DockPanel.Dock="Left"/>
+                <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right"
+                           Text="Get a key"/>
+            </DockPanel>
+            <Grid Margin="0,4,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="TxtAnthropic" Grid.Column="0" Padding="8,6" FontSize="13"
+                         PasswordChar="*" Classes="password"
+                         TextChanged="PasswordBox_TextChanged"/>
+                <Button x:Name="BtnRevealAnthropic" Grid.Column="1" Content="Eye"
+                        Width="32" FontSize="12" VerticalAlignment="Stretch"
+                        Click="BtnReveal_Click" Tag="TxtAnthropic"/>
+            </Grid>
+        </StackPanel>
+
+        <!-- OpenAI -->
+        <StackPanel Grid.Row="3" Margin="0,0,0,12">
+            <DockPanel>
+                <TextBlock Text="OpenAI" FontSize="13" FontWeight="SemiBold" DockPanel.Dock="Left"/>
+                <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right"
+                           Text="Get a key"/>
+            </DockPanel>
+            <Grid Margin="0,4,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="TxtOpenAI" Grid.Column="0" Padding="8,6" FontSize="13"
+                         PasswordChar="*" Classes="password"
+                         TextChanged="PasswordBox_TextChanged"/>
+                <Button x:Name="BtnRevealOpenAI" Grid.Column="1" Content="Eye"
+                        Width="32" FontSize="12" VerticalAlignment="Stretch"
+                        Click="BtnReveal_Click" Tag="TxtOpenAI"/>
+            </Grid>
+        </StackPanel>
+
+        <!-- Google Gemini -->
+        <StackPanel Grid.Row="4" Margin="0,0,0,16">
+            <DockPanel>
+                <TextBlock Text="Google Gemini" FontSize="13" FontWeight="SemiBold"
+                           DockPanel.Dock="Left"/>
+                <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right"
+                           Text="Get a key"/>
+            </DockPanel>
+            <Grid Margin="0,4,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="TxtGemini" Grid.Column="0" Padding="8,6" FontSize="13"
+                         PasswordChar="*" Classes="password"
+                         TextChanged="PasswordBox_TextChanged"/>
+                <Button x:Name="BtnRevealGemini" Grid.Column="1" Content="Eye"
+                        Width="32" FontSize="12" VerticalAlignment="Stretch"
+                        Click="BtnReveal_Click" Tag="TxtGemini"/>
+            </Grid>
+        </StackPanel>
+
+        <!-- Info text -->
+        <TextBlock Grid.Row="5"
+                   Text="Keys are stored as user environment variables and never leave your machine."
+                   FontSize="11" Foreground="#999" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+        <!-- Local models hint -->
+        <Border Grid.Row="6" Background="#F8F8F8" CornerRadius="8" Padding="12,8" Margin="0,0,0,20">
+            <TextBlock FontSize="12" Foreground="#666" TextWrapping="Wrap"
+                       Text="No API key? You can also use local models with Ollama or LM Studio. Just start the server and restart N.E.O."/>
+        </Border>
+
+        <!-- Buttons -->
+        <DockPanel Grid.Row="7">
+            <Button x:Name="BtnSkip" DockPanel.Dock="Right" Content="Skip" Padding="16,8"
+                    Background="Transparent" BorderThickness="0" Foreground="#999"
+                    FontSize="13" Click="BtnSkip_Click" Margin="8,0,0,0"/>
+            <Button x:Name="BtnSave" DockPanel.Dock="Right" Content="Save and Start" Padding="20,8"
+                    FontSize="13" FontWeight="SemiBold" IsEnabled="False"
+                    Click="BtnSave_Click" CornerRadius="12"
+                    Background="#E0E0E0" Foreground="#999"/>
+            <Panel/>
+        </DockPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,46 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Neo.App.CrashDialog"
+        Title="What do you want to do?"
+        FontFamily="Inter, Segoe UI, sans-serif"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        SizeToContent="WidthAndHeight"
+        ShowInTaskbar="False"
+        Topmost="True">
+    <Grid Margin="5">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock x:Name="IconText" Grid.Column="0" Text="Warning" FontSize="48"
+                       VerticalAlignment="Center"/>
+            <TextBlock x:Name="MessageText" Grid.Column="1" Text="Message goes here."
+                       TextWrapping="Wrap" VerticalAlignment="Center" Margin="8,0,0,0"/>
+        </Grid>
+
+        <Border Margin="0,6" Grid.Row="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Classes="rounded" Grid.Column="0" x:Name="Button1"
+                        Content="Button 1" Margin="5" Click="Button1_Click"/>
+                <Button Classes="rounded" Grid.Column="1" x:Name="Button2"
+                        Content="Button 2" Margin="5" Click="Button2_Click"/>
+                <Button Classes="rounded" Grid.Column="2" x:Name="Button3"
+                        Content="Button 3" Margin="5" Click="Button3_Click"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

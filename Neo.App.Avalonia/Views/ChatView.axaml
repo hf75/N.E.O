@@ -1,0 +1,69 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:core="clr-namespace:Neo.App;assembly=Neo.App.Core"
+             x:Class="Neo.App.ChatView"
+             FontFamily="Inter, Segoe UI, sans-serif" FontSize="18">
+
+    <UserControl.Resources>
+        <!-- Palette -->
+        <SolidColorBrush x:Key="Chat.Text" Color="#2F2F2F"/>
+        <SolidColorBrush x:Key="Chat.TextMuted" Color="#5A5F66"/>
+        <SolidColorBrush x:Key="Chat.BubbleBackground" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="Chat.Border" Color="#E6E6EA"/>
+        <SolidColorBrush x:Key="Chat.Border.Prompt" Color="#D3E3FD"/>
+        <SolidColorBrush x:Key="Chat.Border.Info" Color="#DAD7FE"/>
+        <SolidColorBrush x:Key="Chat.Border.Success" Color="#CAEBCB"/>
+        <SolidColorBrush x:Key="Chat.Border.Error" Color="#F4D0CD"/>
+        <SolidColorBrush x:Key="Chat.Border.Code" Color="#C8CCD3"/>
+    </UserControl.Resources>
+
+    <ScrollViewer x:Name="ScrollViewer"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <ItemsControl x:Name="ChatItemsControl">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="core:ChatMessage">
+                    <Grid HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="0*"/>
+                            <ColumnDefinition Width="3*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border x:Name="BubbleBorder"
+                                Grid.Column="1"
+                                Margin="5,25,5,0"
+                                Padding="10,8"
+                                CornerRadius="14"
+                                Background="{StaticResource Chat.BubbleBackground}"
+                                BorderBrush="{StaticResource Chat.Border}"
+                                BorderThickness="1"
+                                HorizontalAlignment="Stretch">
+                            <Grid>
+                                <TextBlock Text="{Binding Text}"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource Chat.Text}"
+                                           Margin="0,0,25,0"/>
+
+                                <Button x:Name="CopyBtn"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Width="20" Height="20"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Top"
+                                        Margin="0,-2,-2,0"
+                                        IsVisible="False"
+                                        Click="CopyButton_Click">
+                                    <TextBlock Text="C" FontSize="12"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource Chat.TextMuted}"/>
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </ScrollViewer>
+</UserControl>

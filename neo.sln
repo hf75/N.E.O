@@ -47,6 +47,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.Agents.GeminiImageAnaly
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.App.Core", "Neo.App.Core\Neo.App.Core.csproj", "{4F1BB8E2-6321-4182-A80A-54331FD5825B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.App.Avalonia", "Neo.App.Avalonia\Neo.App.Avalonia.csproj", "{606A7570-D731-488F-9BB0-96711A6041E9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -309,6 +311,18 @@ Global
 		{4F1BB8E2-6321-4182-A80A-54331FD5825B}.Release|x64.Build.0 = Release|Any CPU
 		{4F1BB8E2-6321-4182-A80A-54331FD5825B}.Release|x86.ActiveCfg = Release|Any CPU
 		{4F1BB8E2-6321-4182-A80A-54331FD5825B}.Release|x86.Build.0 = Release|Any CPU
+		{606A7570-D731-488F-9BB0-96711A6041E9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{606A7570-D731-488F-9BB0-96711A6041E9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{606A7570-D731-488F-9BB0-96711A6041E9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{606A7570-D731-488F-9BB0-96711A6041E9}.Debug|x64.Build.0 = Debug|Any CPU
+		{606A7570-D731-488F-9BB0-96711A6041E9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{606A7570-D731-488F-9BB0-96711A6041E9}.Debug|x86.Build.0 = Debug|Any CPU
+		{606A7570-D731-488F-9BB0-96711A6041E9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{606A7570-D731-488F-9BB0-96711A6041E9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{606A7570-D731-488F-9BB0-96711A6041E9}.Release|x64.ActiveCfg = Release|Any CPU
+		{606A7570-D731-488F-9BB0-96711A6041E9}.Release|x64.Build.0 = Release|Any CPU
+		{606A7570-D731-488F-9BB0-96711A6041E9}.Release|x86.ActiveCfg = Release|Any CPU
+		{606A7570-D731-488F-9BB0-96711A6041E9}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

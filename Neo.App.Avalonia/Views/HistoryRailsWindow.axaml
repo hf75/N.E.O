@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Neo.App.HistoryRailsWindow"
+        Title="History"
+        WindowStartupLocation="CenterOwner"
+        Width="980" Height="560"
+        Background="#FAFAFA"
+        FontFamily="Inter, Segoe UI, sans-serif"
+        KeyDown="HistoryRailsWindow_KeyDown">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Vertical" Margin="0,0,0,10">
+            <TextBlock Text="History Rails" FontSize="20" FontWeight="Bold"/>
+            <TextBlock Foreground="#666" TextWrapping="Wrap"
+                       Text="Click a node to select. Enter or double-click to checkout. Esc closes without changes."/>
+        </StackPanel>
+
+        <Border Grid.Row="1" CornerRadius="10" BorderBrush="#DDD" BorderThickness="1"
+                Background="White">
+            <!-- Placeholder for RailsGraphControl - using a simple TextBlock for now -->
+            <TextBlock x:Name="GraphPlaceholder" Text="History graph visualization"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="#999"/>
+        </Border>
+
+        <DockPanel Grid.Row="2" Margin="0,10,0,0">
+            <Button x:Name="CheckoutButton" DockPanel.Dock="Right" Classes="rounded"
+                    HorizontalAlignment="Right" Click="Checkout_Click"
+                    Content="Checkout"/>
+            <TextBlock DockPanel.Dock="Left" Foreground="#666" VerticalAlignment="Center"/>
+        </DockPanel>
+    </Grid>
+</Window>

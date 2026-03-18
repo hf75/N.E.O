@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Neo.App.SplashScreenWindow"
+        Title="SplashScreenWindow" Height="320" Width="320"
+        SystemDecorations="None"
+        Background="Transparent"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="False" Topmost="True"
+        TransparencyLevelHint="Transparent"
+        CanResize="False">
+    <Grid Background="#01000000" PointerPressed="Grid_PointerPressed">
+        <Ellipse Width="308" Height="308" Fill="Black"/>
+        <Ellipse Width="300" Height="300"
+                 HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Ellipse.Fill>
+                <SolidColorBrush Color="#333333"/>
+            </Ellipse.Fill>
+        </Ellipse>
+        <TextBlock Text="N.E.O."
+                   FontSize="48" FontWeight="Bold"
+                   Foreground="White"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Grid>
+</Window>

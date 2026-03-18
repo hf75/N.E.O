@@ -1,0 +1,208 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Neo.App;assembly=Neo.App.Avalonia"
+        x:Class="Neo.App.MainWindow"
+        WindowStartupLocation="CenterScreen"
+        Title="N.E.O. Native Executable Orchestrator v0.000000000001 pre-alpha"
+        Height="768" Width="1024"
+        FontFamily="Inter, Segoe UI, sans-serif">
+
+    <Border Padding="6">
+        <Grid x:Name="contentGrid">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Global Overlay -->
+            <Grid x:Name="GlobalOverlay"
+                  Grid.Row="0" Grid.Column="0"
+                  Grid.RowSpan="3" Grid.ColumnSpan="3"
+                  Background="Transparent"
+                  IsVisible="False"
+                  ZIndex="9999"
+                  HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid>
+                    <ContentControl x:Name="GlobalOverlayContent"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Button Name="btnCancel" IsVisible="False"
+                            Foreground="White" Background="DarkRed"
+                            MinWidth="240" Padding="6" Margin="0,256,0,32"
+                            Content="Cancel"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            CornerRadius="12"
+                            Click="btnCancel_Click"/>
+                </Grid>
+            </Grid>
+
+            <!-- History / Chat View -->
+            <Border Name="wvHistoryBorder" Grid.Row="0"
+                    BorderBrush="LightGray" CornerRadius="8"
+                    BorderThickness="1" Margin="0,0,6,6" Padding="6">
+                <local:ChatView x:Name="historyView"/>
+            </Border>
+
+            <!-- Vertical Separator -->
+            <StackPanel x:Name="stackPanelLeft" Grid.Row="0" Grid.RowSpan="3" Grid.Column="1"
+                        Orientation="Horizontal">
+                <Separator/>
+            </StackPanel>
+
+            <!-- Horizontal Separator -->
+            <Separator Name="seperatorLeft" Margin="0,4,6,4" Grid.Row="1"/>
+
+            <!-- Prompt Input -->
+            <Border x:Name="txtPromptBorder" Grid.Row="2"
+                    BorderBrush="LightGray" Background="#F0F0F0F0"
+                    CornerRadius="8" BorderThickness="1" Margin="0,4,6,0">
+                <TextBox Margin="6" Background="Transparent" BorderThickness="0"
+                         FontFamily="Inter, Segoe UI, sans-serif" FontSize="20"
+                         KeyDown="input_KeyDown"
+                         HorizontalContentAlignment="Left"
+                         VerticalContentAlignment="Top"
+                         AcceptsReturn="False"
+                         TextWrapping="Wrap" Name="txtPrompt"
+                         Grid.Column="0" Padding="2"/>
+            </Border>
+
+            <!-- Options Hub -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Name="optionsHub">
+                <!-- Import Button -->
+                <Button ToolTip.Tip="Import" Margin="8,0,0,0"
+                        Content="Import" Classes="minimalist"
+                        Click="Button_Click_Import" Width="NaN" Padding="4,2"/>
+
+                <!-- Export Button -->
+                <Button ToolTip.Tip="Export" Margin="8,0,0,0"
+                        Content="Export" Classes="minimalist"
+                        Click="Button_Click_Export" Width="NaN" Padding="4,2"/>
+
+                <!-- Sandbox Hub -->
+                <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                    <ToggleButton x:Name="BtnSandboxHub" ToolTip.Tip="Sandbox Controls"
+                                  IsChecked="False" Classes="options">
+                        <TextBlock Text="S" FontSize="12"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+
+                    <StackPanel x:Name="SandboxOrbit" Orientation="Horizontal"
+                                IsVisible="{Binding #BtnSandboxHub.IsChecked}">
+                        <ToggleButton x:Name="BtnSandboxToggle" Margin="2,0,2,0"
+                                      Classes="minimalist" ToolTip.Tip="Secure Mode (Sandbox)"
+                                      Click="BtnSandboxToggle_Click">
+                            <TextBlock Text="L" FontSize="12"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </ToggleButton>
+                        <ToggleButton IsEnabled="False" x:Name="BtnInternetToggle" Margin="0,0,2,0"
+                                      Classes="minimalist" ToolTip.Tip="Allow Internet"
+                                      Click="BtnInternetToggle_Click">
+                            <TextBlock Text="N" FontSize="12"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </ToggleButton>
+                        <ToggleButton IsEnabled="False" x:Name="BtnFolderAccess" Margin="0,0,2,0"
+                                      Classes="minimalist" ToolTip.Tip="Grant Folder Access"
+                                      Click="BtnFolderAccess_Click">
+                            <TextBlock Text="F" FontSize="12"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </ToggleButton>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Settings Button -->
+                <Button ToolTip.Tip="Settings" Margin="8,0,0,0"
+                        Content="Set" Classes="minimalist"
+                        Click="Button_Click_Settings" Width="NaN" Padding="4,2"/>
+
+                <!-- Designer Mode -->
+                <ToggleButton x:Name="BtnDesignerMode" Margin="8,0,0,0"
+                              Classes="minimalist" ToolTip.Tip="Designer Mode (Click-to-Edit)"
+                              Click="BtnDesignerMode_Click">
+                    <TextBlock Text="D" FontSize="12"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </ToggleButton>
+
+                <!-- Code Editor Toggle -->
+                <ToggleButton x:Name="BtnCodeEditor" Margin="8,0,0,0"
+                              Classes="minimalist" ToolTip.Tip="Code Editor (Ctrl+Shift+C)"
+                              Click="BtnCodeEditor_Click">
+                    <TextBlock Text="C" FontSize="12"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </ToggleButton>
+
+                <!-- History Rails Button -->
+                <Button ToolTip.Tip="History" Margin="8,0,0,0"
+                        Content="H" Classes="minimalist"
+                        Click="Button_Click_HistoryRails"/>
+
+                <!-- Clear Button -->
+                <Button ToolTip.Tip="Clear" Margin="8,0,0,0"
+                        Content="X" Classes="minimalist"
+                        Click="Button_Click_Clear"/>
+            </StackPanel>
+
+            <!-- Dynamic Content Area (right panel) -->
+            <Grid Grid.Column="2" Grid.RowSpan="3" Name="dynamicContentGrid">
+                <ContentControl x:Name="dynamicContent"/>
+
+                <!-- Frosted snapshot overlay -->
+                <Image x:Name="frostedSnapshot"
+                       IsVisible="False"
+                       Stretch="Fill"
+                       IsHitTestVisible="False"/>
+                <Border x:Name="frostedDim"
+                        IsVisible="False"
+                        Background="#40000000"
+                        IsHitTestVisible="False"/>
+
+                <!-- Code Editor Panel -->
+                <Grid x:Name="codeEditorPanel" IsVisible="False" Background="White">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBox x:Name="codeEditor"
+                             Grid.Row="0"
+                             FontFamily="Consolas, 'Cascadia Mono', 'Courier New'"
+                             FontSize="14"
+                             IsReadOnly="False"
+                             TextWrapping="NoWrap"
+                             AcceptsReturn="True"
+                             AcceptsTab="True"/>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal"
+                                HorizontalAlignment="Right" Margin="8">
+                        <Button Content="Apply" Classes="popup"
+                                Margin="0,0,8,0"
+                                Click="BtnCodeEditorApply_Click"/>
+                        <Button Content="Revert" Classes="popup"
+                                Click="BtnCodeEditorRevert_Click"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Repair Overlay -->
+                <Border x:Name="RepairOverlay" Background="#80FFFFFF" IsVisible="False">
+                    <Grid>
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock HorizontalAlignment="Center" Margin="0,20"
+                                       Text="A runtime error occured."
+                                       FontFamily="Inter, Segoe UI, sans-serif" FontSize="24"
+                                       FontWeight="Bold" Foreground="Red"/>
+                            <TextBlock HorizontalAlignment="Center" Margin="0,20"
+                                       Text="I am repairing the code. Please wait ..."
+                                       FontFamily="Inter, Segoe UI, sans-serif" FontSize="24"
+                                       FontWeight="Bold" Foreground="Red"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

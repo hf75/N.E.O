@@ -1,0 +1,67 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Neo.App.PatchReviewWindow"
+        Title="Review Changes"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="Inter, Segoe UI, sans-serif"
+        Width="900" Height="700">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="Review proposed changes" FontSize="22" FontWeight="Bold"/>
+            <TextBlock x:Name="PackagesText" Margin="0,6,0,0" Foreground="#666" TextWrapping="Wrap"/>
+
+            <Expander x:Name="ExplanationExpander" Margin="0,6,0,0" Header="Explanation" IsExpanded="False">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="160">
+                    <TextBlock x:Name="ExplanationText" TextWrapping="Wrap"/>
+                </ScrollViewer>
+            </Expander>
+
+            <Border x:Name="AiReviewBorder" Margin="0,10,0,0" Padding="10" CornerRadius="8"
+                    BorderBrush="#DDD" BorderThickness="1" Background="#F8F8F8" IsVisible="False">
+                <StackPanel>
+                    <TextBlock x:Name="AiReviewHeaderText" FontWeight="Bold"/>
+                    <TextBlock x:Name="AiReviewSummaryText" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    <Expander x:Name="AiReviewDetailsExpander" Margin="0,6,0,0" Header="Details"
+                              IsExpanded="False">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="140">
+                            <TextBlock x:Name="AiReviewDetailsText" TextWrapping="Wrap"/>
+                        </ScrollViewer>
+                    </Expander>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <TextBox Grid.Row="1"
+                 x:Name="PatchTextBox"
+                 FontFamily="Consolas, 'Cascadia Mono', 'Courier New'"
+                 FontSize="13"
+                 IsReadOnly="True"
+                 TextWrapping="NoWrap"
+                 AcceptsReturn="True"/>
+
+        <Grid Grid.Row="2" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" VerticalAlignment="Center" Foreground="#666"
+                       Text="Apply to compile and run these changes."/>
+
+            <Button Grid.Column="1" x:Name="RejectButton" Margin="0,0,8,0" Classes="rounded"
+                    Content="Reject" Click="Reject_Click"/>
+            <Button Grid.Column="2" x:Name="RegenerateButton" Margin="0,0,8,0" Classes="rounded"
+                    Content="Regenerate" IsVisible="False" Click="Regenerate_Click"/>
+            <Button Grid.Column="3" x:Name="ApplyButton" Classes="orange"
+                    Content="Apply" Click="Apply_Click"/>
+        </Grid>
+    </Grid>
+</Window>

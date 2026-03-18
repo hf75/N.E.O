@@ -1,0 +1,127 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Neo.App.ProjectExportDialog"
+        Title="Export Project" FontFamily="Inter, Segoe UI, sans-serif"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        ShowInTaskbar="False"
+        SizeToContent="WidthAndHeight"
+        MinWidth="520">
+    <Border Padding="12">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <DockPanel Grid.Row="0" LastChildFill="False">
+                <TextBlock DockPanel.Dock="Top" Margin="0,0,0,12"
+                           Text="Project Export Settings" FontSize="18"/>
+                <StackPanel DockPanel.Dock="Top" Orientation="Vertical">
+                    <!-- Base Path -->
+                    <TextBlock Text="Base Path:"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Classes="rounded" x:Name="BasePathTextBox" Grid.Column="0"
+                                 Margin="0,6,6,0"
+                                 TextChanged="OnInputChanged"/>
+                        <Button Classes="rounded" Grid.Column="1" MinWidth="140"
+                                Margin="0,6,0,0" Padding="8,6"
+                                Content="Browse ..." Click="BrowseFolder_Click"/>
+                    </Grid>
+
+                    <!-- Project Name -->
+                    <TextBlock Text="Project Name:" Margin="0,6,0,0"/>
+                    <TextBox Classes="rounded" x:Name="ProjectNameTextBox"
+                             Margin="0,6,0,0"
+                             TextChanged="OnInputChanged"/>
+
+                    <!-- Path Hint -->
+                    <TextBlock x:Name="ProjectPathHintTextBlock"
+                               Margin="0,12,0,6" Foreground="Green"
+                               FontSize="12" FontStyle="Italic"
+                               Text="The project path appears here."/>
+
+                    <!-- Cross-platform Export -->
+                    <Grid Name="crossPlattformExport" Margin="0,0,0,6" IsVisible="False">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.ColumnSpan="3" Text="Export Target:"
+                                   Margin="0,6,0,6"/>
+                        <RadioButton IsChecked="True" Name="targetWin" Grid.Row="1" Grid.Column="0"
+                                     Content="Windows" GroupName="ExportTarget"/>
+                        <RadioButton Name="targetLinux" Grid.Column="1" Grid.Row="1"
+                                     Content="Linux" GroupName="ExportTarget"/>
+                        <RadioButton Name="targetOSX" Grid.Column="2" Grid.Row="1"
+                                     Content="OSX" GroupName="ExportTarget"/>
+                    </Grid>
+
+                    <!-- ICO File -->
+                    <TextBlock Text="Icon File (optional):" Margin="0,6,0,0"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Classes="roundedLabel" Margin="0,6,6,0" MinHeight="28">
+                            <TextBlock x:Name="IconFileNameTextBlock"
+                                       VerticalAlignment="Center"
+                                       Foreground="Gray" FontStyle="Italic"/>
+                        </Border>
+                        <Button Grid.Column="1" Classes="rounded" MinWidth="140"
+                                Margin="0,6,0,0" Padding="8,6"
+                                Content="Load ICO ..." Click="LoadIcon_Click"/>
+                    </Grid>
+
+                    <CheckBox Classes="rounded" Name="cbInstallDesktop" Margin="0,12,0,0"
+                              Content="Create Desktop Shortcut"/>
+                    <CheckBox Classes="rounded" Name="cbInstallStartMenu" Margin="0,6,0,0"
+                              Content="Create Startmenu Shortcut"/>
+
+                    <!-- Creation Mode -->
+                    <TextBlock Text="Action when directory exists:" Margin="0,12,0,0"/>
+                    <ComboBox Classes="rounded" x:Name="CreationModeComboBox"
+                              Margin="0,6,0,0" Padding="6"
+                              SelectionChanged="OnCreationModeChanged">
+                        <ComboBoxItem Content="Cancel" IsSelected="True"/>
+                        <ComboBoxItem Content="Overwrite"/>
+                    </ComboBox>
+                </StackPanel>
+            </DockPanel>
+
+            <!-- Button Bar -->
+            <Border Grid.Row="1" Margin="0,16,0,0" BorderBrush="#22000000"
+                    BorderThickness="0,1,0,0" Padding="0,12,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0" x:Name="CancelButton" Classes="rounded"
+                            Margin="0,0,6,0" Padding="10,6"
+                            Content="Cancel" Click="Cancel_Click"/>
+                    <Button Grid.Column="1" x:Name="CreateButton" Classes="rounded"
+                            Margin="0,0,6,0" Padding="10,6"
+                            Content="Export" FontWeight="Bold"
+                            Click="ExportProject_Click" IsEnabled="False"/>
+                    <Button Grid.Column="2" x:Name="SaveAsButton" Classes="rounded"
+                            Padding="10,6" Content="Save as" FontWeight="Bold"
+                            Click="SaveAsButton_Click" IsEnabled="False"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
