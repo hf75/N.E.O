@@ -47,6 +47,10 @@ namespace Neo.App
         {
             InitializeComponent();
 
+            // Position both windows centered together on screen:
+            // [MainWindow 600px] [8px gap] [ChildWindow 800px] = 1408px total
+            CenterWithChild(mainWidth: 600, childWidth: 800, gap: 8);
+
             this.Closing += MainWindow_Closing;
             this.Activated += MainWindow_Activated;
             this.AddHandler(KeyDownEvent, MainWindow_GlobalKeyDown, global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
@@ -70,6 +74,25 @@ namespace Neo.App
             this.PositionChanged += (s, e) => _appController?.ChildProcessService?.UpdatePosition();
             this.SizeChanged += (s, e) => _appController?.ChildProcessService?.UpdatePosition();
 
+        }
+
+        private void CenterWithChild(double mainWidth, double childWidth, double gap)
+        {
+            var screen = Screens.Primary;
+            if (screen == null) return;
+
+            double totalWidth = mainWidth + gap + childWidth;
+            double screenW = screen.WorkingArea.Width / (screen.Scaling > 0 ? screen.Scaling : 1);
+            double screenH = screen.WorkingArea.Height / (screen.Scaling > 0 ? screen.Scaling : 1);
+
+            double startX = (screenW - totalWidth) / 2;
+            double startY = (screenH - Height) / 2;
+
+            if (startX < 0) startX = 0;
+            if (startY < 0) startY = 0;
+
+            Position = new PixelPoint((int)(startX * (screen.Scaling > 0 ? screen.Scaling : 1)),
+                                      (int)(startY * (screen.Scaling > 0 ? screen.Scaling : 1)));
         }
 
         private async void MainWindow_Closing(object? sender, WindowClosingEventArgs e)
