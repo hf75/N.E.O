@@ -55,6 +55,10 @@ namespace Neo.App
             EventHandler<DesignerApplyRequestedEventArgs> applyHandler);
         void CloseDesignerPropertiesWindow();
 
+        // ─── Factory Methods ──────────────────────────────────────────────
+        IChildProcessService CreateChildProcessService();
+        IAppLogger CreateLogger(ApplicationState appState);
+
         // ─── Threading ───────────────────────────────────────────────────
         bool CheckUIThreadAccess();
         void InvokeOnUIThread(Action action);

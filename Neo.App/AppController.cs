@@ -17,9 +17,6 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Forms;
-using System.Windows.Media.Media3D;
 
 namespace Neo.App
 {
@@ -127,8 +124,7 @@ namespace Neo.App
         {
             _view = view;
 
-            // Phase 3 TODO: Abstract Logger creation behind IMainView
-            Logger = new AppLogger(AppState, ((MainWindow)view).historyView);
+            Logger = view.CreateLogger(AppState);
 
             Settings = SettingsService.Load();
 
@@ -262,9 +258,7 @@ namespace Neo.App
             AppInstallerService = new AppInstallerService(AppExportService);
             CompilationService = new CompilationService(_coreRefPath, _desktopRefPath);
             NugetPackageService = new NuGetPackageService(NuGetPackageDirectory, _coreRefPath, _desktopRefPath);
-            // Phase 3 TODO: Abstract ChildProcessService creation behind IMainView
-            var wpfView = (MainWindow)_view;
-            ChildProcessService = new ChildProcessService(wpfView, wpfView.dynamicContentGrid);
+            ChildProcessService = _view.CreateChildProcessService();
             ChildProcessService.ChildProcessCrashed += HandleChildProcessCrashed;
             ChildProcessService.ChildLogReceived += (log) => Debug.WriteLine($"[Child Log] {log.Message}");
             ChildProcessService.DesignerSelectionReceived += HandleDesignerSelectionReceived;

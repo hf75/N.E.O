@@ -95,7 +95,12 @@ namespace Neo.App
 
             this.StateChanged += (s, e) =>
             {
-                _appController.ChildProcessService?.NotifyParentWindowStateChanged(this.WindowState);
+                _appController.ChildProcessService?.NotifyParentWindowStateChanged(this.WindowState switch
+                {
+                    WindowState.Minimized => HostWindowState.Minimized,
+                    WindowState.Maximized => HostWindowState.Maximized,
+                    _ => HostWindowState.Normal
+                });
             };
         }
 
@@ -1154,6 +1159,12 @@ namespace Neo.App
                 _designerPropertiesWindow = null;
             }
         }
+
+        IChildProcessService IMainView.CreateChildProcessService() =>
+            new ChildProcessService(this, dynamicContentGrid);
+
+        IAppLogger IMainView.CreateLogger(ApplicationState appState) =>
+            new AppLogger(appState, historyView);
 
         bool IMainView.CheckUIThreadAccess() => Dispatcher.CheckAccess();
 

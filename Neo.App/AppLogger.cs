@@ -8,19 +8,6 @@ using static System.Net.Mime.MediaTypeNames;
 
 namespace Neo.App
 {
-    // IAppLogger.cs
-    public interface IAppLogger
-    {
-        void LogMessage(string message, BubbleType bubbleType);
-        void LogMessageWithMarkdownFormating(string msg, BubbleType bubbleType);
-
-        void LogHistory(string message);
-
-        public void LogHistory(StructuredResponse response);
-
-        void Clear();
-    }
-
     public class AppLogger : IAppLogger
     {
         private readonly ApplicationState _appState;

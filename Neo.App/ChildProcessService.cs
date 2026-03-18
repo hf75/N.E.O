@@ -17,104 +17,6 @@ using System.ComponentModel;
 
 namespace Neo.App
 {
-    public interface IChildProcessService : IAsyncDisposable
-    {
-        /// <summary>
-        /// Startet den Child-Prozess neu. Nützlich für Konfigurationsänderungen (z.B. Sandbox-Modus).
-        /// </summary>
-        Task RestartAsync();
-
-        /// <summary>
-        /// Aktualisiert die Position und Größe des Child-Fensters, um es an den Host-Container anzupassen.
-        /// </summary>
-        public void UpdatePosition(bool useTopMostTrick = false);
-
-        /// <summary>
-        /// Sendet die kompilierten DLLs an den Child-Prozess und weist ihn an, das UserControl zu laden.
-        /// </summary>
-        /// <param name="mainDllPath">Pfad zur Haupt-DLL mit dem UserControl.</param>
-        /// <param name="nugetDlls">Liste der abhängigen NuGet-DLLs.</param>
-        /// <param name="additionalDlls">Liste weiterer abhängiger DLLs.</param>
-        Task<bool> DisplayControlAsync(string mainDllPath, IEnumerable<string> nugetDlls, IEnumerable<string> additionalDlls);
-
-        /// <summary>
-        /// Prüft, ob der aktuelle UI-Fokus innerhalb des Child-Fensters oder eines seiner untergeordneten Elemente liegt.
-        /// </summary>
-        bool IsFocusInsideChild();
-
-        /// <summary>
-        /// Konfiguriert die Sandbox-Einstellungen für den nächsten Start/Neustart des Child-Prozesses.
-        /// </summary>
-        void ConfigureSandbox(bool useSandbox, SandboxSettings settings);
-
-        /// <summary>
-        /// Konfiguriert die Crossplatform-Einstellungen für den nächsten Start/Neustart des Child-Prozesses.
-        /// </summary>
-        void ConfigureCrossplatformSettings(CrossplatformSettings settings);
-
-        /// <summary>
-        /// Informiert den Service über eine Änderung des Zustands des Elternfensters (z.B. minimiert).
-        /// </summary>        
-        void NotifyParentWindowStateChanged(WindowState newState);
-
-        /// <summary>
-        /// Teilt dem Child-Prozess mit, ob der Cursor sichtbar sein soll (für den Vollbildmodus).
-        /// </summary>
-        Task SetCursorVisibilityAsync(bool isVisible);
-
-        /// <summary>
-        /// Teilt dem Child-Prozess mit ob er Modal sein soll oder nicht.
-        /// </summary>
-        Task SetChildModalityAsync(bool isModal);
-
-        /// <summary>
-        /// Aktiviert/Deaktiviert den Click-to-Edit Designer Mode im Child.
-        /// </summary>
-        Task SetDesignerModeAsync(bool enabled);
-
-        /// <summary>
-        /// Weist den Child-Prozess an, das aktuelle UserControl zu entladen.
-        /// Verhindert Exceptions vom alten Control während der Code-Generierung.
-        /// </summary>
-        Task UnloadControlAsync();
-
-        /// <summary>
-        /// Captures a screenshot of the child window and returns it as a frozen BitmapSource.
-        /// Returns null if the child window is not available.
-        /// </summary>
-        System.Windows.Media.Imaging.BitmapSource? CaptureChildScreenshot();
-
-        /// <summary>
-        /// True if a control was successfully loaded via DisplayControlAsync.
-        /// </summary>
-        bool HasLoadedControl { get; }
-
-        /// <summary>
-        /// Child ausblenden
-        /// </summary>
-        void HideChild();
-
-        /// <summary>
-        /// Child einblenden
-        /// </summary>
-        void ShowChild();
-
-        IntPtr GetChildHwnd();
-
-        /// <summary>6
-        /// Wird ausgelöst, wenn der Child-Prozess unerwartet abstürzt oder nicht mehr reagiert.
-        /// Der Handler ist dafür verantwortlich, die Wiederherstellungslogik zu starten.
-        /// </summary>
-        event Func<CrashReason, ErrorMessage, Task> ChildProcessCrashed;
-
-        /// <summary>
-        /// Wird ausgelöst, wenn der Child-Prozess eine Log-Nachricht sendet.
-        /// </summary>
-        event Action<LogMessage> ChildLogReceived;
-
-        event Action<DesignerSelectionMessage> DesignerSelectionReceived;
-    }
-
     public class ChildProcessService : IChildProcessService
     {
         //
@@ -417,12 +319,12 @@ namespace Neo.App
             return focused == _childHwnd || NativeMethods.IsChild(_childHwnd, focused);
         }
 
-        public void NotifyParentWindowStateChanged(WindowState newState)
+        public void NotifyParentWindowStateChanged(HostWindowState newState)
         {
             // Wir brauchen hier keinen Dispatcher, da ShowWindow thread-sicher ist.
             if (_childHwnd != IntPtr.Zero && _allowChildIsVisible == true )
             {
-                if (newState == WindowState.Minimized)
+                if (newState == HostWindowState.Minimized)
                 {
                     // Verstecke das Child-Fenster, wenn das Hauptfenster minimiert wird.
                     ShowWindow(_childHwnd, SW_HIDE);
@@ -1101,7 +1003,7 @@ namespace Neo.App
                 ct: ct);
         }
 
-        public System.Windows.Media.Imaging.BitmapSource? CaptureChildScreenshot()
+        public object? CaptureChildScreenshot()
         {
             if (_childHwnd == IntPtr.Zero)
                 return null;
