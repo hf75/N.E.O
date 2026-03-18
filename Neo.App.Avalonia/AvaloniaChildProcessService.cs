@@ -4,11 +4,9 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Avalonia;
 using Avalonia.Threading;
 
 using Neo.IPC;
@@ -22,21 +20,6 @@ namespace Neo.App
     /// </summary>
     public class AvaloniaChildProcessService : IChildProcessService
     {
-        // --- Win32 P/Invoke for window positioning (Windows-only) ---
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-        [DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
-
-        private const uint SWP_NOACTIVATE = 0x0010;
-        private const uint SWP_NOMOVE = 0x0002;
-        private const uint SWP_NOSIZE = 0x0001;
-        private const int SW_HIDE = 0;
-        private const int SW_SHOWNOACTIVATE = 4;
-        private const uint GW_HWNDPREV = 3;
-
         private readonly MainWindow _mainWindow;
         private NamedPipeServerStream? _pipeStream;
         private FramedPipeMessenger? _messenger;
@@ -49,7 +32,6 @@ namespace Neo.App
         private bool _isDisposed;
         private bool _isShuttingDown;
         private bool _allowChildVisible = true;
-        private IntPtr _childHwnd = IntPtr.Zero;
         private SandboxSettings _sandboxSettings = SandboxSettings.MaximumSecurity;
         private CrossplatformSettings _crossplatformSettings = new();
         private int _sessionCounter;
@@ -219,16 +201,10 @@ namespace Neo.App
                         switch (env.Type)
                         {
                             case IpcTypes.Hello:
-                                var hello = Json.FromJson<HelloMessage>(env.PayloadJson);
-                                if (hello?.Hwnd is long hwndVal and not 0)
-                                    _childHwnd = new IntPtr(hwndVal);
-                                Debug.WriteLine($"[ChildProcess] Hello received, HWND={_childHwnd}");
+                                Debug.WriteLine("[ChildProcess] Hello received from child");
                                 await SafeSendControlAsync(new IpcEnvelope(
                                     IpcTypes.Ack, env.CorrelationId,
                                     Json.ToJson(new AckMessage("Hello acknowledged"))));
-                                // Position child over our content area immediately
-                                if (_childHwnd != IntPtr.Zero && _allowChildVisible)
-                                    Dispatcher.UIThread.Post(() => UpdatePosition());
                                 break;
 
                             case IpcTypes.Log:
@@ -330,37 +306,8 @@ namespace Neo.App
 
         public void UpdatePosition(bool useTopMostTrick = false)
         {
-            if (_childHwnd == IntPtr.Zero || !_allowChildVisible || !OperatingSystem.IsWindows())
-                return;
-
-            try
-            {
-                var container = _mainWindow.DynamicContentGrid;
-                if (container == null || container.Bounds.Width < 1 || container.Bounds.Height < 1)
-                    return;
-
-                // Get screen coordinates of the container
-                var topLeft = container.PointToScreen(new Point(0, 0));
-                var bottomRight = container.PointToScreen(new Point(container.Bounds.Width, container.Bounds.Height));
-
-                int x = (int)topLeft.X;
-                int y = (int)topLeft.Y;
-                int w = (int)(bottomRight.X - topLeft.X);
-                int h = (int)(bottomRight.Y - topLeft.Y);
-
-                // Get the parent's HWND and place child just in front of it in Z-order
-                var parentHandle = _mainWindow.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
-                var insertAfter = parentHandle != IntPtr.Zero
-                    ? GetWindow(parentHandle, GW_HWNDPREV)  // window just above parent
-                    : IntPtr.Zero;
-
-                ShowWindow(_childHwnd, SW_SHOWNOACTIVATE);
-                SetWindowPos(_childHwnd, insertAfter, x, y, w, h, SWP_NOACTIVATE);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[ChildProcess] UpdatePosition failed: {ex.Message}");
-            }
+            // Child runs as an independent window on all platforms.
+            // No HWND manipulation — consistent cross-platform behavior.
         }
 
         public async Task<bool> DisplayControlAsync(string mainDllPath, IEnumerable<string> nugetDlls, IEnumerable<string> additionalDlls)
@@ -428,20 +375,7 @@ namespace Neo.App
             _crossplatformSettings = settings;
         }
 
-        public void NotifyParentWindowStateChanged(HostWindowState newState)
-        {
-            if (_childHwnd == IntPtr.Zero || !OperatingSystem.IsWindows()) return;
-
-            if (newState == HostWindowState.Minimized)
-            {
-                ShowWindow(_childHwnd, SW_HIDE);
-            }
-            else if (_allowChildVisible)
-            {
-                ShowWindow(_childHwnd, SW_SHOWNOACTIVATE);
-                UpdatePosition();
-            }
-        }
+        public void NotifyParentWindowStateChanged(HostWindowState newState) { }
 
         public async Task SetCursorVisibilityAsync(bool isVisible)
         {
@@ -481,18 +415,11 @@ namespace Neo.App
         public void HideChild()
         {
             _allowChildVisible = false;
-            if (_childHwnd != IntPtr.Zero && OperatingSystem.IsWindows())
-                ShowWindow(_childHwnd, SW_HIDE);
         }
 
         public void ShowChild()
         {
             _allowChildVisible = true;
-            if (_childHwnd != IntPtr.Zero && OperatingSystem.IsWindows())
-            {
-                ShowWindow(_childHwnd, SW_SHOWNOACTIVATE);
-                UpdatePosition();
-            }
         }
 
         private async Task DisposeChildAsync()
@@ -546,7 +473,6 @@ namespace Neo.App
             }
 
             _hasLoadedControl = false;
-            _childHwnd = IntPtr.Zero;
             Debug.WriteLine("[ChildProcess] DisposeChild: done");
         }
 
