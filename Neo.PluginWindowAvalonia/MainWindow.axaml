@@ -15,6 +15,9 @@
                            Foreground="#888" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="WaitStatusText" Text="Waiting for code..."
                            FontSize="16" Foreground="#AAA" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="WaitTimerText" Text=""
+                           FontSize="22" FontFamily="Consolas, 'Cascadia Mono', monospace"
+                           Foreground="#BBB" HorizontalAlignment="Center"/>
             </StackPanel>
         </Border>
 

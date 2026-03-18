@@ -22,15 +22,45 @@ namespace Neo.PluginWindowAvalonia
         private readonly object _pluginUnloadGate = new();
         private bool _pluginUnloadScheduled;
 
-        // Cache f�r Native-DLL-Temp-Pfade (Name -> absoluter Pfad im AC-Temp)
+        // Cache für Native-DLL-Temp-Pfade (Name -> absoluter Pfad im AC-Temp)
         private readonly Dictionary<string, string> _nativePathCache = new(StringComparer.OrdinalIgnoreCase);
+
+        // Elapsed timer for wait overlay
+        private readonly Stopwatch _waitStopwatch = new();
+        private DispatcherTimer? _waitTimer;
 
         public MainWindow()
         {
             InitializeComponent();
+            InitWaitTimer();
 
             // Entspricht WPFs Activated; in Avalonia vorhanden.
             this.Activated += OnActivated;
+        }
+
+        private void InitWaitTimer()
+        {
+            _waitTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            _waitTimer.Tick += (_, _) =>
+            {
+                if (_waitStopwatch.IsRunning)
+                {
+                    var ts = _waitStopwatch.Elapsed;
+                    WaitTimerText.Text = $"{ts.Minutes:D2}:{ts.Seconds:D2}.{ts.Milliseconds / 10:D2}";
+                }
+            };
+        }
+
+        private void StartWaitTimer()
+        {
+            _waitStopwatch.Restart();
+            _waitTimer?.Start();
+        }
+
+        private void StopWaitTimer()
+        {
+            _waitStopwatch.Stop();
+            _waitTimer?.Stop();
         }
 
         private async void OnActivated(object? sender, EventArgs e)
@@ -150,6 +180,7 @@ namespace Neo.PluginWindowAvalonia
                 {
                     dynamicContent.Content = userControl;
                     WaitOverlay.IsVisible = false;
+                    StopWaitTimer();
                 }
                 else
                 {
@@ -157,6 +188,7 @@ namespace Neo.PluginWindowAvalonia
                     {
                         dynamicContent.Content = userControl;
                         WaitOverlay.IsVisible = false;
+                        StopWaitTimer();
                     });
                 }
             }
@@ -185,6 +217,7 @@ namespace Neo.PluginWindowAvalonia
                     dynamicContent.Content = null;
                 WaitOverlay.IsVisible = true;
                 WaitStatusText.Text = "Generating new code...";
+                StartWaitTimer();
             }
             catch
             {
