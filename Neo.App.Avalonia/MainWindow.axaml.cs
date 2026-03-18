@@ -121,6 +121,7 @@ namespace Neo.App
 
                 EnsureAppDataFolderExists();
 
+                isCycleViewLocked = false;
                 Activate();
                 txtPrompt.Focus();
             }
