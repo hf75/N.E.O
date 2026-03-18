@@ -104,13 +104,15 @@ namespace Neo.App
                     return;
                 }
 
-                // Wait for child to connect
+                // Wait for child to connect (with timeout)
                 using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(_pipeCts.Token);
                 connectCts.CancelAfter(TimeSpan.FromSeconds(10));
                 await _pipeStream.WaitForConnectionAsync(connectCts.Token);
 
-                // Wait for Hello from child (first message)
-                var helloEnv = await _messenger.ReceiveControlAsync(_pipeCts.Token);
+                // Wait for Hello from child (with timeout)
+                using var helloCts = CancellationTokenSource.CreateLinkedTokenSource(_pipeCts.Token);
+                helloCts.CancelAfter(TimeSpan.FromSeconds(5));
+                var helloEnv = await _messenger.ReceiveControlAsync(helloCts.Token);
                 if (helloEnv?.Type == IpcTypes.Hello)
                 {
                     // Reply with Hello ACK
@@ -407,6 +409,8 @@ namespace Neo.App
             _isShuttingDown = true;
 
             try { _pipeCts.Cancel(); } catch { }
+            // Give listen loop a moment to exit after cancellation
+            await Task.Delay(100);
 
             if (_pipeStream != null)
             {
