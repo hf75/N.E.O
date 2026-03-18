@@ -27,11 +27,15 @@ namespace Neo.App
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
         [DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
 
         private const uint SWP_NOACTIVATE = 0x0010;
-        private const uint SWP_NOZORDER = 0x0004;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
         private const int SW_HIDE = 0;
         private const int SW_SHOWNOACTIVATE = 4;
+        private const uint GW_HWNDPREV = 3;
 
         private readonly MainWindow _mainWindow;
         private NamedPipeServerStream? _pipeStream;
@@ -344,8 +348,14 @@ namespace Neo.App
                 int w = (int)(bottomRight.X - topLeft.X);
                 int h = (int)(bottomRight.Y - topLeft.Y);
 
+                // Get the parent's HWND and place child just in front of it in Z-order
+                var parentHandle = _mainWindow.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+                var insertAfter = parentHandle != IntPtr.Zero
+                    ? GetWindow(parentHandle, GW_HWNDPREV)  // window just above parent
+                    : IntPtr.Zero;
+
                 ShowWindow(_childHwnd, SW_SHOWNOACTIVATE);
-                SetWindowPos(_childHwnd, IntPtr.Zero, x, y, w, h, SWP_NOACTIVATE | SWP_NOZORDER);
+                SetWindowPos(_childHwnd, insertAfter, x, y, w, h, SWP_NOACTIVATE);
             }
             catch (Exception ex)
             {
