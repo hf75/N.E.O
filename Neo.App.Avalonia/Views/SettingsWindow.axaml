@@ -42,8 +42,7 @@
                        Text="AI code generation attempts:"/>
             <TextBox Classes="rounded" Grid.Row="0" Grid.Column="1" x:Name="AttemptsTextBox"/>
 
-            <CheckBox Classes="rounded" Grid.Row="1" Content="Enable Avalonia"
-                      IsChecked="{Binding UseAvalonia, Mode=TwoWay}" Margin="0,8,0,0"/>
+            <!-- UseAvalonia is always true in the Avalonia host — no toggle needed -->
             <CheckBox Classes="rounded" Grid.Row="2" Content="Enable REACT-UI"
                       IsChecked="{Binding UseReactUi, Mode=TwoWay}" Margin="0,8,0,0"/>
             <CheckBox Classes="rounded" Grid.Row="3" Content="Enable Python"

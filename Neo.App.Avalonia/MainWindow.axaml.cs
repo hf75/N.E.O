@@ -108,9 +108,12 @@ namespace Neo.App
                 titleBase = Title;
                 Title = titleBase + " " + $"[{_appController.AiAgent?.Name}]";
 
+                // Avalonia host always generates Avalonia code
+                _appController.Settings.UseAvalonia = true;
+
                 CrossplatformSettings cps = new CrossplatformSettings()
                 {
-                    UseAvalonia = _appController.Settings.UseAvalonia,
+                    UseAvalonia = true,
                     UsePython = _appController.Settings.UsePython,
                 };
 
