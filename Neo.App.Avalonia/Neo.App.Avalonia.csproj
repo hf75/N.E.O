@@ -38,6 +38,11 @@
     <ProjectReference Include="..\Neo.AssemblyForge\Neo.AssemblyForge.csproj" />
   </ItemGroup>
 
+  <!-- Shared assets from Neo.App -->
+  <ItemGroup>
+    <AvaloniaResource Include="..\Neo.App\logo3.png" Link="Assets\logo3.png" />
+  </ItemGroup>
+
   <!-- Embedded resources shared with Neo.App (read at runtime by AppController) -->
   <ItemGroup>
     <EmbeddedResource Include="..\Neo.App\AgentHelper.cs" Link="AgentHelper.cs" LogicalName="Neo.App.Avalonia.AgentHelper.cs" />
