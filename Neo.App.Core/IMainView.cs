@@ -43,7 +43,7 @@ namespace Neo.App
         // ─── Dialogs ─────────────────────────────────────────────────────
         CrashDialogResult ShowCrashDialog();
 
-        PatchReviewDecision ShowPatchReviewDialog(
+        Task<PatchReviewDecision> ShowPatchReviewDialogAsync(
             string patchOrCode,
             IReadOnlyList<string>? nugetPackages,
             string? explanation,

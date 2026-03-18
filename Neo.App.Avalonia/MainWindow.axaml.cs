@@ -739,7 +739,7 @@ namespace Neo.App
                 _waitIndicator.StatusText = text;
         }
 
-        PatchReviewDecision IMainView.ShowPatchReviewDialog(
+        async Task<PatchReviewDecision> IMainView.ShowPatchReviewDialogAsync(
             string patchOrCode,
             IReadOnlyList<string>? nugetPackages,
             string? explanation,
@@ -748,8 +748,7 @@ namespace Neo.App
         {
             var review = new PatchReviewWindow(patchOrCode, nugetPackages, explanation,
                 isPowerShellMode: isPowerShellMode, isConsoleAppMode: isConsoleAppMode);
-            var task = review.ShowDialog<bool?>(this);
-            task.Wait();
+            await review.ShowDialog<bool?>(this);
             return review.Decision;
         }
 

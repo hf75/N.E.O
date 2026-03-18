@@ -1114,7 +1114,7 @@ namespace Neo.App
                 _waitIndicator.StatusText = text;
         }
 
-        PatchReviewDecision IMainView.ShowPatchReviewDialog(
+        Task<PatchReviewDecision> IMainView.ShowPatchReviewDialogAsync(
             string patchOrCode,
             IReadOnlyList<string>? nugetPackages,
             string? explanation,
@@ -1127,7 +1127,7 @@ namespace Neo.App
                 Owner = this
             };
             review.ShowDialog();
-            return review.Decision;
+            return Task.FromResult(review.Decision);
         }
 
         private DesignerPropertiesWindow? _designerPropertiesWindow;

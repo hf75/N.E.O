@@ -1402,8 +1402,7 @@ namespace Neo.App
                              structuredResponse.Patch = previewPatch;
                              structuredResponse.NuGetPackages = allNuGetPackagesThisRun;
 
-                             PatchReviewDecision decision = _view.InvokeOnUIThread(() =>
-                                 _view.ShowPatchReviewDialog(previewPatch, allNuGetPackagesThisRun, structuredResponse.Explanation));
+                             PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(previewPatch, allNuGetPackagesThisRun, structuredResponse.Explanation);
 
                              if (decision != PatchReviewDecision.Apply)
                              {
@@ -1572,8 +1571,7 @@ namespace Neo.App
             {
                 reviewCallback = async (ctx, ct) =>
                 {
-                    PatchReviewDecision decision = _view.InvokeOnUIThread(() =>
-                        _view.ShowPatchReviewDialog(ctx.Patch, ctx.NuGetPackages, ctx.Explanation));
+                    PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(ctx.Patch, ctx.NuGetPackages, ctx.Explanation);
 
                     return decision switch
                     {
@@ -1814,8 +1812,7 @@ namespace Neo.App
             // Review if AcceptAutomatic is off
             if (!Settings.AcceptAutomatic)
             {
-                PatchReviewDecision decision = _view.InvokeOnUIThread(() =>
-                    _view.ShowPatchReviewDialog(script, null, explanation, isPowerShellMode: true));
+                PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(script, null, explanation, isPowerShellMode: true);
 
                 if (decision == PatchReviewDecision.Reject)
                 {
@@ -1858,8 +1855,7 @@ namespace Neo.App
             // Review if AcceptAutomatic is off
             if (!Settings.AcceptAutomatic)
             {
-                PatchReviewDecision decision = _view.InvokeOnUIThread(() =>
-                    _view.ShowPatchReviewDialog(code, nugetPackages, explanation, isConsoleAppMode: true));
+                PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(code, nugetPackages, explanation, isConsoleAppMode: true);
 
                 if (decision == PatchReviewDecision.Reject)
                 {
