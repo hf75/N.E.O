@@ -1,8 +1,9 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:aedit="https://github.com/avaloniaui/avaloniaedit"
         x:Class="Neo.App.Views.CodeEditorWindow"
         Title="N.E.O. — Code Editor"
-        Width="800" Height="600"
+        Width="900" Height="700"
         WindowStartupLocation="CenterOwner">
     <Grid Margin="8">
         <Grid.RowDefinitions>
@@ -10,14 +11,13 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBox x:Name="codeEditor"
-                 Grid.Row="0"
-                 FontFamily="Consolas, 'Cascadia Mono', 'Courier New'"
-                 FontSize="14"
-                 IsReadOnly="False"
-                 TextWrapping="NoWrap"
-                 AcceptsReturn="True"
-                 AcceptsTab="True"/>
+        <aedit:TextEditor x:Name="codeEditor"
+                          Grid.Row="0"
+                          FontFamily="Consolas, 'Cascadia Mono', 'Courier New'"
+                          FontSize="14"
+                          IsReadOnly="False"
+                          ShowLineNumbers="True"
+                          WordWrap="False"/>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal"
                     HorizontalAlignment="Right" Margin="0,8,0,0">

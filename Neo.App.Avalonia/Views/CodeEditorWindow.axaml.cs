@@ -1,5 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using AvaloniaEdit;
+using AvaloniaEdit.TextMate;
+using TextMateSharp.Grammars;
 
 namespace Neo.App.Views
 {
@@ -13,6 +16,12 @@ namespace Neo.App.Views
         public CodeEditorWindow(string currentCode)
         {
             InitializeComponent();
+
+            // Set up C# syntax highlighting via TextMate
+            var registryOptions = new RegistryOptions(ThemeName.Light);
+            var textMateInstallation = codeEditor.InstallTextMate(registryOptions);
+            textMateInstallation.SetGrammar(registryOptions.GetScopeByLanguageId("csharp"));
+
             codeEditor.Text = currentCode;
             EditedCode = currentCode;
         }

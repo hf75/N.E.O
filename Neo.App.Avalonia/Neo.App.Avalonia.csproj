@@ -8,10 +8,12 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.9" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.4.1" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.9" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.9" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.9" />
@@ -19,6 +21,7 @@
       <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="AvaloniaEdit.TextMate" Version="11.4.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -66,5 +69,8 @@
     <Compile Include="..\Neo.App\UserControlBaseCode.cs" Link="Shared\UserControlBaseCode.cs" />
     <Compile Include="..\Neo.App\PythonInterop\PythonDownloadService.cs" Link="Shared\PythonDownloadService.cs" />
     <Compile Include="..\Neo.App\PythonInterop\PythonArchiveHelper.cs" Link="Shared\PythonArchiveHelper.cs" Condition="Exists('..\Neo.App\PythonInterop\PythonArchiveHelper.cs')" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="icon.ico" />
   </ItemGroup>
 </Project>
