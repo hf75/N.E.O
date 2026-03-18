@@ -52,7 +52,9 @@ namespace Neo.App
         private Dictionary<string, string> _original = new(StringComparer.Ordinal);
         private string _foregroundValue = string.Empty;
         private string _backgroundValue = string.Empty;
+#pragma warning disable CS0414 // Field assigned but not read — reserved for future cursor-follow feature
         private bool _followCursor = true;
+#pragma warning restore CS0414
 
         public event EventHandler<DesignerApplyRequestedEventArgs>? ApplyRequested;
 

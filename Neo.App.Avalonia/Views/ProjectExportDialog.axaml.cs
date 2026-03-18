@@ -35,7 +35,9 @@ namespace Neo.App
         private bool _isInitializing;
         private SettingsModel? _settings;
 
-        public ProjectExportDialog(SettingsModel? settings = null)
+        public ProjectExportDialog() : this(null) { }
+
+        public ProjectExportDialog(SettingsModel? settings)
         {
             _isInitializing = true;
             InitializeComponent();

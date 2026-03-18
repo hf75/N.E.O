@@ -30,7 +30,9 @@ namespace Neo.App
         private bool _hasLoadedControl;
         private bool _isDisposed;
         private bool _isShuttingDown;
+#pragma warning disable CS0414 // Field is assigned but never read — used by HideChild/ShowChild for future IPC visibility control
         private bool _allowChildVisible = true;
+#pragma warning restore CS0414
         private SandboxSettings _sandboxSettings = SandboxSettings.MaximumSecurity;
         private CrossplatformSettings _crossplatformSettings = new();
         private int _sessionCounter;
@@ -213,9 +215,9 @@ namespace Neo.App
                                 break;
                         }
                     },
-                    onBlobStart: null,
-                    onBlobChunk: null,
-                    onBlobEnd: null,
+                    onBlobStart: null!,
+                    onBlobChunk: null!,
+                    onBlobEnd: null!,
                     ct: ct);
             }
             catch (OperationCanceledException) { }
@@ -320,7 +322,7 @@ namespace Neo.App
                 var req = new LoadControlRequest(
                     Path.GetFileName(mainDllPath),
                     "DynamicUserControl",
-                    nugetDlls.Select(Path.GetFileName).ToList());
+                    nugetDlls.Select(d => Path.GetFileName(d)!).ToList());
 
                 await SafeSendControlAsync(new IpcEnvelope(
                     IpcTypes.LoadControl,

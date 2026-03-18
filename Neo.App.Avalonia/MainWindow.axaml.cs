@@ -34,6 +34,11 @@ namespace Neo.App
         private ViewMode _currentViewMode = ViewMode.Default;
         private bool _isCodeEditorActive = false;
 
+        // Fullscreen state
+        private bool _isFullScreen = false;
+        private WindowState _preFullScreenState = WindowState.Normal;
+        private SystemDecorations _preFullScreenDecorations = SystemDecorations.Full;
+
         private AppController _appController = null!;
         public AiWaitIndicator? _waitIndicator = null;
         private DesignerPropertiesWindow? _designerPropertiesWindow;
@@ -46,6 +51,20 @@ namespace Neo.App
             this.Activated += MainWindow_Activated;
             this.KeyDown += MainWindow_GlobalKeyDown;
             this.Loaded += MainWindow_Loaded;
+
+            // Notify child process when window state changes (minimize/maximize/restore)
+            this.PropertyChanged += (s, e) =>
+            {
+                if (e.Property == WindowStateProperty)
+                {
+                    _appController?.ChildProcessService?.NotifyParentWindowStateChanged(WindowState switch
+                    {
+                        WindowState.Minimized => HostWindowState.Minimized,
+                        WindowState.Maximized => HostWindowState.Maximized,
+                        _ => HostWindowState.Normal
+                    });
+                }
+            };
         }
 
         private async void MainWindow_Closing(object? sender, WindowClosingEventArgs e)
@@ -334,8 +353,40 @@ namespace Neo.App
 
         private async void MainWindow_GlobalKeyDown(object? sender, KeyEventArgs e)
         {
-            if (_appController?.ChildProcessService != null && _appController.ChildProcessService.IsFocusInsideChild())
+            if (_appController == null) return;
+
+            if (_appController.ChildProcessService != null && _appController.ChildProcessService.IsFocusInsideChild())
             {
+                e.Handled = true;
+                return;
+            }
+
+            // F11: Toggle fullscreen
+            if (e.Key == Key.F11 && !isCycleViewLocked)
+            {
+                ToggleFullScreen();
+                e.Handled = true;
+                return;
+            }
+
+            // Escape: Cancel current operation
+            if (e.Key == Key.Escape)
+            {
+                if (_isFullScreen)
+                {
+                    ToggleFullScreen();
+                    e.Handled = true;
+                    return;
+                }
+
+                if (_isCodeEditorActive)
+                {
+                    HideCodeEditor();
+                    e.Handled = true;
+                    return;
+                }
+
+                await HardCancel();
                 e.Handled = true;
                 return;
             }
@@ -402,6 +453,30 @@ namespace Neo.App
                 txtPrompt.Clear();
                 txtPrompt.Focus();
                 e.Handled = true;
+            }
+        }
+
+        // ─── Fullscreen ─────────────────────────────────────────────────
+
+        private void ToggleFullScreen()
+        {
+            if (_isFullScreen)
+            {
+                // Restore previous state
+                SystemDecorations = _preFullScreenDecorations;
+                WindowState = _preFullScreenState;
+                _isFullScreen = false;
+                SetViewMode(ViewMode.Default);
+            }
+            else
+            {
+                // Save current state and go fullscreen
+                _preFullScreenState = WindowState;
+                _preFullScreenDecorations = SystemDecorations;
+                SystemDecorations = SystemDecorations.None;
+                WindowState = WindowState.FullScreen;
+                _isFullScreen = true;
+                SetViewMode(ViewMode.ContentOnly);
             }
         }
 
