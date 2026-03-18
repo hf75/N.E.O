@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:Neo.App"
+             xmlns:core="clr-namespace:Neo.App;assembly=Neo.App.Core"
              xmlns:mdxam="clr-namespace:MdXaml;assembly=MdXaml"    
              xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit"             
              mc:Ignorable="d" 
@@ -179,7 +180,7 @@
             </ItemsControl.ItemContainerStyle>
 
             <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="{x:Type local:ChatMessage}">
+                <DataTemplate DataType="{x:Type core:ChatMessage}">
                     <!-- Neu: 3-Spalten-Grid, damit die mittlere Spalte immer 75% ist -->
                     <Grid HorizontalAlignment="Stretch">
                         <Grid.ColumnDefinitions>

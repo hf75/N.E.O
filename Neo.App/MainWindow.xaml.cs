@@ -47,9 +47,10 @@ namespace Neo.App
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
-    public partial class MainWindow : System.Windows.Window
+    public partial class MainWindow : System.Windows.Window, IMainView
     {
         public static string AppName { get; set; } = "Neo";
+        string IMainView.AppName => AppName;
 
         private string? titleBase;
 
@@ -1083,5 +1084,83 @@ namespace Neo.App
         {
             await HardCancel();
         }
+
+        // ─── IMainView Implementation ───────────────────────────────────
+
+        string IMainView.PromptText
+        {
+            get => txtPrompt.Text;
+            set => txtPrompt.Text = value;
+        }
+
+        void IMainView.ClearPrompt() => txtPrompt.Clear();
+        void IMainView.FocusPrompt() => txtPrompt.Focus();
+        void IMainView.ActivateWindow() => Activate();
+
+        void IMainView.ShowRepairOverlay() => RepairOverlay.Visibility = Visibility.Visible;
+        void IMainView.HideRepairOverlay() => RepairOverlay.Visibility = Visibility.Collapsed;
+
+        void IMainView.ShowFrostedSnapshot(object snapshot) =>
+            ShowFrostedSnapshot((System.Windows.Media.Imaging.BitmapSource)snapshot);
+
+        void IMainView.SetWaitIndicatorStatus(string text)
+        {
+            if (_waitIndicator != null)
+                _waitIndicator.StatusText = text;
+        }
+
+        PatchReviewDecision IMainView.ShowPatchReviewDialog(
+            string patchOrCode,
+            IReadOnlyList<string>? nugetPackages,
+            string? explanation,
+            bool isPowerShellMode,
+            bool isConsoleAppMode)
+        {
+            var review = new PatchReviewWindow(patchOrCode, nugetPackages, explanation,
+                isPowerShellMode: isPowerShellMode, isConsoleAppMode: isConsoleAppMode)
+            {
+                Owner = this
+            };
+            review.ShowDialog();
+            return review.Decision;
+        }
+
+        private DesignerPropertiesWindow? _designerPropertiesWindow;
+
+        void IMainView.ShowDesignerPropertiesWindow(DesignerSelectionMessage selection,
+            EventHandler<DesignerApplyRequestedEventArgs> applyHandler)
+        {
+            if (_designerPropertiesWindow == null || !_designerPropertiesWindow.IsVisible)
+            {
+                _designerPropertiesWindow = new DesignerPropertiesWindow
+                {
+                    Owner = this
+                };
+                _designerPropertiesWindow.ApplyRequested += applyHandler;
+                _designerPropertiesWindow.Closed += (_, _) => _designerPropertiesWindow = null;
+                _designerPropertiesWindow.Show();
+            }
+
+            _designerPropertiesWindow.SetSelection(selection);
+            _designerPropertiesWindow.RepositionNearCursor();
+            _designerPropertiesWindow.Activate();
+        }
+
+        void IMainView.CloseDesignerPropertiesWindow()
+        {
+            if (_designerPropertiesWindow != null)
+            {
+                try { _designerPropertiesWindow.Close(); } catch { }
+                _designerPropertiesWindow = null;
+            }
+        }
+
+        bool IMainView.CheckUIThreadAccess() => Dispatcher.CheckAccess();
+
+        void IMainView.InvokeOnUIThread(Action action) => Dispatcher.Invoke(action);
+
+        T IMainView.InvokeOnUIThread<T>(Func<T> func) => Dispatcher.Invoke(func);
+
+        void IMainView.InvokeOnUIThreadAsync(Action action) => _ = Dispatcher.InvokeAsync(action);
     }
 }

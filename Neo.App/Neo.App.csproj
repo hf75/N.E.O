@@ -74,6 +74,7 @@
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Ollama\Neo.Agents.Ollama.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.LmStudio\Neo.Agents.LmStudio.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.PowerShell\Neo.Agents.PowerShell.csproj" />
+    <ProjectReference Include="..\Neo.App.Core\Neo.App.Core.csproj" />
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
     <ProjectReference Include="..\Neo.PluginWindowWPF\Neo.PluginWindowWPF.csproj" />
     <ProjectReference Include="..\Neo.PluginWindowAvalonia\Neo.PluginWindowAvalonia.csproj" />

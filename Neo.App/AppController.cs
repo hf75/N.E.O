@@ -37,8 +37,7 @@ namespace Neo.App
 
     public class AppController
     {
-        private readonly MainWindow _view;
-        private DesignerPropertiesWindow? _designerPropertiesWindow;
+        private readonly IMainView _view;
 
         public ApplicationState AppState { get; private set; } = new();
         public UndoRedoManager _undoRedo = null!;
@@ -124,11 +123,12 @@ namespace Neo.App
         }
 
 
-        public AppController(MainWindow view)
+        public AppController(IMainView view)
         {
             _view = view;
 
-            Logger = new AppLogger(AppState, view.historyView);
+            // Phase 3 TODO: Abstract Logger creation behind IMainView
+            Logger = new AppLogger(AppState, ((MainWindow)view).historyView);
 
             Settings = SettingsService.Load();
 
@@ -241,19 +241,19 @@ namespace Neo.App
 
             NuGetPackageDirectory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                MainWindow.AppName,
+                _view.AppName,
                 "NuGetPackages"
             );
 
             //PythonModulesDirectory = Path.Combine(
             //    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            //    MainWindow.AppName,
+            //    _view.AppName,
             //    "PythonModules"
             //);
 
             DllPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                MainWindow.AppName,
+                _view.AppName,
                 "DynamicUserControl.dll"
             );
 
@@ -262,7 +262,9 @@ namespace Neo.App
             AppInstallerService = new AppInstallerService(AppExportService);
             CompilationService = new CompilationService(_coreRefPath, _desktopRefPath);
             NugetPackageService = new NuGetPackageService(NuGetPackageDirectory, _coreRefPath, _desktopRefPath);
-            ChildProcessService = new ChildProcessService(_view, _view.dynamicContentGrid);
+            // Phase 3 TODO: Abstract ChildProcessService creation behind IMainView
+            var wpfView = (MainWindow)_view;
+            ChildProcessService = new ChildProcessService(wpfView, wpfView.dynamicContentGrid);
             ChildProcessService.ChildProcessCrashed += HandleChildProcessCrashed;
             ChildProcessService.ChildLogReceived += (log) => Debug.WriteLine($"[Child Log] {log.Message}");
             ChildProcessService.DesignerSelectionReceived += HandleDesignerSelectionReceived;
@@ -753,7 +755,7 @@ namespace Neo.App
                 RecreatePromptToDllSession(preserveState: true);
 
                 await ChildProcessService.RestartAsync();
-                _view.dynamicContent.Content = new EmptyUserControl(); // UI-Manipulation über _view
+                _view.ShowEmptyContent();
                 _view.HideFrostedSnapshot();
                 ChildProcessService.HideChild();
 
@@ -765,9 +767,9 @@ namespace Neo.App
             finally
             {
                 // 4. UI-spezifische Aktionen am Ende.
-                _view.Activate();
-                _view.txtPrompt.Text = string.Empty;
-                _view.txtPrompt.Focus();
+                _view.ActivateWindow();
+                _view.PromptText = string.Empty;
+                _view.FocusPrompt();
 
                 // 5. Status garantiert zurücksetzen.
                 await SetStatusAsync(AppStatus.Idle, false);
@@ -1299,7 +1301,7 @@ namespace Neo.App
                 cancellationToken.ThrowIfCancellationRequested();
                 numTries--;
 
-                _view._waitIndicator!.StatusText = "Generating Pass: " + currentAttempt.ToString();
+                _view.SetWaitIndicatorStatus("Generating Pass: " + currentAttempt.ToString());
 
                 try
                 {
@@ -1405,15 +1407,8 @@ namespace Neo.App
                              structuredResponse.Patch = previewPatch;
                              structuredResponse.NuGetPackages = allNuGetPackagesThisRun;
 
-                             PatchReviewDecision decision = _view.Dispatcher.Invoke(() =>
-                              {
-                                 var review = new PatchReviewWindow(previewPatch, allNuGetPackagesThisRun, structuredResponse.Explanation)
-                                 {
-                                     Owner = _view
-                                 };
-                                 review.ShowDialog();
-                                 return review.Decision;
-                              });
+                             PatchReviewDecision decision = _view.InvokeOnUIThread(() =>
+                                 _view.ShowPatchReviewDialog(previewPatch, allNuGetPackagesThisRun, structuredResponse.Explanation));
 
                              if (decision != PatchReviewDecision.Apply)
                              {
@@ -1493,7 +1488,7 @@ namespace Neo.App
                         currentCode: baseCodeForPatch);
                     // LastErrorMsg wird oben in der Schleife drangehangen!
 
-                    _view.txtPrompt.Text = originalPrompt;
+                    _view.PromptText = originalPrompt;
 
                     Logger.LogMessageWithMarkdownFormating(AppLogger.StructuredResponseToText(structuredResponse!), BubbleType.CompletionError);
                     Logger.LogMessage(msg, BubbleType.CompletionError);
@@ -1582,15 +1577,8 @@ namespace Neo.App
             {
                 reviewCallback = async (ctx, ct) =>
                 {
-                    PatchReviewDecision decision = _view.Dispatcher.Invoke(() =>
-                    {
-                        var review = new PatchReviewWindow(ctx.Patch, ctx.NuGetPackages, ctx.Explanation)
-                        {
-                            Owner = _view
-                        };
-                        review.ShowDialog();
-                        return review.Decision;
-                    });
+                    PatchReviewDecision decision = _view.InvokeOnUIThread(() =>
+                        _view.ShowPatchReviewDialog(ctx.Patch, ctx.NuGetPackages, ctx.Explanation));
 
                     return decision switch
                     {
@@ -1831,15 +1819,8 @@ namespace Neo.App
             // Review if AcceptAutomatic is off
             if (!Settings.AcceptAutomatic)
             {
-                PatchReviewDecision decision = _view.Dispatcher.Invoke(() =>
-                {
-                    var review = new PatchReviewWindow(script, null, explanation, isPowerShellMode: true)
-                    {
-                        Owner = _view
-                    };
-                    review.ShowDialog();
-                    return review.Decision;
-                });
+                PatchReviewDecision decision = _view.InvokeOnUIThread(() =>
+                    _view.ShowPatchReviewDialog(script, null, explanation, isPowerShellMode: true));
 
                 if (decision == PatchReviewDecision.Reject)
                 {
@@ -1882,15 +1863,8 @@ namespace Neo.App
             // Review if AcceptAutomatic is off
             if (!Settings.AcceptAutomatic)
             {
-                PatchReviewDecision decision = _view.Dispatcher.Invoke(() =>
-                {
-                    var review = new PatchReviewWindow(code, nugetPackages, explanation, isConsoleAppMode: true)
-                    {
-                        Owner = _view
-                    };
-                    review.ShowDialog();
-                    return review.Decision;
-                });
+                PatchReviewDecision decision = _view.InvokeOnUIThread(() =>
+                    _view.ShowPatchReviewDialog(code, nugetPackages, explanation, isConsoleAppMode: true));
 
                 if (decision == PatchReviewDecision.Reject)
                 {
@@ -2029,27 +2003,13 @@ namespace Neo.App
             if (CurrentStatus != AppStatus.Idle)
                 return;
 
-            if (!_view.Dispatcher.CheckAccess())
+            if (!_view.CheckUIThreadAccess())
             {
-                _ = _view.Dispatcher.InvokeAsync(() => HandleDesignerSelectionReceived(selection));
+                _view.InvokeOnUIThreadAsync(() => HandleDesignerSelectionReceived(selection));
                 return;
             }
 
-            if (_designerPropertiesWindow == null || !_designerPropertiesWindow.IsVisible)
-            {
-                _designerPropertiesWindow = new DesignerPropertiesWindow
-                {
-                    Owner = _view
-                };
-
-                _designerPropertiesWindow.ApplyRequested += DesignerPropertiesWindow_ApplyRequested;
-                _designerPropertiesWindow.Closed += (_, _) => _designerPropertiesWindow = null;
-                _designerPropertiesWindow.Show();
-            }
-
-            _designerPropertiesWindow.SetSelection(selection);
-            _designerPropertiesWindow.RepositionNearCursor();
-            _designerPropertiesWindow.Activate();
+            _view.ShowDesignerPropertiesWindow(selection, DesignerPropertiesWindow_ApplyRequested);
         }
 
         private async void DesignerPropertiesWindow_ApplyRequested(object? sender, DesignerApplyRequestedEventArgs e)
@@ -2145,7 +2105,7 @@ namespace Neo.App
             try
             {
                 // 1. Status setzen und UI blockieren.
-                _view.RepairOverlay.Visibility = Visibility.Visible;
+                _view.ShowRepairOverlay();
                 await SetStatusAsync(AppStatus.Repairing, true, "Attempting automatic repair...");
 
                 // 2. Logik ausführen
@@ -2169,7 +2129,7 @@ namespace Neo.App
 
                 await ExecuteGeneralPrompt(repairPrompt, _cancellationSource.Token, showResultInChild: true);
 
-                _view.txtPrompt.Clear();
+                _view.ClearPrompt();
 
                 Logger.LogMessage("Automatic repair successful. The application has been restored.", BubbleType.Info);                            
             }
@@ -2182,7 +2142,7 @@ namespace Neo.App
             {
                 // 3. UI aufräumen und Status zurücksetzen
                 ChildProcessService.ShowChild();
-                _view.RepairOverlay.Visibility = Visibility.Collapsed; // UI-Manipulation über _view
+                _view.HideRepairOverlay();
                 await SetStatusAsync(AppStatus.Idle, false);
             }
         }
@@ -2268,10 +2228,9 @@ namespace Neo.App
 
             await ChildProcessService.SetDesignerModeAsync(enabled);
 
-            if (!enabled && _designerPropertiesWindow != null)
+            if (!enabled)
             {
-                try { _designerPropertiesWindow.Close(); } catch { /* window may already be closed */ }
-                _designerPropertiesWindow = null;
+                _view.CloseDesignerPropertiesWindow();
             }
 
             return true;
@@ -2407,7 +2366,7 @@ namespace Neo.App
             if (grantAccess)
             {
                 string? path = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), MainWindow.AppName, "shared"); // AppName muss in den Controller
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), _view.AppName, "shared"); // AppName muss in den Controller
                 GrantedFolders.Add(path);
             }
         }

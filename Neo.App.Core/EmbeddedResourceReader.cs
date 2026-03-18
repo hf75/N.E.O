@@ -10,7 +10,11 @@ namespace Neo.App
     {
         public static string GetEmbeddedResourceContent(string resourceName)
         {
-            var assembly = Assembly.GetExecutingAssembly(); // Oder die relevante Assembly holen
+            return GetEmbeddedResourceContent(Assembly.GetCallingAssembly(), resourceName);
+        }
+
+        public static string GetEmbeddedResourceContent(Assembly assembly, string resourceName)
+        {
 
             // Versuche, den vollständigen Ressourcennamen zu ermitteln
             string? fullResourceName = DetermineFullResourceName(assembly, resourceName);
