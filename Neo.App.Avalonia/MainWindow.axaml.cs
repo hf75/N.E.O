@@ -528,7 +528,18 @@ namespace Neo.App
             if (_isCodeEditorActive)
                 HideCodeEditor();
 
-            await _appController.ClearSessionAsync();
+            try
+            {
+                Debug.WriteLine("[PerformClear] Starting ClearSessionAsync...");
+                await _appController.ClearSessionAsync();
+                Debug.WriteLine("[PerformClear] ClearSessionAsync completed.");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[PerformClear] EXCEPTION: {ex}");
+                // Ensure UI is unblocked even if Clear fails
+                try { await SetUiBusyState(false); } catch { }
+            }
 
             txtPrompt.Clear();
             txtPrompt.Focus();

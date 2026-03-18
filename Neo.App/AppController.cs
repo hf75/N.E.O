@@ -766,7 +766,12 @@ namespace Neo.App
                 _view.PromptText = string.Empty;
                 _view.FocusPrompt();
 
-                // 5. Status garantiert zurücksetzen.
+                // 5. Discard any crash events that fired during the intentional restart.
+                //    Without this, the pipe disconnect from the old child process triggers
+                //    ShowRecoveryDialogAsync which does ANOTHER restart, potentially looping.
+                _pendingCrash = null;
+
+                // 6. Status garantiert zurücksetzen.
                 await SetStatusAsync(AppStatus.Idle, false);
             }
         }
