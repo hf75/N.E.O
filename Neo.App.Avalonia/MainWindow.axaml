@@ -70,8 +70,8 @@
                         <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent"/>
                         <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent"/>
                         <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent"/>
-                        <x:Double x:Key="TextControlBorderThemeThickness">0</x:Double>
-                        <x:Double x:Key="TextControlBorderThemeThicknessFocused">0</x:Double>
+                        <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+                        <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
                     </TextBox.Resources>
                 </TextBox>
             </Border>
