@@ -7,6 +7,26 @@
         Height="768" Width="600"
         FontFamily="Inter, Segoe UI, sans-serif">
 
+    <Window.Styles>
+        <!-- Override Fluent theme's focus styling for the prompt TextBox -->
+        <Style Selector="TextBox#txtPrompt">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="TextBox#txtPrompt:focus">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="TextBox#txtPrompt:pointerover">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="TextBox#txtPrompt /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+    </Window.Styles>
+
     <Border Padding="6">
         <Grid x:Name="contentGrid">
             <Grid.RowDefinitions>
