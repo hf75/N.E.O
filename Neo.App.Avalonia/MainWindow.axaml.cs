@@ -167,7 +167,6 @@ namespace Neo.App
 
                     btnCancel.IsVisible = showCancel;
 
-                    dynamicContent.Content = new EmptyUserControl();
                     GlobalOverlayContent.Content = _waitIndicator;
                     GlobalOverlay.IsVisible = true;
                 }
@@ -228,9 +227,6 @@ namespace Neo.App
                     SetViewMode(ViewMode.TxtPromptOnly);
                     break;
                 case ViewMode.TxtPromptOnly:
-                    SetViewMode(ViewMode.ContentOnly);
-                    break;
-                case ViewMode.ContentOnly:
                     SetViewMode(ViewMode.Default);
                     break;
             }
@@ -240,20 +236,14 @@ namespace Neo.App
         {
             _currentViewMode = mode;
 
+            // Reset all to visible
             wvHistoryBorder.IsVisible = true;
             seperatorLeft.IsVisible = true;
-            stackPanelLeft.IsVisible = true;
             txtPromptBorder.IsVisible = true;
-            dynamicContentGrid.IsVisible = true;
             optionsHub.IsVisible = true;
 
             Grid.SetRow(txtPromptBorder, 2);
             Grid.SetRowSpan(txtPromptBorder, 1);
-            Grid.SetRow(optionsHub, 1);
-            Grid.SetRow(dynamicContentGrid, 0);
-            Grid.SetRowSpan(dynamicContentGrid, 3);
-            Grid.SetColumn(dynamicContentGrid, 2);
-            Grid.SetColumnSpan(dynamicContentGrid, 1);
 
             txtPrompt.Focus();
 
@@ -268,101 +258,38 @@ namespace Neo.App
                     optionsHub.IsVisible = false;
                     Grid.SetRow(txtPromptBorder, 0);
                     Grid.SetRowSpan(txtPromptBorder, 3);
-                    Grid.SetRow(optionsHub, 0);
-                    break;
-
-                case ViewMode.ContentOnly:
-                    wvHistoryBorder.IsVisible = false;
-                    seperatorLeft.IsVisible = false;
-                    stackPanelLeft.IsVisible = false;
-                    txtPromptBorder.IsVisible = false;
-                    optionsHub.IsVisible = false;
-                    Grid.SetColumn(dynamicContentGrid, 0);
-                    Grid.SetColumnSpan(dynamicContentGrid, 3);
                     break;
             }
-
-            Dispatcher.UIThread.Post(() =>
-            {
-                _appController?.ChildProcessService?.UpdatePosition(false);
-            }, DispatcherPriority.Background);
         }
 
         // ─── Code Editor ────────────────────────────────────────────────
 
-        private void BtnCodeEditor_Click(object? sender, RoutedEventArgs e)
+        private async void BtnCodeEditor_Click(object? sender, RoutedEventArgs e)
         {
-            if (_isCodeEditorActive)
-                HideCodeEditor();
-            else
-                ShowCodeEditor();
-        }
+            if (_appController == null) return;
 
-        private void ShowCodeEditor()
-        {
             _isCodeEditorActive = true;
             BtnCodeEditor.IsChecked = true;
 
-            codeEditor.Text = _appController.AppState.LastCode ?? string.Empty;
+            var editorWindow = new Views.CodeEditorWindow(_appController.AppState.LastCode ?? string.Empty);
+            await editorWindow.ShowDialog<object?>(this);
 
-            _appController.ChildProcessService?.HideChild();
-            codeEditorPanel.IsVisible = true;
-
-            codeEditor.Focus();
-        }
-
-        private void HideCodeEditor()
-        {
             _isCodeEditorActive = false;
             BtnCodeEditor.IsChecked = false;
 
-            codeEditorPanel.IsVisible = false;
-            _appController.ChildProcessService?.ShowChild();
-        }
-
-        private async void BtnCodeEditorApply_Click(object? sender, RoutedEventArgs e)
-        {
-            var newCode = codeEditor.Text;
-            if (newCode == _appController.AppState.LastCode)
+            if (editorWindow.Applied && editorWindow.EditedCode != _appController.AppState.LastCode)
             {
-                HideCodeEditor();
-                return;
+                await _appController.ApplyManualCodeEditAsync(editorWindow.EditedCode ?? "");
             }
-
-            HideCodeEditor();
-            await _appController.ApplyManualCodeEditAsync(newCode ?? "");
         }
 
-        private void BtnCodeEditorRevert_Click(object? sender, RoutedEventArgs e)
-        {
-            HideCodeEditor();
-        }
+        private void ShowCodeEditor() { BtnCodeEditor_Click(null, null!); }
+        private void HideCodeEditor() { _isCodeEditorActive = false; BtnCodeEditor.IsChecked = false; }
 
-        // ─── Frosted Snapshot ───────────────────────────────────────────
+        // ─── Frosted Snapshot (no-op: child runs as separate window) ────
 
-        public void ShowFrostedSnapshot(Bitmap snapshot)
-        {
-            frostedSnapshot.Source = snapshot;
-            frostedSnapshot.Opacity = 1;
-            frostedDim.Opacity = 1;
-            frostedSnapshot.IsVisible = true;
-            frostedDim.IsVisible = true;
-        }
-
-        public Task HideFrostedSnapshotAsync()
-        {
-            frostedSnapshot.IsVisible = false;
-            frostedDim.IsVisible = false;
-            frostedSnapshot.Source = null;
-            return Task.CompletedTask;
-        }
-
-        public void HideFrostedSnapshot()
-        {
-            frostedSnapshot.IsVisible = false;
-            frostedDim.IsVisible = false;
-            frostedSnapshot.Source = null;
-        }
+        public Task HideFrostedSnapshotAsync() => Task.CompletedTask;
+        public void HideFrostedSnapshot() { }
 
         // ─── Global Key Handling ────────────────────────────────────────
 
@@ -726,10 +653,7 @@ namespace Neo.App
             return dialog.Result;
         }
 
-        public void ShowEmptyContent()
-        {
-            dynamicContent.Content = new EmptyUserControl();
-        }
+        public void ShowEmptyContent() { /* No right panel in Avalonia — child is a separate window */ }
 
         // ─── IMainView Implementation ───────────────────────────────────
 
@@ -746,11 +670,7 @@ namespace Neo.App
         void IMainView.ShowRepairOverlay() => RepairOverlay.IsVisible = true;
         void IMainView.HideRepairOverlay() => RepairOverlay.IsVisible = false;
 
-        void IMainView.ShowFrostedSnapshot(object snapshot)
-        {
-            if (snapshot is Bitmap bmp)
-                ShowFrostedSnapshot(bmp);
-        }
+        void IMainView.ShowFrostedSnapshot(object snapshot) { /* No-op: child is a separate window */ }
 
         void IMainView.SetWaitIndicatorStatus(string text)
         {

@@ -4,27 +4,20 @@
         x:Class="Neo.App.MainWindow"
         WindowStartupLocation="CenterScreen"
         Title="N.E.O. Native Executable Orchestrator v0.000000000001 pre-alpha"
-        Height="768" Width="1024"
+        Height="768" Width="600"
         FontFamily="Inter, Segoe UI, sans-serif">
 
     <Border Padding="6">
         <Grid x:Name="contentGrid">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-
             <Grid.RowDefinitions>
                 <RowDefinition Height="3*"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Global Overlay -->
+            <!-- Global Overlay (wait indicator + cancel) -->
             <Grid x:Name="GlobalOverlay"
-                  Grid.Row="0" Grid.Column="0"
-                  Grid.RowSpan="3" Grid.ColumnSpan="3"
+                  Grid.Row="0" Grid.RowSpan="3"
                   Background="Transparent"
                   IsVisible="False"
                   ZIndex="9999"
@@ -42,24 +35,33 @@
                 </Grid>
             </Grid>
 
+            <!-- Repair Overlay (full-window) -->
+            <Border x:Name="RepairOverlay" Grid.Row="0" Grid.RowSpan="3"
+                    Background="#80FFFFFF" IsVisible="False" ZIndex="9998">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock HorizontalAlignment="Center" Margin="0,20"
+                               Text="A runtime error occured."
+                               FontSize="24" FontWeight="Bold" Foreground="Red"/>
+                    <TextBlock HorizontalAlignment="Center" Margin="0,20"
+                               Text="I am repairing the code. Please wait ..."
+                               FontSize="24" FontWeight="Bold" Foreground="Red"/>
+                </StackPanel>
+            </Border>
+
             <!-- History / Chat View -->
             <Border Name="wvHistoryBorder" Grid.Row="0"
                     BorderBrush="LightGray" CornerRadius="8"
-                    BorderThickness="1" Margin="0,0,6,6" Padding="6">
+                    BorderThickness="1" Margin="0,0,0,6" Padding="6">
                 <local:ChatView x:Name="historyView"/>
             </Border>
 
-            <!-- Vertical Separator -->
-            <Border x:Name="stackPanelLeft" Grid.Row="0" Grid.RowSpan="3" Grid.Column="1"
-                    Width="1" Background="LightGray" Margin="4,0"/>
-
-            <!-- Horizontal Separator -->
-            <Separator Name="seperatorLeft" Margin="0,4,6,4" Grid.Row="1"/>
+            <!-- Toolbar Separator -->
+            <Separator Name="seperatorLeft" Margin="0,4,0,4" Grid.Row="1"/>
 
             <!-- Prompt Input -->
             <Border x:Name="txtPromptBorder" Grid.Row="2"
                     BorderBrush="LightGray" Background="#F0F0F0F0"
-                    CornerRadius="8" BorderThickness="1" Margin="0,4,6,0">
+                    CornerRadius="8" BorderThickness="1" Margin="0,4,0,0">
                 <TextBox Margin="6" Background="Transparent" BorderThickness="0"
                          FontFamily="Inter, Segoe UI, sans-serif" FontSize="20"
                          KeyDown="input_KeyDown"
@@ -67,10 +69,10 @@
                          VerticalContentAlignment="Top"
                          AcceptsReturn="True"
                          TextWrapping="Wrap" Name="txtPrompt"
-                         Grid.Column="0" Padding="2"/>
+                         Padding="2"/>
             </Border>
 
-            <!-- Options Hub -->
+            <!-- Options Hub (toolbar) -->
             <StackPanel Grid.Row="1" Orientation="Horizontal" Name="optionsHub">
                 <!-- Import Button -->
                 <Button ToolTip.Tip="Import" Margin="8,0,0,0" Classes="minimalist"
@@ -143,63 +145,6 @@
                     <PathIcon Width="14" Height="14" Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z"/>
                 </Button>
             </StackPanel>
-
-            <!-- Dynamic Content Area (right panel) -->
-            <Grid Grid.Column="2" Grid.RowSpan="3" Name="dynamicContentGrid">
-                <ContentControl x:Name="dynamicContent"/>
-
-                <!-- Frosted snapshot overlay -->
-                <Image x:Name="frostedSnapshot"
-                       IsVisible="False"
-                       Stretch="Fill"
-                       IsHitTestVisible="False"/>
-                <Border x:Name="frostedDim"
-                        IsVisible="False"
-                        Background="#40000000"
-                        IsHitTestVisible="False"/>
-
-                <!-- Code Editor Panel -->
-                <Grid x:Name="codeEditorPanel" IsVisible="False" Background="White">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <TextBox x:Name="codeEditor"
-                             Grid.Row="0"
-                             FontFamily="Consolas, 'Cascadia Mono', 'Courier New'"
-                             FontSize="14"
-                             IsReadOnly="False"
-                             TextWrapping="NoWrap"
-                             AcceptsReturn="True"
-                             AcceptsTab="True"/>
-
-                    <StackPanel Grid.Row="1" Orientation="Horizontal"
-                                HorizontalAlignment="Right" Margin="8">
-                        <Button Content="Apply" Classes="popup"
-                                Margin="0,0,8,0"
-                                Click="BtnCodeEditorApply_Click"/>
-                        <Button Content="Revert" Classes="popup"
-                                Click="BtnCodeEditorRevert_Click"/>
-                    </StackPanel>
-                </Grid>
-
-                <!-- Repair Overlay -->
-                <Border x:Name="RepairOverlay" Background="#80FFFFFF" IsVisible="False">
-                    <Grid>
-                        <StackPanel HorizontalAlignment="Center">
-                            <TextBlock HorizontalAlignment="Center" Margin="0,20"
-                                       Text="A runtime error occured."
-                                       FontFamily="Inter, Segoe UI, sans-serif" FontSize="24"
-                                       FontWeight="Bold" Foreground="Red"/>
-                            <TextBlock HorizontalAlignment="Center" Margin="0,20"
-                                       Text="I am repairing the code. Please wait ..."
-                                       FontFamily="Inter, Segoe UI, sans-serif" FontSize="24"
-                                       FontWeight="Bold" Foreground="Red"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-            </Grid>
         </Grid>
     </Border>
 </Window>

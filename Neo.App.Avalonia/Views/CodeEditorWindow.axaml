@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Neo.App.Views.CodeEditorWindow"
+        Title="N.E.O. — Code Editor"
+        Width="800" Height="600"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBox x:Name="codeEditor"
+                 Grid.Row="0"
+                 FontFamily="Consolas, 'Cascadia Mono', 'Courier New'"
+                 FontSize="14"
+                 IsReadOnly="False"
+                 TextWrapping="NoWrap"
+                 AcceptsReturn="True"
+                 AcceptsTab="True"/>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="Apply" Classes="popup"
+                    Margin="0,0,8,0"
+                    Click="Apply_Click"/>
+            <Button Content="Revert" Classes="popup"
+                    Click="Revert_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
