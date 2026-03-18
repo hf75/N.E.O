@@ -371,10 +371,16 @@ namespace Neo.PluginWindowAvalonia
                             {
                                 if (!bounds.IsVisible)
                                 {
-                                    // Show wait overlay instead of hiding the window
+                                    // Show wait overlay — only start timer if we had content before
+                                    bool hadContent = MainWin.dynamicContent.Content != null;
                                     MainWin.WaitOverlay.IsVisible = true;
-                                    MainWin.WaitStatusText.Text = "Generating new code...";
-                                    MainWin.StartWaitTimer();
+                                    MainWin.WaitStatusText.Text = hadContent
+                                        ? "Generating new code..."
+                                        : "Waiting for code...";
+                                    if (hadContent)
+                                        MainWin.StartWaitTimer();
+                                    else
+                                        MainWin.StopWaitTimer();
                                 }
                                 else
                                 {
