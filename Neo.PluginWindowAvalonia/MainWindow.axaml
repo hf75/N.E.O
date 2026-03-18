@@ -8,6 +8,16 @@
 <Grid>
         <ContentControl x:Name="dynamicContent" />
 
+        <!-- Wait overlay: shown when no control is loaded -->
+        <Border x:Name="WaitOverlay" Background="#F8F8F8" IsVisible="True">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
+                <TextBlock Text="N.E.O." FontSize="32" FontWeight="Bold"
+                           Foreground="#888" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="WaitStatusText" Text="Waiting for code..."
+                           FontSize="16" Foreground="#AAA" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
         <Canvas x:Name="SelectionOverlay" IsHitTestVisible="False">
             <Border x:Name="SelectionBorder"
                     BorderBrush="#FF00A2FF"

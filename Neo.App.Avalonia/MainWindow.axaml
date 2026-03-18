@@ -15,25 +15,16 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Global Overlay (wait indicator + cancel) -->
-            <Grid x:Name="GlobalOverlay"
-                  Grid.Row="0" Grid.RowSpan="3"
-                  Background="Transparent"
-                  IsVisible="False"
-                  ZIndex="9999"
-                  HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Grid>
-                    <ContentControl x:Name="GlobalOverlayContent"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    <Button Name="btnCancel" IsVisible="False"
-                            Foreground="White" Background="DarkRed"
-                            MinWidth="240" Padding="6" Margin="0,256,0,32"
-                            Content="Cancel"
-                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                            CornerRadius="12"
-                            Click="btnCancel_Click"/>
-                </Grid>
-            </Grid>
+            <!-- Cancel button (shown during long operations) -->
+            <Button Name="btnCancel" Grid.Row="0" Grid.RowSpan="3"
+                    IsVisible="False" ZIndex="9999"
+                    Foreground="White" Background="DarkRed"
+                    MinWidth="240" Padding="6"
+                    Content="Cancel"
+                    HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                    Margin="0,0,0,16"
+                    CornerRadius="12"
+                    Click="btnCancel_Click"/>
 
             <!-- Repair Overlay (full-window) -->
             <Border x:Name="RepairOverlay" Grid.Row="0" Grid.RowSpan="3"

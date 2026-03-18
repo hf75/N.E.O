@@ -145,14 +145,19 @@ namespace Neo.PluginWindowAvalonia
                 if (!(Activator.CreateInstance(controlType) is Avalonia.Controls.UserControl userControl))
                     throw new InvalidCastException("Der erzeugte Typ ist kein Avalonia UserControl.");
 
-                // Auf UI-Thread einh�ngen
+                // Auf UI-Thread einhängen
                 if (Dispatcher.UIThread.CheckAccess())
                 {
                     dynamicContent.Content = userControl;
+                    WaitOverlay.IsVisible = false;
                 }
                 else
                 {
-                    Dispatcher.UIThread.Post(() => dynamicContent.Content = userControl);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        dynamicContent.Content = userControl;
+                        WaitOverlay.IsVisible = false;
+                    });
                 }
             }
         }
@@ -178,6 +183,8 @@ namespace Neo.PluginWindowAvalonia
             {
                 if (dynamicContent.Content is Avalonia.Controls.UserControl)
                     dynamicContent.Content = null;
+                WaitOverlay.IsVisible = true;
+                WaitStatusText.Text = "Generating new code...";
             }
             catch
             {

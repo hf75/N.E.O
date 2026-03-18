@@ -40,7 +40,7 @@ namespace Neo.App
         private SystemDecorations _preFullScreenDecorations = SystemDecorations.Full;
 
         private AppController _appController = null!;
-        public AiWaitIndicator? _waitIndicator = null;
+        // Wait indicator is now shown in the Live Preview child window, not here
         private DesignerPropertiesWindow? _designerPropertiesWindow;
 
         public MainWindow()
@@ -156,40 +156,22 @@ namespace Neo.App
 
             if (isBusy)
             {
+                // Unload the child control so the Live Preview window shows its wait overlay
                 if (showOverlay)
                 {
-                    _appController?.ChildProcessService?.HideChild();
-
-                    if (_waitIndicator == null)
-                        _waitIndicator = CreateNewWaitUserControl();
-                    _waitIndicator.StatusText = message ?? "";
-                    _waitIndicator.Start();
-
-                    btnCancel.IsVisible = showCancel;
-
-                    GlobalOverlayContent.Content = _waitIndicator;
-                    GlobalOverlay.IsVisible = true;
+                    try { await _appController?.ChildProcessService?.UnloadControlAsync()!; }
+                    catch { /* child may not be connected yet */ }
                 }
-                else
-                {
-                    GlobalOverlay.IsVisible = false;
-                }
+
+                // Show cancel button in main window if requested
+                btnCancel.IsVisible = showCancel;
             }
             else
             {
-                GlobalOverlay.IsVisible = false;
-                GlobalOverlayContent.Content = null;
                 btnCancel.IsVisible = false;
-
-                _waitIndicator?.Stop();
-
-                _appController?.ChildProcessService?.ShowChild();
             }
 
-            // Yield to allow Avalonia to render the UI changes before
-            // heavy synchronous operations (NuGet loading, compilation, etc.)
-            // block the UI thread. WPF pumps messages during awaits automatically;
-            // Avalonia needs this explicit yield.
+            // Yield to let Avalonia render before heavy sync operations
             await Task.Delay(1);
         }
 
@@ -626,10 +608,7 @@ namespace Neo.App
             _appController.RequestCancellation();
         }
 
-        public AiWaitIndicator CreateNewWaitUserControl()
-        {
-            return new AiWaitIndicator();
-        }
+        public AiWaitIndicator CreateNewWaitUserControl() => new AiWaitIndicator();
 
         public void ResetButtonMenu()
         {
@@ -672,11 +651,7 @@ namespace Neo.App
 
         void IMainView.ShowFrostedSnapshot(object snapshot) { /* No-op: child is a separate window */ }
 
-        void IMainView.SetWaitIndicatorStatus(string text)
-        {
-            if (_waitIndicator != null)
-                _waitIndicator.StatusText = text;
-        }
+        void IMainView.SetWaitIndicatorStatus(string text) { /* Status shown in Live Preview child window */ }
 
         async Task<PatchReviewDecision> IMainView.ShowPatchReviewDialogAsync(
             string patchOrCode,
