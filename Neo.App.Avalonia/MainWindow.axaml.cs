@@ -157,7 +157,7 @@ namespace Neo.App
             {
                 if (showOverlay)
                 {
-                    _appController.ChildProcessService?.HideChild();
+                    _appController?.ChildProcessService?.HideChild();
 
                     if (_waitIndicator == null)
                         _waitIndicator = CreateNewWaitUserControl();
@@ -183,8 +183,14 @@ namespace Neo.App
 
                 _waitIndicator?.Stop();
 
-                _appController.ChildProcessService?.ShowChild();
+                _appController?.ChildProcessService?.ShowChild();
             }
+
+            // Yield to allow Avalonia to render the UI changes before
+            // heavy synchronous operations (NuGet loading, compilation, etc.)
+            // block the UI thread. WPF pumps messages during awaits automatically;
+            // Avalonia needs this explicit yield.
+            await Task.Delay(1);
         }
 
         // ─── Prompt Handling ────────────────────────────────────────────
