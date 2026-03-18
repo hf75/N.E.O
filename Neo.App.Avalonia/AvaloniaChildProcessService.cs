@@ -113,7 +113,7 @@ namespace Neo.App
             var psi = new ProcessStartInfo
             {
                 FileName = childExe,
-                Arguments = $"--pipe {pipeName} --parentPid {Environment.ProcessId}",
+                Arguments = $"--pipe {pipeName} --parentPid {Environment.ProcessId} --standalone",
                 UseShellExecute = false,
                 CreateNoWindow = false,
             };

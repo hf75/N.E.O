@@ -76,13 +76,29 @@ namespace Neo.PluginWindowAvalonia
             var lifetime = ApplicationLifetime as IClassicDesktopStyleApplicationLifetime
                 ?? throw new InvalidOperationException("Classic desktop lifetime required.");
 
-            // MainWindow erzeugen (Avalonia-Äquivalent zu WindowStyle=None & NoResize)
-            MainWin = new MainWindow
+            // Check if running standalone (from Neo.App.Avalonia host) or embedded (from WPF host)
+            var args = (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Args ?? Array.Empty<string>();
+            bool isStandalone = args.Any(a => string.Equals(a, "--standalone", StringComparison.OrdinalIgnoreCase));
+
+            MainWin = new MainWindow();
+            if (isStandalone)
             {
-                ShowInTaskbar = false,
-                SystemDecorations = SystemDecorations.None,
-                CanResize = false
-            };
+                // Standalone mode: full window with decorations
+                MainWin.Title = "N.E.O. — Live Preview";
+                MainWin.Width = 800;
+                MainWin.Height = 600;
+                MainWin.ShowInTaskbar = true;
+                MainWin.SystemDecorations = SystemDecorations.Full;
+                MainWin.CanResize = true;
+                MainWin.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
+            else
+            {
+                // Embedded mode: no decorations (WPF host controls position/size via HWND)
+                MainWin.ShowInTaskbar = false;
+                MainWin.SystemDecorations = SystemDecorations.None;
+                MainWin.CanResize = false;
+            }
 
             lifetime.MainWindow = MainWin;
 
