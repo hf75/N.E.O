@@ -195,9 +195,13 @@ namespace Neo.App
 
         private void input_KeyDown(object? sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Return && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            if (e.Key == Key.Return)
             {
-                PromptToNextLine();
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                {
+                    PromptToNextLine();
+                }
+                // Always handle Return to prevent TextBox from inserting newlines
                 e.Handled = true;
             }
         }

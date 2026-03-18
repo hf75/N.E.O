@@ -65,7 +65,7 @@
                          KeyDown="input_KeyDown"
                          HorizontalContentAlignment="Left"
                          VerticalContentAlignment="Top"
-                         AcceptsReturn="False"
+                         AcceptsReturn="True"
                          TextWrapping="Wrap" Name="txtPrompt"
                          Grid.Column="0" Padding="2"/>
             </Border>
