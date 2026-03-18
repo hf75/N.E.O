@@ -180,23 +180,7 @@ namespace Neo.App
             txtPrompt.IsEnabled = !isBusy;
             optionsHub.IsEnabled = !isBusy;
             isCycleViewLocked = isBusy;
-
-            if (isBusy)
-            {
-                // Unload the child control so the Live Preview window shows its wait overlay
-                if (showOverlay)
-                {
-                    try { await _appController?.ChildProcessService?.UnloadControlAsync()!; }
-                    catch { /* child may not be connected yet */ }
-                }
-
-                // Show cancel button in main window if requested
-                btnCancel.IsVisible = showCancel;
-            }
-            else
-            {
-                btnCancel.IsVisible = false;
-            }
+            btnCancel.IsVisible = isBusy && showCancel;
 
             // Yield to let Avalonia render before heavy sync operations
             await Task.Delay(1);

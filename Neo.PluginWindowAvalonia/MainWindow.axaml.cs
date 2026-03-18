@@ -51,13 +51,13 @@ namespace Neo.PluginWindowAvalonia
             };
         }
 
-        private void StartWaitTimer()
+        public void StartWaitTimer()
         {
             _waitStopwatch.Restart();
             _waitTimer?.Start();
         }
 
-        private void StopWaitTimer()
+        public void StopWaitTimer()
         {
             _waitStopwatch.Stop();
             _waitTimer?.Stop();

@@ -1245,6 +1245,10 @@ namespace Neo.App
                 // Always restore child visibility and clean up frosted overlay
                 ChildProcessService.ShowChild();
                 _view.HideFrostedSnapshot();
+
+                // Discard pipe disconnects caused by normal operation (not real crashes)
+                _pendingCrash = null;
+
                 await SetStatusAsync(AppStatus.Idle, false);
             }
         }
