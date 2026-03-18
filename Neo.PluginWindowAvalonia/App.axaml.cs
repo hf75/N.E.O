@@ -91,6 +91,13 @@ namespace Neo.PluginWindowAvalonia
                 MainWin.SystemDecorations = SystemDecorations.Full;
                 MainWin.CanResize = true;
                 MainWin.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                try
+                {
+                    var stream = typeof(App).Assembly.GetManifestResourceStream("icon.ico");
+                    if (stream != null)
+                        MainWin.Icon = new WindowIcon(stream);
+                }
+                catch { /* icon not critical */ }
             }
             else
             {
