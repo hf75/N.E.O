@@ -281,12 +281,15 @@ namespace Neo.PluginWindowAvalonia
                                 throw new InvalidOperationException("Failed to build assembly bundle from assets.");
 
                             await Dispatcher.UIThread.InvokeAsync(() =>
+                            {
                                 MainWin.HandleLoadUserControlFromBytes(
                                     mainAssemblyBytes: mainBytes,
                                     explicitControlTypeName: string.IsNullOrWhiteSpace(req.TypeName) ? null : req.TypeName,
                                     managedAssembliesByFullName: managedByFull,
                                     nativeLibrariesByBasename: nativeByBase
-                                ));
+                                );
+                                MainWin.Activate();
+                            });
 
                             await SendLogAsync(LogLevel.Info, "LoadControl executed.", "Child", "Mode=Bytes(In-Memory)");
                             await SafeSendAsync(new IpcEnvelope(
