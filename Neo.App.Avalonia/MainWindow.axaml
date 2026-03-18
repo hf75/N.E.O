@@ -50,10 +50,8 @@
             </Border>
 
             <!-- Vertical Separator -->
-            <StackPanel x:Name="stackPanelLeft" Grid.Row="0" Grid.RowSpan="3" Grid.Column="1"
-                        Orientation="Horizontal">
-                <Separator/>
-            </StackPanel>
+            <Border x:Name="stackPanelLeft" Grid.Row="0" Grid.RowSpan="3" Grid.Column="1"
+                    Width="1" Background="LightGray" Margin="4,0"/>
 
             <!-- Horizontal Separator -->
             <Separator Name="seperatorLeft" Margin="0,4,6,4" Grid.Row="1"/>
