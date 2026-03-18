@@ -701,7 +701,7 @@ namespace Neo.App
             BtnDesignerMode.IsChecked = false;
         }
 
-        public CrashDialogResult ShowCrashDialog()
+        public async Task<CrashDialogResult> ShowCrashDialogAsync()
         {
             var dialog = new CrashDialog(
                 title: "Plugin Process Error",
@@ -710,9 +710,7 @@ namespace Neo.App
                 button2Text: "Reset & Start Fresh",
                 button3Text: "Close and Do Nothing"
             );
-            // ShowDialog synchronously via blocking pattern
-            var task = dialog.ShowDialog<CrashDialogResult?>(this);
-            task.Wait();
+            await dialog.ShowDialog<CrashDialogResult?>(this);
             return dialog.Result;
         }
 

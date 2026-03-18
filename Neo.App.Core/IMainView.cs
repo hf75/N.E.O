@@ -41,7 +41,7 @@ namespace Neo.App
         void SetWaitIndicatorStatus(string text);
 
         // ─── Dialogs ─────────────────────────────────────────────────────
-        CrashDialogResult ShowCrashDialog();
+        Task<CrashDialogResult> ShowCrashDialogAsync();
 
         Task<PatchReviewDecision> ShowPatchReviewDialogAsync(
             string patchOrCode,

@@ -1042,7 +1042,7 @@ namespace Neo.App
             }
         }
 
-        public CrashDialogResult ShowCrashDialog()
+        public Task<CrashDialogResult> ShowCrashDialogAsync()
         {
             var dialog = new CrashDialog(
                 title: "Plugin Process Error",
@@ -1053,7 +1053,7 @@ namespace Neo.App
             );
             dialog.Owner = this;
             dialog.ShowDialog();
-            return dialog.Result;
+            return Task.FromResult(dialog.Result);
         }
 
         public void ShowEmptyContent()

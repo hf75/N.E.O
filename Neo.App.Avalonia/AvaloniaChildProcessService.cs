@@ -26,6 +26,7 @@ namespace Neo.App
         private readonly SemaphoreSlim _sendLock = new(1, 1);
         private readonly SemaphoreSlim _restartLock = new(1, 1);
         private Process? _childProcess;
+        private Task? _listenLoopTask;
         private CancellationTokenSource _pipeCts = new();
         private bool _hasLoadedControl;
         private bool _isDisposed;
@@ -128,8 +129,8 @@ namespace Neo.App
                         Json.ToJson(parentHello)));
                 }
 
-                // Start listen loop
-                _ = Task.Run(() => ListenLoopAsync(_pipeCts.Token));
+                // Start listen loop (save task for clean shutdown)
+                _listenLoopTask = Task.Run(() => ListenLoopAsync(_pipeCts.Token));
 
                 Debug.WriteLine($"[AvaloniaChildProcessService] Child process started (PID: {_childProcess.Id})");
             }
@@ -409,8 +410,14 @@ namespace Neo.App
             _isShuttingDown = true;
 
             try { _pipeCts.Cancel(); } catch { }
-            // Give listen loop a moment to exit after cancellation
-            await Task.Delay(100);
+
+            // Wait for listen loop to fully exit before disposing resources
+            if (_listenLoopTask != null)
+            {
+                try { await _listenLoopTask.WaitAsync(TimeSpan.FromSeconds(3)); }
+                catch { /* timeout or cancelled — proceed with cleanup */ }
+                _listenLoopTask = null;
+            }
 
             if (_pipeStream != null)
             {

@@ -2144,7 +2144,7 @@ namespace Neo.App
 
             // Der Dialog ist ein UI-Element, also muss die View ihn erstellen und anzeigen.
             // Wir fügen eine Helfermethode in der MainWindow hinzu.
-            var result = _view.ShowCrashDialog();
+            var result = await _view.ShowCrashDialogAsync();
 
             switch (result)
             {
