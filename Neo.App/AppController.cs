@@ -713,26 +713,25 @@ namespace Neo.App
         public async Task ClearSessionAsync(string reason = "Clearing...")
         {
             // 1. Prüfen, ob die App bereit ist.
-            if (CurrentStatus != AppStatus.Idle) return;
+            if (CurrentStatus != AppStatus.Idle) { Debug.WriteLine("[ClearSession] Skipped: not Idle"); return; }
 
             try
             {
-                // 2. Den Status setzen (ersetzt LockUsageWithIndicator).
+                Debug.WriteLine("[ClearSession] Step 1: SetStatusAsync(Initializing)");
                 await SetStatusAsync(AppStatus.Initializing, false, reason);
 
-                // 3. Die eigentliche Logik (fast 1:1 aus der alten Methode).
-                Logger.Clear(); // Zugriff über die neue Eigenschaft
+                Debug.WriteLine("[ClearSession] Step 2: Logger.Clear()");
+                Logger.Clear();
 
+                Debug.WriteLine("[ClearSession] Step 3: FileHelper.ClearDirectory");
                 FileHelper.ClearDirectory(NuGetPackageDirectory);
 
+                Debug.WriteLine("[ClearSession] Step 4: HandlePythonFiles + GetUserControlBaseCode");
                 string freshHistory = "Code:\n\n";
-
                 HandlePythonFilesInVirtualProjectFiles(_settings.UsePython);
-
                 freshHistory += GetUserControlBaseCode();
 
-                // ApplyStateNonUndoableAsync müssen wir auch verschieben.
-                // Vorerst rufen wir es über die View auf.
+                Debug.WriteLine("[ClearSession] Step 5: ApplyStateNonUndoable");
                 ApplyStateNonUndoable(s =>
                 {
                     s.History = freshHistory;
@@ -741,38 +740,43 @@ namespace Neo.App
                     s.PackageVersions = new();
                 }, clearHistory: true);
 
-                // PreloadMandatoryNugetPacks müssen wir auch verschieben.
+                Debug.WriteLine("[ClearSession] Step 6: PreloadMandatoryNugetPacks");
                 await PreloadMandatoryNugetPacks();
 
+                Debug.WriteLine("[ClearSession] Step 7: RecreatePromptToDllSession");
                 VirtualProjectFiles.UpdateFileContent("./currentcode.cs", GetUserControlBaseCode());
-
-                // Sync the extracted prompt→DLL session with the freshly reset state (code/history/NuGet).
                 RecreatePromptToDllSession(preserveState: true);
 
+                Debug.WriteLine("[ClearSession] Step 8: ChildProcessService.RestartAsync");
                 await ChildProcessService.RestartAsync();
+
+                Debug.WriteLine("[ClearSession] Step 9: UI cleanup");
                 _view.ShowEmptyContent();
                 _view.HideFrostedSnapshot();
                 ChildProcessService.HideChild();
 
                 GrantedFolders.Clear();
-                _view.ResetButtonMenu(); // UI-Manipulation über _view
+                _view.ResetButtonMenu();
 
                 _cancellationSource = new CancellationTokenSource();
+                Debug.WriteLine("[ClearSession] Try-block completed successfully");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ClearSession] EXCEPTION in try-block: {ex}");
             }
             finally
             {
-                // 4. UI-spezifische Aktionen am Ende.
+                Debug.WriteLine("[ClearSession] Finally: starting cleanup");
                 _view.ActivateWindow();
                 _view.PromptText = string.Empty;
                 _view.FocusPrompt();
 
-                // 5. Discard any crash events that fired during the intentional restart.
-                //    Without this, the pipe disconnect from the old child process triggers
-                //    ShowRecoveryDialogAsync which does ANOTHER restart, potentially looping.
                 _pendingCrash = null;
 
-                // 6. Status garantiert zurücksetzen.
+                Debug.WriteLine("[ClearSession] Finally: SetStatusAsync(Idle)");
                 await SetStatusAsync(AppStatus.Idle, false);
+                Debug.WriteLine("[ClearSession] Finally: DONE");
             }
         }
 

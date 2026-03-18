@@ -51,15 +51,21 @@ namespace Neo.App
 
         public async Task RestartAsync()
         {
+            Debug.WriteLine("[ChildProcess] RestartAsync: acquiring lock...");
             await _restartLock.WaitAsync();
+            Debug.WriteLine("[ChildProcess] RestartAsync: lock acquired");
             try
             {
+                Debug.WriteLine("[ChildProcess] RestartAsync: DisposeChildAsync...");
                 await DisposeChildAsync();
+                Debug.WriteLine("[ChildProcess] RestartAsync: StartChildProcessCoreAsync...");
                 await StartChildProcessCoreAsync();
+                Debug.WriteLine("[ChildProcess] RestartAsync: done");
             }
             finally
             {
                 _restartLock.Release();
+                Debug.WriteLine("[ChildProcess] RestartAsync: lock released");
             }
         }
 
@@ -105,15 +111,33 @@ namespace Neo.App
                     return;
                 }
 
-                // Wait for child to connect (with timeout)
-                using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(_pipeCts.Token);
-                connectCts.CancelAfter(TimeSpan.FromSeconds(10));
-                await _pipeStream.WaitForConnectionAsync(connectCts.Token);
+                Debug.WriteLine("[ChildProcess] StartCore: waiting for child to connect...");
 
-                // Wait for Hello from child (with timeout)
-                using var helloCts = CancellationTokenSource.CreateLinkedTokenSource(_pipeCts.Token);
-                helloCts.CancelAfter(TimeSpan.FromSeconds(5));
-                var helloEnv = await _messenger.ReceiveControlAsync(helloCts.Token);
+                // WaitForConnectionAsync does NOT honor CancellationToken on Windows.
+                // Use a real timeout by racing against Task.Delay.
+                var connectTask = _pipeStream.WaitForConnectionAsync(_pipeCts.Token);
+                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10), _pipeCts.Token);
+                if (await Task.WhenAny(connectTask, timeoutTask) != connectTask)
+                {
+                    Debug.WriteLine("[ChildProcess] StartCore: connection timed out (10s)");
+                    // Force-close the pipe to unblock WaitForConnectionAsync
+                    try { _pipeStream.Dispose(); } catch { }
+                    _pipeStream = null;
+                    _messenger = null;
+                    return;
+                }
+                await connectTask; // propagate any exception
+
+                Debug.WriteLine("[ChildProcess] StartCore: child connected, waiting for Hello...");
+
+                // ReceiveControlAsync with real timeout
+                var helloTask = _messenger.ReceiveControlAsync(_pipeCts.Token);
+                var helloTimeout = Task.Delay(TimeSpan.FromSeconds(5), _pipeCts.Token);
+                IpcEnvelope? helloEnv = null;
+                if (await Task.WhenAny(helloTask, helloTimeout) == helloTask)
+                    helloEnv = await helloTask;
+                else
+                    Debug.WriteLine("[ChildProcess] StartCore: Hello timed out (5s)");
                 if (helloEnv?.Type == IpcTypes.Hello)
                 {
                     // Reply with Hello ACK
@@ -407,20 +431,24 @@ namespace Neo.App
 
         private async Task DisposeChildAsync()
         {
+            Debug.WriteLine("[ChildProcess] DisposeChild: start");
             _isShuttingDown = true;
 
+            Debug.WriteLine("[ChildProcess] DisposeChild: cancelling CTS");
             try { _pipeCts.Cancel(); } catch { }
 
             // Wait for listen loop to fully exit before disposing resources
             if (_listenLoopTask != null)
             {
+                Debug.WriteLine("[ChildProcess] DisposeChild: waiting for listen loop (3s max)...");
                 try { await _listenLoopTask.WaitAsync(TimeSpan.FromSeconds(3)); }
-                catch { /* timeout or cancelled — proceed with cleanup */ }
+                catch { Debug.WriteLine("[ChildProcess] DisposeChild: listen loop wait timed out or failed"); }
                 _listenLoopTask = null;
             }
 
             if (_pipeStream != null)
             {
+                Debug.WriteLine("[ChildProcess] DisposeChild: disposing pipe");
                 try
                 {
                     if (_pipeStream.IsConnected)
@@ -434,6 +462,7 @@ namespace Neo.App
 
             if (_childProcess != null && !_childProcess.HasExited)
             {
+                Debug.WriteLine("[ChildProcess] DisposeChild: killing child process");
                 try
                 {
                     try { _childProcess.CloseMainWindow(); } catch { }
@@ -451,6 +480,7 @@ namespace Neo.App
             }
 
             _hasLoadedControl = false;
+            Debug.WriteLine("[ChildProcess] DisposeChild: done");
         }
 
         public async ValueTask DisposeAsync()
