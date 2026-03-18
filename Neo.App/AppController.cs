@@ -128,10 +128,11 @@ namespace Neo.App
 
             Settings = SettingsService.Load();
 
-            AgentHelperCode = EmbeddedResourceReader.GetEmbeddedResourceContent("AgentHelper.cs");
+            var hostAssembly = System.Reflection.Assembly.GetEntryAssembly() ?? GetType().Assembly;
+            AgentHelperCode = EmbeddedResourceReader.GetEmbeddedResourceContent(hostAssembly, "AgentHelper.cs");
 
-            PythonHelperCode["PythonHost.cs"] = EmbeddedResourceReader.GetEmbeddedResourceContent("PythonHost.cs");
-            PythonHelperCode["PythonModuleLoader.cs"] = EmbeddedResourceReader.GetEmbeddedResourceContent("PythonModuleLoader.cs");
+            PythonHelperCode["PythonHost.cs"] = EmbeddedResourceReader.GetEmbeddedResourceContent(hostAssembly, "PythonHost.cs");
+            PythonHelperCode["PythonModuleLoader.cs"] = EmbeddedResourceReader.GetEmbeddedResourceContent(hostAssembly, "PythonModuleLoader.cs");
 
             // Auto-discover plugin agents (ImageGen, STT, etc.)
             PluginAgents = DiscoverPluginAgents();

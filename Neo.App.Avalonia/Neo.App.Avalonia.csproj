@@ -38,6 +38,14 @@
     <ProjectReference Include="..\Neo.AssemblyForge\Neo.AssemblyForge.csproj" />
   </ItemGroup>
 
+  <!-- Embedded resources shared with Neo.App (read at runtime by AppController) -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\Neo.App\AgentHelper.cs" Link="AgentHelper.cs" LogicalName="Neo.App.Avalonia.AgentHelper.cs" />
+    <EmbeddedResource Include="..\Neo.App\IconLoader.cs" Link="IconLoader.cs" LogicalName="Neo.App.Avalonia.IconLoader.cs" />
+    <EmbeddedResource Include="..\Neo.App\PythonInterop\PythonHost.cs" Link="PythonHost.cs" LogicalName="Neo.App.Avalonia.PythonHost.cs" />
+    <EmbeddedResource Include="..\Neo.App\PythonInterop\PythonModuleLoader.cs" Link="PythonModuleLoader.cs" LogicalName="Neo.App.Avalonia.PythonModuleLoader.cs" />
+  </ItemGroup>
+
   <!-- Link shared source files from Neo.App that are platform-independent.
        Files with WPF/WinForms/Win32 dependencies require stub replacements
        provided in PlatformStubs.cs. -->
