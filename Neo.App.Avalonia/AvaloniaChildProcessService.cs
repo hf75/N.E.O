@@ -146,35 +146,14 @@ namespace Neo.App
                 }
                 await connectTask; // propagate any exception
 
-                Debug.WriteLine("[ChildProcess] StartCore: child connected, waiting for Hello...");
+                Debug.WriteLine("[ChildProcess] StartCore: child connected, starting listen loop");
 
-                // ReceiveControlAsync with real timeout
-                var helloTask = _messenger.ReceiveControlAsync(_pipeCts.Token);
-                var helloTimeout = Task.Delay(TimeSpan.FromSeconds(5), _pipeCts.Token);
-                IpcEnvelope? helloEnv = null;
-                if (await Task.WhenAny(helloTask, helloTimeout) == helloTask)
-                    helloEnv = await helloTask;
-                else
-                    Debug.WriteLine("[ChildProcess] StartCore: Hello timed out (5s)");
-                if (helloEnv?.Type == IpcTypes.Hello)
-                {
-                    // Reply with Hello ACK
-                    await _messenger.SendControlAsync(new IpcEnvelope(
-                        IpcTypes.Ack, helloEnv.CorrelationId,
-                        Json.ToJson(new AckMessage("Hello received by Parent"))));
-
-                    // Send our Hello
-                    var parentHello = new HelloMessage("Parent", Environment.ProcessId);
-                    await _messenger.SendControlAsync(new IpcEnvelope(
-                        IpcTypes.Hello,
-                        Guid.NewGuid().ToString("N"),
-                        Json.ToJson(parentHello)));
-                }
-
-                // Start listen loop (save task for clean shutdown)
+                // Start listen loop immediately — don't block waiting for Hello.
+                // The child sends Hello from its Opened event which fires asynchronously.
+                // Hello is handled inside the ListenLoop.
                 _listenLoopTask = Task.Run(() => ListenLoopAsync(_pipeCts.Token));
 
-                Debug.WriteLine($"[AvaloniaChildProcessService] Child process started (PID: {_childProcess.Id})");
+                Debug.WriteLine($"[ChildProcess] StartCore: done (PID: {_childProcess.Id})");
             }
             catch (OperationCanceledException)
             {
