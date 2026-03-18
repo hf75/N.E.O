@@ -52,7 +52,25 @@ namespace Neo.App
         public async Task RestartAsync()
         {
             Debug.WriteLine("[ChildProcess] RestartAsync: acquiring lock...");
-            await _restartLock.WaitAsync();
+
+            // If another RestartAsync is in progress (e.g. from MainWindow_Loaded),
+            // cancel it by killing the CTS so its pipe waits abort immediately.
+            if (!_restartLock.Wait(0)) // non-blocking check
+            {
+                Debug.WriteLine("[ChildProcess] RestartAsync: lock held by another call, cancelling it...");
+                try { _pipeCts.Cancel(); } catch { }
+                // Now wait for the lock (the other call should exit quickly after cancel)
+                if (!await _restartLock.WaitAsync(TimeSpan.FromSeconds(5)))
+                {
+                    Debug.WriteLine("[ChildProcess] RestartAsync: lock timeout after 5s, forcing...");
+                    // Force cleanup: dispose pipe to unblock any pending reads
+                    try { _pipeStream?.Dispose(); } catch { }
+                    _pipeStream = null;
+                    _messenger = null;
+                    await _restartLock.WaitAsync(); // should succeed now
+                }
+            }
+
             Debug.WriteLine("[ChildProcess] RestartAsync: lock acquired");
             try
             {
