@@ -49,7 +49,7 @@ namespace Neo.App
 
             this.Closing += MainWindow_Closing;
             this.Activated += MainWindow_Activated;
-            this.KeyDown += MainWindow_GlobalKeyDown;
+            this.AddHandler(KeyDownEvent, MainWindow_GlobalKeyDown, global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
             this.Loaded += MainWindow_Loaded;
 
             // Notify child process when window state changes (minimize/maximize/restore)
