@@ -29,6 +29,9 @@ namespace Neo.App
         public static string AppName { get; set; } = "Neo";
         string IMainView.AppName => AppName;
 
+        /// <summary>The right-side content grid, exposed for child window positioning.</summary>
+        public global::Avalonia.Controls.Grid DynamicContentGrid => dynamicContentGrid;
+
         private string? titleBase;
         private bool isCycleViewLocked = true;
         private ViewMode _currentViewMode = ViewMode.Default;
@@ -65,6 +68,11 @@ namespace Neo.App
                     });
                 }
             };
+
+            // Track window position and size changes to reposition child window
+            this.PositionChanged += (s, e) => _appController?.ChildProcessService?.UpdatePosition();
+            this.SizeChanged += (s, e) => _appController?.ChildProcessService?.UpdatePosition();
+            this.LayoutUpdated += (s, e) => _appController?.ChildProcessService?.UpdatePosition();
         }
 
         private async void MainWindow_Closing(object? sender, WindowClosingEventArgs e)

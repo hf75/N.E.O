@@ -4,9 +4,11 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Avalonia;
 using Avalonia.Threading;
 
 using Neo.IPC;
@@ -20,6 +22,17 @@ namespace Neo.App
     /// </summary>
     public class AvaloniaChildProcessService : IChildProcessService
     {
+        // --- Win32 P/Invoke for window positioning (Windows-only) ---
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint SWP_NOZORDER = 0x0004;
+        private const int SW_HIDE = 0;
+        private const int SW_SHOWNOACTIVATE = 4;
+
         private readonly MainWindow _mainWindow;
         private NamedPipeServerStream? _pipeStream;
         private FramedPipeMessenger? _messenger;
@@ -31,9 +44,8 @@ namespace Neo.App
         private bool _hasLoadedControl;
         private bool _isDisposed;
         private bool _isShuttingDown;
-#pragma warning disable CS0414 // Field is assigned but never read — used by HideChild/ShowChild for future IPC visibility control
         private bool _allowChildVisible = true;
-#pragma warning restore CS0414
+        private IntPtr _childHwnd = IntPtr.Zero;
         private SandboxSettings _sandboxSettings = SandboxSettings.MaximumSecurity;
         private CrossplatformSettings _crossplatformSettings = new();
         private int _sessionCounter;
@@ -203,10 +215,16 @@ namespace Neo.App
                         switch (env.Type)
                         {
                             case IpcTypes.Hello:
-                                // Late Hello (re-handshake) — just ACK it
+                                var hello = Json.FromJson<HelloMessage>(env.PayloadJson);
+                                if (hello?.Hwnd is long hwndVal and not 0)
+                                    _childHwnd = new IntPtr(hwndVal);
+                                Debug.WriteLine($"[ChildProcess] Hello received, HWND={_childHwnd}");
                                 await SafeSendControlAsync(new IpcEnvelope(
                                     IpcTypes.Ack, env.CorrelationId,
                                     Json.ToJson(new AckMessage("Hello acknowledged"))));
+                                // Position child over our content area immediately
+                                if (_childHwnd != IntPtr.Zero && _allowChildVisible)
+                                    Dispatcher.UIThread.Post(() => UpdatePosition());
                                 break;
 
                             case IpcTypes.Log:
@@ -308,7 +326,31 @@ namespace Neo.App
 
         public void UpdatePosition(bool useTopMostTrick = false)
         {
-            // No HWND embedding in Avalonia version — child is a separate window
+            if (_childHwnd == IntPtr.Zero || !_allowChildVisible || !OperatingSystem.IsWindows())
+                return;
+
+            try
+            {
+                var container = _mainWindow.DynamicContentGrid;
+                if (container == null || container.Bounds.Width < 1 || container.Bounds.Height < 1)
+                    return;
+
+                // Get screen coordinates of the container
+                var topLeft = container.PointToScreen(new Point(0, 0));
+                var bottomRight = container.PointToScreen(new Point(container.Bounds.Width, container.Bounds.Height));
+
+                int x = (int)topLeft.X;
+                int y = (int)topLeft.Y;
+                int w = (int)(bottomRight.X - topLeft.X);
+                int h = (int)(bottomRight.Y - topLeft.Y);
+
+                ShowWindow(_childHwnd, SW_SHOWNOACTIVATE);
+                SetWindowPos(_childHwnd, IntPtr.Zero, x, y, w, h, SWP_NOACTIVATE | SWP_NOZORDER);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ChildProcess] UpdatePosition failed: {ex.Message}");
+            }
         }
 
         public async Task<bool> DisplayControlAsync(string mainDllPath, IEnumerable<string> nugetDlls, IEnumerable<string> additionalDlls)
@@ -378,7 +420,17 @@ namespace Neo.App
 
         public void NotifyParentWindowStateChanged(HostWindowState newState)
         {
-            // Could send IPC message to child to show/hide, but no HWND control
+            if (_childHwnd == IntPtr.Zero || !OperatingSystem.IsWindows()) return;
+
+            if (newState == HostWindowState.Minimized)
+            {
+                ShowWindow(_childHwnd, SW_HIDE);
+            }
+            else if (_allowChildVisible)
+            {
+                ShowWindow(_childHwnd, SW_SHOWNOACTIVATE);
+                UpdatePosition();
+            }
         }
 
         public async Task SetCursorVisibilityAsync(bool isVisible)
@@ -419,11 +471,18 @@ namespace Neo.App
         public void HideChild()
         {
             _allowChildVisible = false;
+            if (_childHwnd != IntPtr.Zero && OperatingSystem.IsWindows())
+                ShowWindow(_childHwnd, SW_HIDE);
         }
 
         public void ShowChild()
         {
             _allowChildVisible = true;
+            if (_childHwnd != IntPtr.Zero && OperatingSystem.IsWindows())
+            {
+                ShowWindow(_childHwnd, SW_SHOWNOACTIVATE);
+                UpdatePosition();
+            }
         }
 
         private async Task DisposeChildAsync()
@@ -477,6 +536,7 @@ namespace Neo.App
             }
 
             _hasLoadedControl = false;
+            _childHwnd = IntPtr.Zero;
             Debug.WriteLine("[ChildProcess] DisposeChild: done");
         }
 
