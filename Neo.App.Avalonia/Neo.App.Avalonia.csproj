@@ -85,4 +85,12 @@
   <ItemGroup>
     <Content Include="icon.ico" />
   </ItemGroup>
+
+  <!-- Copy Neo.PluginWindowAvalonia output to our bin so the child process can be found -->
+  <Target Name="CopyChildOutputs" AfterTargets="Build">
+    <ItemGroup>
+      <ChildOutputs Include="..\Neo.PluginWindowAvalonia\bin\$(Configuration)\$(NeoTargetFramework)\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ChildOutputs)" DestinationFolder="$(TargetDir)%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

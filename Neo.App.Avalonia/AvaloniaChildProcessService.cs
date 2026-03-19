@@ -103,20 +103,23 @@ namespace Neo.App
             _messenger = new FramedPipeMessenger(_pipeStream);
 
             // Find child executable — always use Avalonia child from this host
-            var childExe = FindChildExecutable();
-            if (childExe == null)
+            var (childPath, useDotnet) = FindChildExecutable();
+            if (childPath == null)
             {
                 Debug.WriteLine("[AvaloniaChildProcessService] Child executable not found!");
                 return;
             }
 
+            var childArgs = $"--pipe {pipeName} --parentPid {Environment.ProcessId} --standalone";
+
             var psi = new ProcessStartInfo
             {
-                FileName = childExe,
-                Arguments = $"--pipe {pipeName} --parentPid {Environment.ProcessId} --standalone",
+                FileName = useDotnet ? "dotnet" : childPath,
+                Arguments = useDotnet ? $"\"{childPath}\" {childArgs}" : childArgs,
                 UseShellExecute = false,
                 CreateNoWindow = false,
             };
+            Debug.WriteLine($"[ChildProcess] Starting: {psi.FileName} {psi.Arguments}");
 
             try
             {
@@ -163,30 +166,39 @@ namespace Neo.App
             }
         }
 
-        private string? FindChildExecutable()
+        // Returns (fileName, arguments prefix) — on Linux the "exe" is actually
+        // "dotnet" with the DLL path as argument.
+        private (string? exePath, bool useDotnetLauncher) FindChildExecutable()
         {
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var exeName = OperatingSystem.IsWindows()
+
+            // 1. Try native executable first (works on Windows, or after dotnet publish on Linux)
+            var nativeName = OperatingSystem.IsWindows()
                 ? "Neo.PluginWindowAvalonia.exe"
                 : "Neo.PluginWindowAvalonia";
 
-            // 1. Same directory (published/deployed)
-            var candidate = Path.Combine(baseDir, exeName);
-            if (File.Exists(candidate)) return candidate;
+            var candidate = Path.Combine(baseDir, nativeName);
+            if (File.Exists(candidate)) return (candidate, false);
 
-            // 2. Dev-time: sibling project output
-            var devPath = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
-                "Neo.PluginWindowAvalonia", "bin", "Debug", "net9.0", exeName));
-            if (File.Exists(devPath)) return devPath;
+            // 2. Try DLL (dotnet build on Linux only produces a DLL, not a native binary)
+            var dllName = "Neo.PluginWindowAvalonia.dll";
+            var dllCandidate = Path.Combine(baseDir, dllName);
+            if (File.Exists(dllCandidate)) return (dllCandidate, true);
 
-            // 3. Try Release too
-            var relPath = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
-                "Neo.PluginWindowAvalonia", "bin", "Release", "net9.0", exeName));
-            if (File.Exists(relPath)) return relPath;
+            // 3. Dev-time: sibling project output
+            foreach (var config in new[] { "Debug", "Release" })
+            {
+                var devNative = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
+                    "Neo.PluginWindowAvalonia", "bin", config, "net9.0", nativeName));
+                if (File.Exists(devNative)) return (devNative, false);
 
-            Debug.WriteLine($"[AvaloniaChildProcessService] Tried: {candidate}");
-            Debug.WriteLine($"[AvaloniaChildProcessService] Tried: {devPath}");
-            return null;
+                var devDll = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
+                    "Neo.PluginWindowAvalonia", "bin", config, "net9.0", dllName));
+                if (File.Exists(devDll)) return (devDll, true);
+            }
+
+            Debug.WriteLine($"[AvaloniaChildProcessService] Child not found in: {baseDir}");
+            return (null, false);
         }
 
         private async Task ListenLoopAsync(CancellationToken ct)
