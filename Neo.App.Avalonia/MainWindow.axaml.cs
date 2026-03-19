@@ -184,7 +184,6 @@ namespace Neo.App
         {
             txtPrompt.IsEnabled = !isBusy;
             optionsHub.IsEnabled = !isBusy;
-            optionsHub.Opacity = isBusy ? 0.4 : 1.0;
             isCycleViewLocked = isBusy;
             btnCancel.IsVisible = isBusy && showCancel;
 
