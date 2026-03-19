@@ -26,17 +26,18 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBox Classes="rounded" x:Name="BasePathTextBox" Grid.Column="0"
-                                 Margin="0,6,6,0"
+                                 Margin="0,6,6,0" Padding="4"
                                  TextChanged="OnInputChanged"/>
                         <Button Classes="rounded" Grid.Column="1" MinWidth="140"
                                 Margin="0,6,0,0" Padding="8,6"
+                                HorizontalContentAlignment="Center"
                                 Content="Browse ..." Click="BrowseFolder_Click"/>
                     </Grid>
 
                     <!-- Project Name -->
                     <TextBlock Text="Project Name:" Margin="0,6,0,0"/>
                     <TextBox Classes="rounded" x:Name="ProjectNameTextBox"
-                             Margin="0,6,0,0"
+                             Margin="0,6,0,0" Padding="4"
                              TextChanged="OnInputChanged"/>
 
                     <!-- Path Hint -->
@@ -81,6 +82,7 @@
                         </Border>
                         <Button Grid.Column="1" Classes="rounded" MinWidth="140"
                                 Margin="0,6,0,0" Padding="8,6"
+                                HorizontalContentAlignment="Center"
                                 Content="Load ICO ..." Click="LoadIcon_Click"/>
                     </Grid>
 
