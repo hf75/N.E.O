@@ -70,9 +70,9 @@ namespace Neo.App
             {
                 return (false, null, "The specified export path is not valid.");
             }
-            if (string.IsNullOrEmpty(_coreRefPath) || string.IsNullOrEmpty(_desktopRefPath))
+            if (string.IsNullOrEmpty(_coreRefPath))
             {
-                return (false, null, "Core or Desktop runtime reference paths are not configured.");
+                return (false, null, "Core runtime reference path is not configured.");
             }
 
             try
@@ -223,7 +223,9 @@ namespace Neo.App
             else if(data.ExportSettings.Cpe == CrossPlatformExport.OSX )
                 appHostApp = "apphost-template-osx";
 
-            var dllPaths = new List<string> { _coreRefPath!, _desktopRefPath! };
+            var dllPaths = new List<string> { _coreRefPath! };
+            if (!string.IsNullOrEmpty(_desktopRefPath))
+                dllPaths.Add(_desktopRefPath);
 
             string appNamePostfix = "App";
             if (data.ExportSettings.Cpe != CrossPlatformExport.NONE)
