@@ -40,7 +40,7 @@
 
             <TextBlock VerticalAlignment="Center" Grid.Row="0" Grid.Column="0" Margin="0,0,8,0"
                        Text="AI code generation attempts:"/>
-            <TextBox Classes="rounded" Grid.Row="0" Grid.Column="1" x:Name="AttemptsTextBox"/>
+            <TextBox Classes="rounded" Grid.Row="0" Grid.Column="1" x:Name="AttemptsTextBox" Padding="4"/>
 
             <!-- UseAvalonia is always true in the Avalonia host — no toggle needed -->
             <CheckBox Classes="rounded" Grid.Row="2" Content="Enable REACT-UI"
@@ -86,7 +86,7 @@
             <StackPanel x:Name="RowOllamaEndpoint" Grid.Row="12" Grid.ColumnSpan="2"
                         Margin="0,4,0,0" IsVisible="False">
                 <TextBlock Text="Ollama Endpoint:" Margin="0,0,0,4"/>
-                <TextBox x:Name="OllamaEndpointTextBox" Classes="rounded"/>
+                <TextBox x:Name="OllamaEndpointTextBox" Classes="rounded" Padding="4"/>
             </StackPanel>
 
             <StackPanel x:Name="RowLmStudioModel" Grid.Row="13" Grid.ColumnSpan="2"
@@ -98,7 +98,7 @@
             <StackPanel x:Name="RowLmStudioEndpoint" Grid.Row="14" Grid.ColumnSpan="2"
                         Margin="0,4,0,0" IsVisible="False">
                 <TextBlock Text="LM Studio Endpoint:" Margin="0,0,0,4"/>
-                <TextBox x:Name="LmStudioEndpointTextBox" Classes="rounded"/>
+                <TextBox x:Name="LmStudioEndpointTextBox" Classes="rounded" Padding="4"/>
             </StackPanel>
 
             <!-- AI Query Section -->
@@ -128,11 +128,17 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <Button Classes="rounded" Grid.Column="0" Margin="0,0,8,0"
+                <Button Classes="rounded" Grid.Column="0"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Margin="0,0,4,0"
                         Click="ResetButton_Click" Content="Reset"/>
-                <Button Classes="rounded" Grid.Column="1" Margin="0,0,8,0"
+                <Button Classes="rounded" Grid.Column="1"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Margin="4,0"
                         Click="OkButton_Click" Content="OK"/>
                 <Button Classes="rounded" Grid.Column="2"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Margin="4,0,0,0"
                         Click="CancelButton_Click" Content="Cancel"/>
             </Grid>
         </Grid>
