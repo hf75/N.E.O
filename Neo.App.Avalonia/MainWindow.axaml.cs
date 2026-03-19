@@ -269,7 +269,11 @@ namespace Neo.App
             _isCodeEditorActive = true;
             BtnCodeEditor.IsChecked = true;
 
-            var editorWindow = new Views.CodeEditorWindow(_appController.AppState.LastCode ?? string.Empty);
+            // Use current code from the virtual project (most up-to-date), fallback to AppState
+            string currentCode = _appController.GetCurrentCode()
+                ?? _appController.AppState.LastCode
+                ?? string.Empty;
+            var editorWindow = new Views.CodeEditorWindow(currentCode);
             await editorWindow.ShowDialog<object?>(this);
 
             _isCodeEditorActive = false;

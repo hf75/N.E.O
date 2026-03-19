@@ -2397,5 +2397,15 @@ namespace Neo.App
             else
                 return UserControlBaseCodeAvalonia.BaseCode;
         }
+
+        /// <summary>
+        /// Returns the current source code from the virtual project files,
+        /// falling back to AppState.LastCode or the base template.
+        /// </summary>
+        public string? GetCurrentCode()
+        {
+            return VirtualProjectFiles?.GetFileContent("./currentcode.cs")
+                ?? AppState.LastCode;
+        }
     }
 }
