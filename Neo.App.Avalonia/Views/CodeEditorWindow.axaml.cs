@@ -1,16 +1,10 @@
-using System;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using AvaloniaEdit;
-using AvaloniaEdit.TextMate;
-using TextMateSharp.Grammars;
 
 namespace Neo.App.Views
 {
     public partial class CodeEditorWindow : Window
     {
-        private string _initialCode;
-
         public string? EditedCode { get; private set; }
         public bool Applied { get; private set; }
 
@@ -18,29 +12,14 @@ namespace Neo.App.Views
 
         public CodeEditorWindow(string currentCode)
         {
-            _initialCode = currentCode;
-            EditedCode = currentCode;
             InitializeComponent();
-
-            // Defer initialization to after layout is complete
-            codeEditor.Loaded += (_, _) =>
-            {
-                try
-                {
-                    var registryOptions = new RegistryOptions(ThemeName.LightPlus);
-                    var installation = codeEditor.InstallTextMate(registryOptions);
-                    installation.SetGrammar(registryOptions.GetScopeByLanguageId("csharp"));
-                }
-                catch { /* TextMate optional */ }
-
-                codeEditor.Text = _initialCode;
-                codeEditor.ScrollToLine(1);
-            };
+            EditedCode = currentCode;
+            codeTextBox.Text = currentCode;
         }
 
         private void Apply_Click(object? sender, RoutedEventArgs e)
         {
-            EditedCode = codeEditor.Text;
+            EditedCode = codeTextBox.Text;
             Applied = true;
             Close();
         }

@@ -8,14 +8,11 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <NoWarn>$(NoWarn);NU1605</NoWarn>
     <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.12" />
-    <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.4.1" />
-    <PackageReference Include="AvaloniaEdit.TextMate" Version="11.4.1" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
