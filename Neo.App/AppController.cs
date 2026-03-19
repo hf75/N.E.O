@@ -1013,8 +1013,9 @@ namespace Neo.App
         {
             if (CurrentStatus != AppStatus.Idle) return;
 
-            try 
+            try
             {
+                ChildProcessService.HideChild();
                 await SetStatusAsync(AppStatus.Exporting, false, "Exporting...");
 
                 // 1. Daten für den Export sammeln
@@ -1069,11 +1070,12 @@ namespace Neo.App
             }
             finally
             {
+                ChildProcessService.ShowChild();
+                _pendingCrash = null;
                 await SetStatusAsync(AppStatus.Idle, false);
             }
         }
 
-        // In AppController.cs
         public async Task ImportProjectAsync(string assemblyPath)
         {
             // 0. Clear everything
