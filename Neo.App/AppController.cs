@@ -100,7 +100,7 @@ namespace Neo.App
                 _settings = value;
 
                 // Update AIQuery agent DLL and NuGet package based on provider setting.
-                var requiredDll = GetAIQueryAgentDll(value.AIQueryProvider);
+                var requiredDll = ResolveAppDll(GetAIQueryAgentDll(value.AIQueryProvider));
                 if (!AdditionalDlls.Contains(requiredDll))
                     AdditionalDlls.Add(requiredDll);
 
@@ -137,16 +137,16 @@ namespace Neo.App
             // Auto-discover plugin agents (ImageGen, STT, etc.)
             PluginAgents = DiscoverPluginAgents();
 
-            AdditionalDlls.Add("./Neo.Agents.Core.dll");
+            AdditionalDlls.Add(ResolveAppDll("Neo.Agents.Core.dll"));
             foreach (var plugin in PluginAgents)
             {
-                AdditionalDlls.Add($"./{plugin.AgentDllName}");
+                AdditionalDlls.Add(ResolveAppDll(plugin.AgentDllName));
 
                 // Ensure default model is in settings
                 if (!Settings.PluginAgentModels.ContainsKey(plugin.SettingsKey))
                     Settings.PluginAgentModels[plugin.SettingsKey] = plugin.DefaultModel;
             }
-            AdditionalDlls.Add(GetAIQueryAgentDll(Settings.AIQueryProvider));
+            AdditionalDlls.Add(ResolveAppDll(GetAIQueryAgentDll(Settings.AIQueryProvider)));
             DefaultNugets.Add(GetAIQueryNuGetPackage(Settings.AIQueryProvider));
 
             if (Settings.UsePython)
@@ -333,12 +333,26 @@ namespace Neo.App
 
         private static string GetAIQueryAgentDll(string provider) => provider switch
         {
-            "OpenAI" => "./Neo.Agents.OpenAI.dll",
-            "Gemini" => "./Neo.Agents.Gemini.dll",
-            "Ollama" => "./Neo.Agents.Ollama.dll",
-            "LM Studio" => "./Neo.Agents.LmStudio.dll",
-            _ => "./Neo.Agents.Claude.dll",
+            "OpenAI" => "Neo.Agents.OpenAI.dll",
+            "Gemini" => "Neo.Agents.Gemini.dll",
+            "Ollama" => "Neo.Agents.Ollama.dll",
+            "LM Studio" => "Neo.Agents.LmStudio.dll",
+            _ => "Neo.Agents.Claude.dll",
         };
+
+        /// <summary>
+        /// Resolves a DLL filename to its full path in the application's base directory.
+        /// Handles relative paths (./name.dll) and bare filenames (name.dll).
+        /// </summary>
+        private static string ResolveAppDll(string dllName)
+        {
+            // Strip leading ./ if present
+            if (dllName.StartsWith("./") || dllName.StartsWith(".\\"))
+                dllName = dllName.Substring(2);
+
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            return Path.Combine(baseDir, dllName);
+        }
 
         private Dictionary<string, string> BuildAdditionalSourceFiles(bool usePython)
         {
