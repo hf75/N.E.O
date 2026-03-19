@@ -33,7 +33,7 @@
                     <TextBlock Grid.Column="0" VerticalAlignment="Center"
                                Foreground="#374151" Text="Text"/>
                     <TextBox x:Name="TextValue" Grid.Column="1" MinHeight="32"
-                             Classes="rounded"/>
+                             Classes="rounded" Padding="4"/>
                 </Grid>
 
                 <Grid x:Name="RowContent" Margin="0,0,0,8">
@@ -44,7 +44,7 @@
                     <TextBlock Grid.Column="0" VerticalAlignment="Center"
                                Foreground="#374151" Text="Content"/>
                     <TextBox x:Name="ContentValue" Grid.Column="1" MinHeight="32"
-                             Classes="rounded"/>
+                             Classes="rounded" Padding="4"/>
                 </Grid>
 
                 <Grid x:Name="RowFontFamily" Margin="0,0,0,8">
