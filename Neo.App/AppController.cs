@@ -108,7 +108,11 @@ namespace Neo.App
                 DefaultNugets.Clear();
                 DefaultNugets.Add(requiredNuget);
                 if (value.UseAvalonia)
+                {
                     DefaultNugets.Add("Avalonia.Desktop|default");
+                    DefaultNugets.Add("Avalonia.Themes.Fluent|default");
+                    DefaultNugets.Add("Avalonia.Fonts.Inter|default");
+                }
                 if (value.UsePython)
                     DefaultNugets.Add("pythonnet|default");
 
@@ -152,7 +156,11 @@ namespace Neo.App
             DefaultNugets.Add(GetAIQueryNuGetPackage(Settings.AIQueryProvider));
 
             if (Settings.UseAvalonia)
+            {
                 DefaultNugets.Add("Avalonia.Desktop|default");
+                DefaultNugets.Add("Avalonia.Themes.Fluent|default");
+                DefaultNugets.Add("Avalonia.Fonts.Inter|default");
+            }
 
             if (Settings.UsePython)
                 DefaultNugets.Add("pythonnet|default");
