@@ -148,7 +148,8 @@ namespace Neo.App
                 _appController.ChildProcessService.ConfigureCrossplatformSettings(cps);
 
                 await _appController.ChildProcessService.RestartAsync();
-                _appController.ChildProcessService.HideChild();
+                // Don't call HideChild here — the child's WaitOverlay is already
+                // visible by default (XAML). HideChild would start the timer.
 
                 EnsureAppDataFolderExists();
 
