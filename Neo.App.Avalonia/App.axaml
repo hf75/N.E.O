@@ -95,10 +95,19 @@
             <Setter Property="CornerRadius" Value="12"/>
         </Style>
         <Style Selector="Button.minimalist:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#E8E8E8"/>
             <Setter Property="BorderBrush" Value="#AAAAAA"/>
+            <Setter Property="Opacity" Value="1"/>
         </Style>
         <Style Selector="Button.minimalist:pressed /template/ ContentPresenter">
-            <Setter Property="Background" Value="#F0F0F0"/>
+            <Setter Property="Background" Value="#D8D8D8"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Button.minimalist:disabled /template/ ContentPresenter">
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Button.minimalist:disabled">
+            <Setter Property="Opacity" Value="0.4"/>
         </Style>
 
         <!-- Minimalist Popup Button -->
@@ -112,9 +121,11 @@
         </Style>
         <Style Selector="Button.popup:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#F5F5F5"/>
+            <Setter Property="Opacity" Value="1"/>
         </Style>
         <Style Selector="Button.popup:pressed /template/ ContentPresenter">
             <Setter Property="Background" Value="#E0E0E0"/>
+            <Setter Property="Opacity" Value="1"/>
         </Style>
 
         <!-- Minimalist ToggleButton -->
@@ -129,11 +140,20 @@
             <Setter Property="CornerRadius" Value="12"/>
         </Style>
         <Style Selector="ToggleButton.minimalist:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#E8E8E8"/>
             <Setter Property="BorderBrush" Value="#AAAAAA"/>
+            <Setter Property="Opacity" Value="1"/>
         </Style>
         <Style Selector="ToggleButton.minimalist:checked /template/ ContentPresenter">
             <Setter Property="Background" Value="#E6F5E6"/>
             <Setter Property="BorderBrush" Value="#70AD70"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="ToggleButton.minimalist:disabled /template/ ContentPresenter">
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="ToggleButton.minimalist:disabled">
+            <Setter Property="Opacity" Value="0.4"/>
         </Style>
 
         <!-- Options ToggleButton (no checked highlight) -->
