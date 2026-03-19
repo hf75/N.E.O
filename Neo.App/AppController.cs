@@ -938,28 +938,12 @@ namespace Neo.App
                     filteredList.Add(code);
             }
 
-            Debug.WriteLine($"[Compile] DllPath={DllPath}");
-            Debug.WriteLine($"[Compile] NuGetDlls={AppState.NuGetDlls?.Count ?? 0}");
-            Debug.WriteLine($"[Compile] AdditionalDlls={AdditionalDlls?.Count ?? 0}");
-            foreach (var dll in AdditionalDlls ?? new()) Debug.WriteLine($"[Compile]   Additional: {dll} (exists={File.Exists(dll)})");
-            Debug.WriteLine($"[Compile] Codes={filteredList.Count}");
-
-            string? compiledUserControlDllPath = null;
-            try
-            {
-                compiledUserControlDllPath = await CompilationService.CompileToDllAsync(
-                    filteredList,
-                    DllPath,
-                    AppState.NuGetDlls,
-                    AdditionalDlls
-                );
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[Compile] EXCEPTION: {ex}");
-            }
-
-            Debug.WriteLine($"[Compile] Result: {compiledUserControlDllPath ?? "NULL"}");
+            string? compiledUserControlDllPath = await CompilationService.CompileToDllAsync(
+                filteredList,
+                DllPath,
+                AppState.NuGetDlls,
+                AdditionalDlls
+            );
 
             if (string.IsNullOrEmpty(compiledUserControlDllPath))
             {
