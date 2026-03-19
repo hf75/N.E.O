@@ -17,7 +17,10 @@
                           FontSize="14"
                           IsReadOnly="False"
                           ShowLineNumbers="True"
-                          WordWrap="False"/>
+                          WordWrap="False"
+                          Foreground="#1E1E1E"
+                          Background="#FAFAFA"
+                          AttachedToVisualTree="CodeEditor_AttachedToVisualTree"/>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal"
                     HorizontalAlignment="Right" Margin="0,8,0,0">
