@@ -91,7 +91,7 @@ namespace Neo.App
                     blockNodes.AddRange(assignments);
                     blockNodes.Add(newStatementExpr);
 
-                    var block = SyntaxFactory.Block(blockNodes).NormalizeWhitespace();
+                    var block = SyntaxFactory.Block(blockNodes);
                     newRoot = newRoot.ReplaceNode(statement, block);
                 }
                 else
@@ -101,7 +101,9 @@ namespace Neo.App
                 }
             }
 
-            updatedCode = newRoot.NormalizeWhitespace().ToFullString();
+            // Don't use NormalizeWhitespace() — it can break named tuple elements
+            // and other code constructs. Use ToFullString() to preserve original formatting.
+            updatedCode = newRoot.ToFullString();
             return true;
         }
 
