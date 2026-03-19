@@ -183,7 +183,10 @@ namespace Neo.App
         public async Task SetUiBusyState(bool isBusy, string? message = null, bool showCancel = false, bool showOverlay = true)
         {
             txtPrompt.IsEnabled = !isBusy;
-            optionsHub.IsEnabled = !isBusy;
+            // Disable individual buttons instead of the StackPanel to avoid
+            // Fluent theme applying its own Opacity to the container.
+            foreach (var child in optionsHub.Children)
+                child.IsEnabled = !isBusy;
             isCycleViewLocked = isBusy;
             btnCancel.IsVisible = isBusy && showCancel;
 
