@@ -115,10 +115,10 @@
                             Content="Cancel" Click="Cancel_Click"/>
                     <Button Grid.Column="1" x:Name="CreateButton" Classes="rounded"
                             Margin="0,0,6,0" Padding="10,6"
-                            Content="Export" FontWeight="Bold"
+                            Content="Export"
                             Click="ExportProject_Click" IsEnabled="False"/>
                     <Button Grid.Column="2" x:Name="SaveAsButton" Classes="rounded"
-                            Padding="10,6" Content="Save as" FontWeight="Bold"
+                            Padding="10,6" Content="Save as"
                             Click="SaveAsButton_Click" IsEnabled="False"/>
                 </Grid>
             </Border>
