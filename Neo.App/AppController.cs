@@ -2304,6 +2304,13 @@ namespace Neo.App
                 Logger.LogMessage($"Injected {injectedCount} design IDs for click-to-edit.", BubbleType.Info);
                 return true;
             }
+            catch (Exception ex)
+            {
+                // Designer ID compilation may fail for complex code patterns (e.g. tuples).
+                // This must not crash the app — just report and disable designer for this code.
+                Logger.LogMessage($"Designer mode unavailable for this code: {ex.Message}", BubbleType.CompletionError);
+                return false;
+            }
             finally
             {
                 await SetStatusAsync(AppStatus.Idle, false);
