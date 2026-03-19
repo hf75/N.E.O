@@ -810,6 +810,7 @@ namespace Neo.App
 
             try
             {
+                ChildProcessService.HideChild();
                 await SetStatusAsync(AppStatus.Compiling, true, "Compiling manual edit...");
 
                 ApplyState(s => s.LastCode = newCode, "Manual code edit");
@@ -833,6 +834,8 @@ namespace Neo.App
             }
             finally
             {
+                ChildProcessService.ShowChild();
+                _pendingCrash = null;
                 await SetStatusAsync(AppStatus.Idle, false);
             }
         }
