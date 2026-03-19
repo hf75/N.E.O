@@ -377,6 +377,12 @@ namespace Neo.PluginWindowAvalonia
                                 }
                                 else
                                 {
+                                    // Stop timer and hide wait overlay
+                                    MainWin.StopWaitTimer();
+                                    MainWin.WaitTimerText.Text = "";
+                                    if (!MainWin.HasEverLoadedControl)
+                                        MainWin.WaitStatusText.Text = "Waiting for code...";
+
                                     // Dock to the right edge of parent, same height
                                     int dockX = (int)(bounds.X + bounds.Width + 8); // 8px gap
                                     int dockY = (int)bounds.Y;
