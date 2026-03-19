@@ -42,7 +42,15 @@ namespace Neo.App
             agent.SetInput("NuGetDlls", nugetDllPaths ?? new List<string>());
             agent.SetInput("AdditionalDlls", additionalDlls ?? new List<string>());
 
-            await agent.ExecuteAsync();
+            try
+            {
+                await agent.ExecuteAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[CompilationService] Compilation threw: {ex.Message}");
+                return null;
+            }
 
             return agent.GetOutput<string>("CompiledDllPath");
         }
