@@ -86,11 +86,12 @@
     <Content Include="icon.ico" />
   </ItemGroup>
 
-  <!-- Copy Neo.PluginWindowAvalonia output to our bin so the child process can be found -->
+  <!-- Copy Neo.PluginWindowAvalonia-specific output to our bin so the child process can be found.
+       Only copy the child's own assemblies, not shared Avalonia/NuGet deps (already present). -->
   <Target Name="CopyChildOutputs" AfterTargets="Build">
     <ItemGroup>
-      <ChildOutputs Include="..\Neo.PluginWindowAvalonia\bin\$(Configuration)\$(NeoTargetFramework)\**\*.*" />
+      <ChildOutputs Include="..\Neo.PluginWindowAvalonia\bin\$(Configuration)\$(NeoTargetFramework)\Neo.PluginWindowAvalonia.*" />
     </ItemGroup>
-    <Copy SourceFiles="@(ChildOutputs)" DestinationFolder="$(TargetDir)%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ChildOutputs)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
   </Target>
 </Project>
