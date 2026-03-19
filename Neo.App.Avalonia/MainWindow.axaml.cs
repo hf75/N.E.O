@@ -695,10 +695,12 @@ namespace Neo.App
                 _designerPropertiesWindow = new DesignerPropertiesWindow();
                 _designerPropertiesWindow.ApplyRequested += applyHandler;
                 _designerPropertiesWindow.Closed += (_, _) => _designerPropertiesWindow = null;
-                _designerPropertiesWindow.Show(this);
+                _designerPropertiesWindow.Show();
+                _designerPropertiesWindow.Topmost = true;
             }
 
             _designerPropertiesWindow.SetSelection(selection);
+            _designerPropertiesWindow.Topmost = true;
             _designerPropertiesWindow.Activate();
         }
 
