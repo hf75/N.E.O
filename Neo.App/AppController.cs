@@ -1051,12 +1051,13 @@ namespace Neo.App
             // 0. Clear everything
             await ClearSessionAsync();
 
-            // 1. Prüfen, ob die App bereit ist.g
+            // 1. Prüfen, ob die App bereit ist.
             if (CurrentStatus != AppStatus.Idle) return;
 
             try
             {
-                // 2. Den Status setzen.
+                // 2. Den Status setzen und show timer in child window.
+                ChildProcessService.HideChild();
                 await SetStatusAsync(AppStatus.Importing, false, "Importing...");
 
                 // 3. Die eigentliche Logik
@@ -1065,18 +1066,17 @@ namespace Neo.App
                 if (!importResult.Success || importResult.Data == null)
                 {
                     Logger.LogMessage(importResult.ErrorMessage ?? "An unknown import error occurred.", BubbleType.CompletionError);
-                    return; // Wichtig: hier abbrechen, damit der finally-Block den Status zurücksetzt.
+                    return;
                 }
 
                 ResxData resxData = importResult.Data!;
 
                 bool usePython = false;
-                bool useAvalonia = false;
+                // Always keep UseAvalonia as-is (the host decides, not the imported project)
+                bool useAvalonia = Settings.UseAvalonia;
 
                 if (resxData.Nuget!.ContainsKey("pythonnet"))
                     usePython = true;
-                if (resxData.Nuget.ContainsKey("Avalonia.Desktop"))
-                    useAvalonia = true;
 
                 _settings.UsePython = usePython;
                 _settings.UseAvalonia = useAvalonia;
@@ -1095,7 +1095,7 @@ namespace Neo.App
                 };
 
                 ChildProcessService.ConfigureCrossplatformSettings(cpes);
-                await ChildProcessService.RestartAsync();
+                // No need to restart — ClearSessionAsync already restarted the child.
 
                 // NuGet-Pakete laden und anwenden
                 await LoadAndApplyNugetPackages(resxData.Nuget);
@@ -1140,7 +1140,9 @@ namespace Neo.App
             }
             finally
             {
-                // 4. Status garantiert zurücksetzen.
+                // 4. Restore child visibility and reset status.
+                ChildProcessService.ShowChild();
+                _pendingCrash = null;
                 await SetStatusAsync(AppStatus.Idle, false);
             }
         }
