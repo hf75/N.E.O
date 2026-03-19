@@ -700,8 +700,11 @@ namespace Neo.App
             }
 
             _designerPropertiesWindow.SetSelection(selection);
+            // Toggle Topmost off/on to force window manager to bring it to front
+            _designerPropertiesWindow.Topmost = false;
             _designerPropertiesWindow.Topmost = true;
             _designerPropertiesWindow.Activate();
+            _designerPropertiesWindow.Focus();
         }
 
         void IMainView.CloseDesignerPropertiesWindow()
