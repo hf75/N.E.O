@@ -93,8 +93,9 @@
                     <TextBlock Text="Action when directory exists:" Margin="0,12,0,0"/>
                     <ComboBox Classes="rounded" x:Name="CreationModeComboBox"
                               Margin="0,6,0,0" Padding="6"
+                              SelectedIndex="0"
                               SelectionChanged="OnCreationModeChanged">
-                        <ComboBoxItem Content="Cancel" IsSelected="True"/>
+                        <ComboBoxItem Content="Cancel"/>
                         <ComboBoxItem Content="Overwrite"/>
                     </ComboBox>
                 </StackPanel>
