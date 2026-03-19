@@ -273,6 +273,7 @@ namespace Neo.App
             string currentCode = _appController.GetCurrentCode()
                 ?? _appController.AppState.LastCode
                 ?? string.Empty;
+            Debug.WriteLine($"[CodeEditor] GetCurrentCode={_appController.GetCurrentCode()?.Length ?? -1}, LastCode={_appController.AppState.LastCode?.Length ?? -1}, final={currentCode.Length}");
             var editorWindow = new Views.CodeEditorWindow(currentCode);
             await editorWindow.ShowDialog<object?>(this);
 

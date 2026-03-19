@@ -17,13 +17,18 @@ namespace Neo.App.Views
         {
             InitializeComponent();
 
-            // Set up C# syntax highlighting via TextMate
-            var registryOptions = new RegistryOptions(ThemeName.Light);
-            var textMateInstallation = codeEditor.InstallTextMate(registryOptions);
-            textMateInstallation.SetGrammar(registryOptions.GetScopeByLanguageId("csharp"));
-
-            codeEditor.Text = currentCode;
             EditedCode = currentCode;
+
+            // Set text and syntax highlighting after the window is opened,
+            // ensuring the AvaloniaEdit Document is fully initialized.
+            Opened += (_, _) =>
+            {
+                var registryOptions = new RegistryOptions(ThemeName.Light);
+                var textMateInstallation = codeEditor.InstallTextMate(registryOptions);
+                textMateInstallation.SetGrammar(registryOptions.GetScopeByLanguageId("csharp"));
+
+                codeEditor.Document.Text = currentCode;
+            };
         }
 
         private void Apply_Click(object? sender, RoutedEventArgs e)
