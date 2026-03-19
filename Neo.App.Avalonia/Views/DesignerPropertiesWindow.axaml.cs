@@ -52,9 +52,6 @@ namespace Neo.App
         private Dictionary<string, string> _original = new(StringComparer.Ordinal);
         private string _foregroundValue = string.Empty;
         private string _backgroundValue = string.Empty;
-#pragma warning disable CS0414 // Field assigned but not read — reserved for future cursor-follow feature
-        private bool _followCursor = true;
-#pragma warning restore CS0414
 
         public event EventHandler<DesignerApplyRequestedEventArgs>? ApplyRequested;
 
@@ -188,14 +185,6 @@ namespace Neo.App
             }
         }
 
-        private void Header_PointerPressed(object? sender, PointerPressedEventArgs e)
-        {
-            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            {
-                _followCursor = false;
-                BeginMoveDrag(e);
-            }
-        }
 
         private async void PickForeground_Click(object? sender, RoutedEventArgs e)
         {
@@ -252,10 +241,6 @@ namespace Neo.App
             return s_fontFamilyChoices;
         }
 
-        private void Close_Click(object? sender, RoutedEventArgs e)
-        {
-            Close();
-        }
 
         private static string ShortTypeName(string? fullName)
         {
