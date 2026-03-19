@@ -197,14 +197,26 @@ namespace Neo.App
             }
         }
 
-        private void PickForeground_Click(object? sender, RoutedEventArgs e)
+        private async void PickForeground_Click(object? sender, RoutedEventArgs e)
         {
-            // Color picker not available in Avalonia by default - no-op for now
+            var picker = new Views.ColorPickerDialog(_foregroundValue);
+            await picker.ShowDialog<object?>(this);
+            if (picker.Confirmed && picker.SelectedColor != null)
+            {
+                _foregroundValue = picker.SelectedColor;
+                ForegroundPreview.Background = TryCreateBrushFromHex(_foregroundValue) ?? Brushes.Transparent;
+            }
         }
 
-        private void PickBackground_Click(object? sender, RoutedEventArgs e)
+        private async void PickBackground_Click(object? sender, RoutedEventArgs e)
         {
-            // Color picker not available in Avalonia by default - no-op for now
+            var picker = new Views.ColorPickerDialog(_backgroundValue);
+            await picker.ShowDialog<object?>(this);
+            if (picker.Confirmed && picker.SelectedColor != null)
+            {
+                _backgroundValue = picker.SelectedColor;
+                BackgroundPreview.Background = TryCreateBrushFromHex(_backgroundValue) ?? Brushes.Transparent;
+            }
         }
 
         private static IBrush? TryCreateBrushFromHex(string hex)
