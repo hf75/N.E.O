@@ -1,18 +1,20 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:cp="clr-namespace:Avalonia.Controls;assembly=Avalonia.Controls.ColorPicker"
         x:Class="Neo.App.Views.ColorPickerDialog"
         Title="Pick a Color"
-        Width="380" SizeToContent="Height"
+        Width="420" Height="520"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
-    <StackPanel Margin="16" Spacing="12">
-        <ColorView x:Name="ColorPicker" IsAlphaVisible="True"
-                   IsColorSpectrumVisible="True"
-                   IsColorComponentsVisible="True"
-                   IsHexInputVisible="True"/>
+    <Grid Margin="16" RowDefinitions="*,Auto">
+        <cp:ColorView x:Name="ColorPicker" Grid.Row="0"
+                       IsAlphaVisible="True"
+                       IsColorSpectrumVisible="True"
+                       IsColorComponentsVisible="True"
+                       IsHexInputVisible="True"/>
 
-        <Grid>
+        <Grid Grid.Row="1" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="8"/>
@@ -25,5 +27,5 @@
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                     Click="Cancel_Click"/>
         </Grid>
-    </StackPanel>
+    </Grid>
 </Window>
