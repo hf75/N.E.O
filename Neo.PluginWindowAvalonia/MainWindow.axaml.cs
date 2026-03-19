@@ -25,6 +25,9 @@ namespace Neo.PluginWindowAvalonia
         // Cache für Native-DLL-Temp-Pfade (Name -> absoluter Pfad im AC-Temp)
         private readonly Dictionary<string, string> _nativePathCache = new(StringComparer.OrdinalIgnoreCase);
 
+        // Tracks whether a control was ever successfully loaded
+        public bool HasEverLoadedControl { get; private set; }
+
         // Elapsed timer for wait overlay
         private readonly Stopwatch _waitStopwatch = new();
         private DispatcherTimer? _waitTimer;
@@ -179,6 +182,7 @@ namespace Neo.PluginWindowAvalonia
                 if (Dispatcher.UIThread.CheckAccess())
                 {
                     dynamicContent.Content = userControl;
+                    HasEverLoadedControl = true;
                     WaitOverlay.IsVisible = false;
                     StopWaitTimer();
                 }
@@ -187,6 +191,7 @@ namespace Neo.PluginWindowAvalonia
                     Dispatcher.UIThread.Post(() =>
                     {
                         dynamicContent.Content = userControl;
+                        HasEverLoadedControl = true;
                         WaitOverlay.IsVisible = false;
                         StopWaitTimer();
                     });

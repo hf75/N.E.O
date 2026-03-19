@@ -371,16 +371,18 @@ namespace Neo.PluginWindowAvalonia
                             {
                                 if (!bounds.IsVisible)
                                 {
-                                    // Show wait overlay — only start timer if we had content before
-                                    bool hadContent = MainWin.dynamicContent.Content != null;
+                                    // Show wait overlay — only start timer if a control was loaded before
                                     MainWin.WaitOverlay.IsVisible = true;
-                                    MainWin.WaitStatusText.Text = hadContent
-                                        ? "Generating new code..."
-                                        : "Waiting for code...";
-                                    if (hadContent)
+                                    if (MainWin.HasEverLoadedControl)
+                                    {
+                                        MainWin.WaitStatusText.Text = "Generating new code...";
                                         MainWin.StartWaitTimer();
+                                    }
                                     else
-                                        MainWin.StopWaitTimer();
+                                    {
+                                        MainWin.WaitStatusText.Text = "Waiting for code...";
+                                        MainWin.WaitTimerText.Text = "";
+                                    }
                                 }
                                 else
                                 {
