@@ -46,6 +46,19 @@
     <AvaloniaResource Include="..\Neo.App\logo3.png" Link="Assets\logo3.png" />
   </ItemGroup>
 
+  <!-- AppHost templates for cross-platform export (shared from Neo.App) -->
+  <ItemGroup>
+    <Content Include="..\Neo.App\AppHostTemplates\apphost-template-windows.exe" Link="AppHostTemplates\apphost-template-windows.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\Neo.App\AppHostTemplates\apphost-template-linux" Link="AppHostTemplates\apphost-template-linux">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\Neo.App\AppHostTemplates\apphost-template-osx" Link="AppHostTemplates\apphost-template-osx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- Embedded resources shared with Neo.App (read at runtime by AppController) -->
   <ItemGroup>
     <EmbeddedResource Include="..\Neo.App\AgentHelper.cs" Link="AgentHelper.cs" LogicalName="Neo.App.Avalonia.AgentHelper.cs" />
