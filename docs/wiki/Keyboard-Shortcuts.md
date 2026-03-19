@@ -2,36 +2,38 @@
 
 ## Prompt Input
 
-| Shortcut | Action |
-|----------|--------|
-| **Enter** | Send prompt to AI |
-| **Shift+Enter** | Insert newline (don't send) |
+| Shortcut | Action | WPF | Avalonia |
+|----------|--------|-----|----------|
+| **Enter** | Send prompt to AI | Yes | Yes |
+| **Shift+Enter** | Insert newline (don't send) | Yes | Yes |
 
 ## Navigation
 
-| Shortcut | Action |
-|----------|--------|
-| **Ctrl+Shift+F** | Toggle fullscreen (content-only view) |
-| **Ctrl+Shift+C** | Toggle code editor |
-| **Ctrl+2** | Cycle view mode (Default → Prompt-Only → Content-Only) |
+| Shortcut | Action | WPF | Avalonia |
+|----------|--------|-----|----------|
+| **Ctrl+Shift+C** | Toggle code editor | Yes | Yes |
+| **Ctrl+2** | Cycle view mode | Default / Prompt-Only / Content-Only | Default / Prompt-Only |
+| **Ctrl+Shift+F** | Toggle fullscreen (content-only view) | Yes | — |
+| **F11** | Toggle fullscreen | — | Yes |
+| **Escape** | Cancel current operation / exit fullscreen / close code editor | Yes | Yes |
 
 ## AI
 
-| Shortcut | Action |
-|----------|--------|
-| **Ctrl+1** | Switch to next AI provider |
+| Shortcut | Action | WPF | Avalonia |
+|----------|--------|-----|----------|
+| **Ctrl+1** | Switch to next AI provider | Yes | Yes |
 
 ## History
 
-| Shortcut | Action |
-|----------|--------|
-| **Ctrl+Shift+Z** | Undo |
-| **Ctrl+Shift+Y** | Redo (opens History Rails if ambiguous) |
+| Shortcut | Action | WPF | Avalonia |
+|----------|--------|-----|----------|
+| **Ctrl+Shift+Z** | Undo | Yes | Yes |
+| **Ctrl+Shift+Y** | Redo (opens History Rails if ambiguous) | Yes | Yes |
 
 ## History Rails Window
 
-| Shortcut | Action |
-|----------|--------|
-| **Enter** / **Double-click** | Select and apply the highlighted history node |
-| **Escape** | Close without changes |
-| **Right-drag** | Pan the history graph |
+| Shortcut | Action | WPF | Avalonia |
+|----------|--------|-----|----------|
+| **Enter** / **Double-click** | Select and apply the highlighted history node | Yes | Yes |
+| **Escape** | Close without changes | Yes | Yes |
+| **Right-drag** | Pan the history graph | Yes | Yes |

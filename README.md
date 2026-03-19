@@ -26,10 +26,26 @@ N.E.O. is a .NET desktop application that lets you create small, ready-to-use ut
 - AI image generation, image analysis, speech-to-text, and text-to-speech as built-in capabilities
 - Optional Python integration via embedded Python 3.11
 
+## Cross-Platform
+
+N.E.O. ships with two host applications:
+
+| Host | Project | Platform | Solution |
+|------|---------|----------|----------|
+| **WPF host** | `Neo.App` | Windows only | `neo.sln` |
+| **Avalonia host** | `Neo.App.Avalonia` | Windows, Linux, macOS | `neo-avalonia.sln` |
+
+Both hosts share the same core logic (`Neo.App.Core`), AI agents, compilation pipeline, and IPC layer. The difference is the host UI framework:
+
+- **WPF host** — The original host. Side-by-side layout with an embedded Live Preview panel. Includes the visual designer, sandbox security (AppContainer), and full code editor with syntax highlighting (AvalonEdit).
+- **Avalonia host** — Cross-platform port. Single-column layout with chat and prompt area. The Live Preview runs in a separate window with magnetic docking (snaps to the edge of the main window). Code editor is available but without syntax highlighting.
+
+Choose the host that matches your platform. On Windows, either host works.
+
 ## Prerequisites
 
 - [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) or later (change `NeoNetMajor` in `Directory.Build.props` to match your version)
-- Windows 10/11 (the host application is WPF-based)
+- Windows 10/11 required only for the WPF host (`Neo.App`); the Avalonia host (`Neo.App.Avalonia`) runs on Windows, Linux, and macOS
 - At least one AI provider (see API Keys below)
 
 ## API Keys
@@ -49,9 +65,16 @@ Example (Windows PowerShell):
 [Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-...", "User")
 ```
 
+Example (Linux / macOS — add to `~/.bashrc` or `~/.zshrc`):
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
 On first launch, N.E.O. will prompt you to set up your keys if none are found. Use **Ctrl+1** to cycle through available AI providers at any time.
 
 ## Building
+
+### Windows (full solution, includes WPF host)
 
 ```bash
 git clone https://github.com/hf75/N.E.O.git
@@ -60,12 +83,33 @@ dotnet restore neo.sln
 dotnet build neo.sln
 ```
 
+### Cross-platform (Avalonia host only)
+
+```bash
+git clone https://github.com/hf75/N.E.O.git
+cd N.E.O
+dotnet restore neo-avalonia.sln
+dotnet build neo-avalonia.sln
+```
+
 The solution is fully self-contained — all dependencies (including the agent libraries) are included in the repository.
+
+## Running
+
+```bash
+# WPF host (Windows only)
+dotnet run --project Neo.App
+
+# Avalonia host (Windows, Linux, macOS)
+dotnet run --project Neo.App.Avalonia
+```
 
 ## Architecture
 
 ```
-Neo.App (WPF Host)
+Neo.App (WPF Host, Windows)  ─┐
+                               ├── Neo.App.Core (shared logic)
+Neo.App.Avalonia (Cross-plat) ─┘       |
   |-- Neo.Agents.Claude / OpenAI / Gemini / Ollama / LmStudio (AI code generation)
   |-- Neo.Agents.GeminiImageGen (AI image generation)
   |-- Neo.Agents.OpenAIWhisper (Speech-to-Text)

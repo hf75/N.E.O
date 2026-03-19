@@ -2,9 +2,11 @@
 
 **AI-powered desktop application builder** — describe what you want in natural language, and N.E.O. generates, compiles, and runs it in real time.
 
+N.E.O. runs on **Windows, Linux, and macOS** via its Avalonia-based host, or on Windows with its original WPF-based host.
+
 ## What is N.E.O.?
 
-N.E.O. is a .NET desktop application that lets you create desktop apps through natural language prompts. It uses AI (Claude, ChatGPT, Gemini, or local models) to generate C# code, compiles it at runtime using Roslyn, and displays the result in a sandboxed child process.
+N.E.O. is a .NET desktop application that lets you create desktop apps through natural language prompts. It uses AI (Claude, ChatGPT, Gemini, or local models) to generate C# code, compiles it at runtime using Roslyn, and displays the result in a child process.
 
 ## Quick Links
 
@@ -20,13 +22,22 @@ N.E.O. is a .NET desktop application that lets you create desktop apps through n
 
 ```
 You type a prompt
-    → AI generates C# code
-        → Roslyn compiles it to a DLL
-            → DLL is streamed to a sandboxed child process
-                → Your app appears in real time
+    -> AI generates C# code
+        -> Roslyn compiles it to a DLL
+            -> DLL is streamed to a child process via named pipes
+                -> Your app appears in real time
 ```
 
 Each iteration builds on the previous one. Ask for changes, and the AI sends a patch — no full rewrite needed.
+
+## Two Host Applications
+
+| Host | Project | Platform | Solution |
+|------|---------|----------|----------|
+| **WPF host** | `Neo.App` | Windows | `neo.sln` |
+| **Avalonia host** | `Neo.App.Avalonia` | Windows, Linux, macOS | `neo-avalonia.sln` |
+
+Both hosts share the same core engine (`Neo.App.Core`), AI agents, compilation pipeline, and IPC layer. Choose the one that matches your platform.
 
 ## Supported UI Frameworks
 

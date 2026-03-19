@@ -3,12 +3,19 @@
 ## Prerequisites
 
 - [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) or later
-- Windows 10/11 (the host application is WPF-based)
 - An API key for at least one AI provider, **or** a local model server (Ollama / LM Studio)
+
+**Platform requirements:**
+- **WPF host** (`Neo.App`): Windows 10/11
+- **Avalonia host** (`Neo.App.Avalonia`): Windows, Linux, or macOS
 
 > **Tip:** To use a different .NET version (e.g. .NET 10), change `NeoNetMajor` in `Directory.Build.props` at the solution root.
 
 ## 1. Clone and Build
+
+There are two solution files. Use the one that matches your platform:
+
+### Windows (full solution, includes WPF host)
 
 ```bash
 git clone https://github.com/hf75/N.E.O.git
@@ -16,18 +23,40 @@ cd N.E.O
 dotnet build neo.sln
 ```
 
+### Cross-platform (Avalonia host only)
+
+```bash
+git clone https://github.com/hf75/N.E.O.git
+cd N.E.O
+dotnet build neo-avalonia.sln
+```
+
 The solution is fully self-contained — all dependencies are included in the repository.
 
 ## 2. Configure an AI Provider
 
-N.E.O. reads API keys from **Windows user environment variables**. Set at least one:
+N.E.O. reads API keys from **environment variables**. Set at least one:
+
+### Windows (PowerShell)
 
 ```powershell
-# PowerShell (pick one or more)
+# Pick one or more
 [Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-...", "User")
 [Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "sk-...", "User")
 [Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "AI...", "User")
 ```
+
+### Linux / macOS (Bash)
+
+Add to your `~/.bashrc`, `~/.zshrc`, or equivalent:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+export OPENAI_API_KEY="sk-..."
+export GEMINI_API_KEY="AI..."
+```
+
+Then reload your shell (`source ~/.bashrc`) or open a new terminal.
 
 Or use the **built-in setup wizard** — if no keys are detected on first launch, N.E.O. will open a setup window where you can enter your keys directly.
 
@@ -42,10 +71,14 @@ If you prefer to run models locally:
 ## 3. Run
 
 ```bash
+# WPF host (Windows only)
 dotnet run --project Neo.App
+
+# Avalonia host (Windows, Linux, macOS)
+dotnet run --project Neo.App.Avalonia
 ```
 
-Or open `neo.sln` in Visual Studio / Rider and press F5.
+Or open the appropriate solution file (`neo.sln` or `neo-avalonia.sln`) in Visual Studio / Rider and press F5.
 
 ## 4. Your First Prompt
 

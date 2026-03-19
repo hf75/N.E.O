@@ -2,26 +2,50 @@
 
 ## The Interface
 
-N.E.O.'s main window is divided into three areas:
+N.E.O. has two host applications with different layouts:
+
+### WPF Host (Windows)
 
 ```
-┌─────────────────────┬──────────────────────┐
-│                     │                      │
-│   Chat History      │   Live Preview       │
-│                     │   (Generated App)    │
-│                     │                      │
-├─────────────────────┤                      │
-│   [Toolbar Buttons] │                      │
-├─────────────────────┤                      │
-│   Prompt Input      │                      │
-│                     │                      │
-└─────────────────────┴──────────────────────┘
++---------------------+----------------------+
+|                     |                      |
+|   Chat History      |   Live Preview       |
+|                     |   (Generated App)    |
+|                     |                      |
++---------------------+                      |
+|   [Toolbar Buttons] |                      |
++---------------------+                      |
+|   Prompt Input      |                      |
+|                     |                      |
++---------------------+----------------------+
 ```
 
-- **Chat History** (top-left): Shows your prompts, AI responses, and system messages
-- **Toolbar** (center): Action buttons for all features
-- **Prompt Input** (bottom-left): Type your prompts here
-- **Live Preview** (right): Your generated application, running in real time
+The WPF host uses a side-by-side layout with the Live Preview embedded in the right half of the main window.
+
+### Avalonia Host (Cross-Platform)
+
+```
++---------------------+     +------------------+
+|                     |     |                  |
+|   Chat History      |     |  Live Preview    |
+|                     |     |  (Separate       |
++---------------------+     |   Window)        |
+|   [Toolbar Buttons] |     |                  |
++---------------------+     |                  |
+|   Prompt Input      |     |                  |
+|                     |     |                  |
++---------------------+     +------------------+
+      Main Window             Preview Window
+```
+
+The Avalonia host uses a single-column layout. The Live Preview runs in a **separate window** with magnetic docking — it automatically snaps to the edge of the main window when dragged nearby.
+
+### Common Elements
+
+- **Chat History**: Shows your prompts, AI responses, and system messages
+- **Toolbar**: Action buttons for all features
+- **Prompt Input**: Type your prompts here
+- **Live Preview**: Your generated application, running in real time
 
 ## Toolbar Buttons
 
@@ -70,11 +94,12 @@ The AI can respond in several ways:
 
 Toggle with the **Code Editor** button or **Ctrl+Shift+C**.
 
-- Full C# syntax highlighting (AvalonEdit)
-- Line numbers
-- Direct editing of generated code
-- **Apply**: Compile and apply your changes
-- **Revert**: Discard changes
+| Feature | WPF Host | Avalonia Host |
+|---------|----------|---------------|
+| C# syntax highlighting | Yes (AvalonEdit) | No |
+| Line numbers | Yes | Yes |
+| Direct editing | Yes | Yes |
+| Apply / Revert | Yes | Yes |
 
 ## Undo/Redo History
 
@@ -88,13 +113,26 @@ When you undo and then make a new change, it creates a **branch** — your previ
 
 ## View Modes
 
+### WPF Host
+
 Cycle through view modes with **Ctrl+2**:
 
 1. **Default**: All panels visible
 2. **Prompt-Only**: Maximized prompt area, no preview
 3. **Content-Only**: Full-screen preview (also via **Ctrl+Shift+F**)
 
+### Avalonia Host
+
+Cycle through view modes with **Ctrl+2**:
+
+1. **Default**: All panels visible
+2. **Prompt-Only**: Maximized prompt area
+
+Use **F11** to toggle fullscreen mode.
+
 ## Sandbox Security
+
+> **Note:** Sandbox security is only available on the **WPF host** (Windows). The Avalonia host does not include AppContainer sandboxing.
 
 N.E.O. can run generated code in a **Windows AppContainer sandbox**:
 
