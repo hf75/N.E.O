@@ -76,19 +76,17 @@
                 </TextBox>
             </Border>
 
-            <!-- Options Hub (toolbar) — Opacity controlled manually in code-behind -->
+            <!-- Options Hub (toolbar) — Opacity controlled manually in code-behind.
+                 Override Fluent's transparent disabled colors with solid ones. -->
             <StackPanel Grid.Row="1" Orientation="Horizontal" Name="optionsHub">
-                <StackPanel.Styles>
-                    <Style Selector="Button:disabled /template/ ContentPresenter">
-                        <Setter Property="Opacity" Value="1"/>
-                    </Style>
-                    <Style Selector="ToggleButton:disabled /template/ ContentPresenter">
-                        <Setter Property="Opacity" Value="1"/>
-                    </Style>
-                    <Style Selector="StackPanel:disabled">
-                        <Setter Property="Opacity" Value="1"/>
-                    </Style>
-                </StackPanel.Styles>
+                <StackPanel.Resources>
+                    <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="White"/>
+                    <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="Black"/>
+                    <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="#CCCCCC"/>
+                    <SolidColorBrush x:Key="ToggleButtonBackgroundDisabled" Color="White"/>
+                    <SolidColorBrush x:Key="ToggleButtonForegroundDisabled" Color="Black"/>
+                    <SolidColorBrush x:Key="ToggleButtonBorderBrushDisabled" Color="#CCCCCC"/>
+                </StackPanel.Resources>
                 <!-- Import Button -->
                 <Button ToolTip.Tip="Import" Margin="8,0,0,0" Classes="minimalist"
                         Click="Button_Click_Import">
