@@ -1,6 +1,9 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Neo.App;assembly=Neo.App.Avalonia"
+        xmlns:core="clr-namespace:Neo.App;assembly=Neo.App.Core"
         x:Class="Neo.App.HistoryRailsWindow"
+        x:DataType="core:HistoryRailsViewModel"
         Title="History"
         WindowStartupLocation="CenterOwner"
         Width="980" Height="560"
@@ -17,15 +20,15 @@
         <StackPanel Grid.Row="0" Orientation="Vertical" Margin="0,0,0,10">
             <TextBlock Text="History Rails" FontSize="20" FontWeight="Bold"/>
             <TextBlock Foreground="#666" TextWrapping="Wrap"
-                       Text="Click a node to select. Enter or double-click to checkout. Esc closes without changes."/>
+                       Text="Click a node to select. Enter or double-click to checkout. Right-drag pans. Esc closes."/>
         </StackPanel>
 
         <Border Grid.Row="1" CornerRadius="10" BorderBrush="#DDD" BorderThickness="1"
-                Background="White">
-            <!-- Placeholder for RailsGraphControl - using a simple TextBlock for now -->
-            <TextBlock x:Name="GraphPlaceholder" Text="History graph visualization"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                       Foreground="#999"/>
+                Background="White" ClipToBounds="True">
+            <local:RailsGraphControl x:Name="Graph"
+                                     Root="{Binding Root}"
+                                     Current="{Binding Current}"
+                                     Selected="{Binding Selected, Mode=TwoWay}"/>
         </Border>
 
         <DockPanel Grid.Row="2" Margin="0,10,0,0">
