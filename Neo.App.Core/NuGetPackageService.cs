@@ -39,7 +39,9 @@ namespace Neo.App
                 var agentLoader = new NuGetPackageLoaderAgent();
                 agentLoader.SetInput("PackageNames", packages);
                 agentLoader.SetInput("OutputDirectory", _nuGetPackageDirectory);
-                agentLoader.SetInput("TargetFramework", $"net{Environment.Version.Major}.0-windows");
+                agentLoader.SetInput("TargetFramework", OperatingSystem.IsWindows()
+                    ? $"net{Environment.Version.Major}.0-windows"
+                    : $"net{Environment.Version.Major}.0");
 
                 await agentLoader.ExecuteAsync();
 

@@ -407,7 +407,9 @@ namespace Neo.App
                 NuGetPackageDirectory = NuGetPackageDirectory,
                 OutputDllPath = DllPath,
                 ReferenceAssemblyDirectories = referenceDirs,
-                TargetFramework = $"net{Environment.Version.Major}.0-windows",
+                TargetFramework = OperatingSystem.IsWindows()
+                    ? $"net{Environment.Version.Major}.0-windows"
+                    : $"net{Environment.Version.Major}.0",
                 AdditionalReferenceDllPaths = AdditionalDlls,
                 AssemblyName = "DynamicUserControl",
             };
