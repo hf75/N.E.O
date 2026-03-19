@@ -118,6 +118,13 @@ namespace Neo.App
 
         private async void MainWindow_Loaded(object? sender, RoutedEventArgs e)
         {
+            // Force UseAvalonia BEFORE AppController constructor, because
+            // the constructor calls RecreatePromptToDllSession which reads
+            // Settings.UseAvalonia to select the correct base code template.
+            var preSettings = SettingsService.Load();
+            preSettings.UseAvalonia = true;
+            SettingsService.Save(preSettings);
+
             _appController = new AppController(this);
 
             if (_appController.AvailableAgents.Count == 0)
@@ -135,9 +142,6 @@ namespace Neo.App
 
                 titleBase = Title;
                 Title = titleBase + " " + $"[{_appController.AiAgent?.Name}]";
-
-                // Avalonia host always generates Avalonia code
-                _appController.Settings.UseAvalonia = true;
 
                 CrossplatformSettings cps = new CrossplatformSettings()
                 {
