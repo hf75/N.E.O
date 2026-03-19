@@ -14,40 +14,24 @@ namespace Neo.App.Views
         public ColorPickerDialog(string initialColor)
         {
             InitializeComponent();
-            ColorInput.Text = initialColor;
-            UpdatePreview(initialColor);
-        }
 
-        private void ColorInput_TextChanged(object? sender, TextChangedEventArgs e)
-        {
-            UpdatePreview(ColorInput.Text ?? "");
-        }
-
-        private void UpdatePreview(string colorText)
-        {
-            try
+            if (!string.IsNullOrWhiteSpace(initialColor))
             {
-                if (!string.IsNullOrWhiteSpace(colorText))
+                try
                 {
-                    ColorPreview.Background = SolidColorBrush.Parse(colorText);
-                    return;
+                    var color = Color.Parse(initialColor);
+                    ColorPicker.Color = color;
                 }
-            }
-            catch { }
-            ColorPreview.Background = Brushes.Transparent;
-        }
-
-        private void Swatch_Click(object? sender, RoutedEventArgs e)
-        {
-            if (sender is Button btn && btn.Tag is string color)
-            {
-                ColorInput.Text = color;
+                catch { /* invalid color string — use default */ }
             }
         }
 
         private void Ok_Click(object? sender, RoutedEventArgs e)
         {
-            SelectedColor = ColorInput.Text?.Trim();
+            var c = ColorPicker.Color;
+            SelectedColor = c.A == 255
+                ? $"#{c.R:X2}{c.G:X2}{c.B:X2}"
+                : $"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}";
             Confirmed = true;
             Close();
         }

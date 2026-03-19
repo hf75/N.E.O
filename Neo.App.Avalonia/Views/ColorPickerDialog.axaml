@@ -2,54 +2,15 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Neo.App.Views.ColorPickerDialog"
         Title="Pick a Color"
-        Width="320" SizeToContent="Height"
+        Width="380" SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
     <StackPanel Margin="16" Spacing="12">
-        <TextBlock Text="Enter a color (hex or name):" FontSize="14"/>
-
-        <TextBox x:Name="ColorInput" Padding="4" FontFamily="Consolas, monospace"
-                 FontSize="16" TextChanged="ColorInput_TextChanged"/>
-
-        <Border x:Name="ColorPreview" Height="48" CornerRadius="8"
-                BorderBrush="#D0D7DE" BorderThickness="1" Background="Transparent"/>
-
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="8"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-
-            <!-- Common colors -->
-            <WrapPanel Grid.Column="0" Grid.ColumnSpan="3" HorizontalAlignment="Center">
-                <Button Classes="minimalist" Width="28" Height="28" Margin="2" Background="Black"
-                        Tag="Black" Click="Swatch_Click"/>
-                <Button Classes="minimalist" Width="28" Height="28" Margin="2" Background="White"
-                        Tag="White" Click="Swatch_Click"/>
-                <Button Classes="minimalist" Width="28" Height="28" Margin="2" Background="Red"
-                        Tag="Red" Click="Swatch_Click"/>
-                <Button Classes="minimalist" Width="28" Height="28" Margin="2" Background="#FF6600"
-                        Tag="#FF6600" Click="Swatch_Click"/>
-                <Button Classes="minimalist" Width="28" Height="28" Margin="2" Background="Yellow"
-                        Tag="Yellow" Click="Swatch_Click"/>
-                <Button Classes="minimalist" Width="28" Height="28" Margin="2" Background="Green"
-                        Tag="Green" Click="Swatch_Click"/>
-                <Button Classes="minimalist" Width="28" Height="28" Margin="2" Background="#4A90E2"
-                        Tag="#4A90E2" Click="Swatch_Click"/>
-                <Button Classes="minimalist" Width="28" Height="28" Margin="2" Background="Blue"
-                        Tag="Blue" Click="Swatch_Click"/>
-                <Button Classes="minimalist" Width="28" Height="28" Margin="2" Background="Purple"
-                        Tag="Purple" Click="Swatch_Click"/>
-                <Button Classes="minimalist" Width="28" Height="28" Margin="2" Background="Gray"
-                        Tag="Gray" Click="Swatch_Click"/>
-                <Button Classes="minimalist" Width="28" Height="28" Margin="2" Background="LightGray"
-                        Tag="LightGray" Click="Swatch_Click"/>
-                <Button Classes="minimalist" Width="28" Height="28" Margin="2" Background="Transparent"
-                        Tag="Transparent" Click="Swatch_Click"/>
-            </WrapPanel>
-        </Grid>
+        <ColorView x:Name="ColorPicker" IsAlphaVisible="True"
+                   IsColorSpectrumVisible="True"
+                   IsColorComponentsVisible="True"
+                   IsHexInputVisible="True"/>
 
         <Grid>
             <Grid.ColumnDefinitions>
