@@ -22,14 +22,19 @@ namespace Neo.App
 
         public async Task<string?> CompileToDllAsync(List<string> codes, string dllOutputPath, List<string> nugetDllPaths, List<string> additionalDlls)
         {
-            if (string.IsNullOrEmpty(_coreRefPath) || string.IsNullOrEmpty(_desktopRefPath))
+            if (string.IsNullOrEmpty(_coreRefPath))
             {
+                System.Diagnostics.Debug.WriteLine("[CompilationService] _coreRefPath is null/empty — cannot compile.");
                 return null;
             }
 
+            var refPaths = new List<string> { _coreRefPath };
+            if (!string.IsNullOrEmpty(_desktopRefPath))
+                refPaths.Add(_desktopRefPath);
+
             var agent = new CSharpDllCompileAgent();
 
-            agent.SetOption("CoreDllPath", new List<string> { _coreRefPath, _desktopRefPath });
+            agent.SetOption("CoreDllPath", refPaths);
 
             agent.SetInput("Code", codes);
             agent.SetInput("DllOutputPath", dllOutputPath);
