@@ -158,7 +158,7 @@
                 <!-- Clear Button -->
                 <Button ToolTip.Tip="Clear" Margin="8,0,0,0" Classes="minimalist"
                         Click="Button_Click_Clear">
-                    <PathIcon Width="10" Height="10" Data="M1 1 L9 9 M9 1 L1 9"/>
+                    <TextBlock Text="✕" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Button>
             </StackPanel>
         </Grid>
