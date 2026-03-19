@@ -768,6 +768,7 @@ namespace Neo.App
             finally
             {
                 Debug.WriteLine("[ClearSession] Finally: starting cleanup");
+                ChildProcessService.ShowChild();
                 _view.ActivateWindow();
                 _view.PromptText = string.Empty;
                 _view.FocusPrompt();
