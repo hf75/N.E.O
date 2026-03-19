@@ -41,14 +41,18 @@ namespace Neo.App.Views
             var openai = (TxtOpenAI.Text ?? "").Trim();
             var gemini = (TxtGemini.Text ?? "").Trim();
 
+            var target = OperatingSystem.IsWindows()
+                ? EnvironmentVariableTarget.User
+                : EnvironmentVariableTarget.Process;
+
             if (anthropic.Length > 0)
-                Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", anthropic, EnvironmentVariableTarget.User);
+                Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", anthropic, target);
 
             if (openai.Length > 0)
-                Environment.SetEnvironmentVariable("OPENAI_API_KEY", openai, EnvironmentVariableTarget.User);
+                Environment.SetEnvironmentVariable("OPENAI_API_KEY", openai, target);
 
             if (gemini.Length > 0)
-                Environment.SetEnvironmentVariable("GEMINI_API_KEY", gemini, EnvironmentVariableTarget.User);
+                Environment.SetEnvironmentVariable("GEMINI_API_KEY", gemini, target);
 
             KeysSaved = true;
             Close();

@@ -56,9 +56,9 @@ namespace Neo.App
             this.DataContext = _workingCopy;
             AttemptsTextBox.Text = _workingCopy.AiCodeGenerationAttempts.ToString();
 
-            _anthropicKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY", EnvironmentVariableTarget.User);
-            _openAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY", EnvironmentVariableTarget.User);
-            _geminiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY", EnvironmentVariableTarget.User);
+            _anthropicKey = AppController.GetEnvVar("ANTHROPIC_API_KEY");
+            _openAiKey = AppController.GetEnvVar("OPENAI_API_KEY");
+            _geminiKey = AppController.GetEnvVar("GEMINI_API_KEY");
 
             if (!string.IsNullOrWhiteSpace(_anthropicKey))
             {
@@ -140,8 +140,7 @@ namespace Neo.App
                         {
                             if (plugin.RequiredEnvVar != null)
                             {
-                                var key = Environment.GetEnvironmentVariable(
-                                    plugin.RequiredEnvVar, EnvironmentVariableTarget.User);
+                                var key = AppController.GetEnvVar(plugin.RequiredEnvVar);
                                 if (string.IsNullOrWhiteSpace(key))
                                     continue;
                             }
@@ -219,7 +218,7 @@ namespace Neo.App
                     var currentModel = _workingCopy.PluginAgentModels.TryGetValue(plugin.SettingsKey, out var pm)
                         ? pm : plugin.DefaultModel;
                     var envVal = plugin.RequiredEnvVar != null
-                        ? Environment.GetEnvironmentVariable(plugin.RequiredEnvVar, EnvironmentVariableTarget.User)
+                        ? AppController.GetEnvVar(plugin.RequiredEnvVar)
                         : null;
                     var capturedPlugin = plugin;
                     tasks.Add(LoadModelsAsync(comboBox, currentModel,

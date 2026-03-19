@@ -154,7 +154,7 @@ namespace Neo.App
 
             var systemMessage = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython, PluginAgents);
 
-            var openAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY", EnvironmentVariableTarget.User);
+            var openAiKey = GetEnvVar("OPENAI_API_KEY");
             if (!string.IsNullOrWhiteSpace(openAiKey))
             {
                 ChatGPT = new OpenAiTextChatAgent();
@@ -166,7 +166,7 @@ namespace Neo.App
                 AvailableAgents.Add(ChatGPT);
             }
 
-            var anthropicKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY", EnvironmentVariableTarget.User);
+            var anthropicKey = GetEnvVar("ANTHROPIC_API_KEY");
             if (!string.IsNullOrWhiteSpace(anthropicKey))
             {
                 Claude = new AnthropicTextChatAgent();
@@ -178,7 +178,7 @@ namespace Neo.App
                 AvailableAgents.Add(Claude);
             }
 
-            var geminiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY", EnvironmentVariableTarget.User);
+            var geminiKey = GetEnvVar("GEMINI_API_KEY");
             if (!string.IsNullOrWhiteSpace(geminiKey))
             {
                 Gemini = new GeminiTextChatAgent();
@@ -300,8 +300,7 @@ namespace Neo.App
                         {
                             if (plugin.RequiredEnvVar != null)
                             {
-                                var key = Environment.GetEnvironmentVariable(
-                                    plugin.RequiredEnvVar, EnvironmentVariableTarget.User);
+                                var key = GetEnvVar(plugin.RequiredEnvVar);
                                 if (string.IsNullOrWhiteSpace(key))
                                     continue;
                             }
@@ -615,7 +614,7 @@ namespace Neo.App
             Ollama = null;
             LmStudio = null;
 
-            var openAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY", EnvironmentVariableTarget.User);
+            var openAiKey = GetEnvVar("OPENAI_API_KEY");
             if (!string.IsNullOrWhiteSpace(openAiKey))
             {
                 ChatGPT = new OpenAiTextChatAgent();
@@ -627,7 +626,7 @@ namespace Neo.App
                 AvailableAgents.Add(ChatGPT);
             }
 
-            var anthropicKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY", EnvironmentVariableTarget.User);
+            var anthropicKey = GetEnvVar("ANTHROPIC_API_KEY");
             if (!string.IsNullOrWhiteSpace(anthropicKey))
             {
                 Claude = new AnthropicTextChatAgent();
@@ -639,7 +638,7 @@ namespace Neo.App
                 AvailableAgents.Add(Claude);
             }
 
-            var geminiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY", EnvironmentVariableTarget.User);
+            var geminiKey = GetEnvVar("GEMINI_API_KEY");
             if (!string.IsNullOrWhiteSpace(geminiKey))
             {
                 Gemini = new GeminiTextChatAgent();
@@ -2411,6 +2410,22 @@ namespace Neo.App
         {
             return VirtualProjectFiles?.GetFileContent("./currentcode.cs")
                 ?? AppState.LastCode;
+        }
+
+        /// <summary>
+        /// Cross-platform environment variable lookup.
+        /// On Windows: tries User-level (registry) first, falls back to Process.
+        /// On Linux/macOS: reads from Process (shell environment).
+        /// </summary>
+        internal static string? GetEnvVar(string name)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var value = Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+            return Environment.GetEnvironmentVariable(name);
         }
     }
 }
