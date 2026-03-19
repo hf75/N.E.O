@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using AvaloniaEdit;
@@ -9,7 +10,6 @@ namespace Neo.App.Views
     public partial class CodeEditorWindow : Window
     {
         private string _initialCode;
-        private bool _editorInitialized;
 
         public string? EditedCode { get; private set; }
         public bool Applied { get; private set; }
@@ -21,20 +21,21 @@ namespace Neo.App.Views
             _initialCode = currentCode;
             EditedCode = currentCode;
             InitializeComponent();
-        }
 
-        private void CodeEditor_AttachedToVisualTree(object? sender, global::Avalonia.VisualTreeAttachmentEventArgs e)
-        {
-            if (_editorInitialized) return;
-            _editorInitialized = true;
+            // Defer initialization to after layout is complete
+            codeEditor.Loaded += (_, _) =>
+            {
+                try
+                {
+                    var registryOptions = new RegistryOptions(ThemeName.LightPlus);
+                    var installation = codeEditor.InstallTextMate(registryOptions);
+                    installation.SetGrammar(registryOptions.GetScopeByLanguageId("csharp"));
+                }
+                catch { /* TextMate optional */ }
 
-            // TextMate syntax highlighting
-            var registryOptions = new RegistryOptions(ThemeName.LightPlus);
-            var installation = codeEditor.InstallTextMate(registryOptions);
-            installation.SetGrammar(registryOptions.GetScopeByLanguageId("csharp"));
-
-            // Set text AFTER TextMate is installed so colors apply immediately
-            codeEditor.Text = _initialCode;
+                codeEditor.Text = _initialCode;
+                codeEditor.ScrollToLine(1);
+            };
         }
 
         private void Apply_Click(object? sender, RoutedEventArgs e)
