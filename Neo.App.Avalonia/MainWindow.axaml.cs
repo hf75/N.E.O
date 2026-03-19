@@ -695,7 +695,7 @@ namespace Neo.App
                 _designerPropertiesWindow = new DesignerPropertiesWindow();
                 _designerPropertiesWindow.ApplyRequested += applyHandler;
                 _designerPropertiesWindow.Closed += (_, _) => _designerPropertiesWindow = null;
-                _designerPropertiesWindow.Show();
+                _designerPropertiesWindow.Show(this);
             }
 
             _designerPropertiesWindow.SetSelection(selection);
