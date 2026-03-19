@@ -111,14 +111,14 @@
                     </Grid.ColumnDefinitions>
 
                     <Button Grid.Column="0" x:Name="CancelButton" Classes="rounded"
-                            Padding="10,6" HorizontalAlignment="Center"
+                            HorizontalAlignment="Stretch" Margin="0,0,4,0"
                             Content="Cancel" Click="Cancel_Click"/>
                     <Button Grid.Column="1" x:Name="CreateButton" Classes="rounded"
-                            Padding="10,6" HorizontalAlignment="Center"
+                            HorizontalAlignment="Stretch" Margin="4,0"
                             Content="Export"
                             Click="ExportProject_Click" IsEnabled="False"/>
                     <Button Grid.Column="2" x:Name="SaveAsButton" Classes="rounded"
-                            Padding="10,6" HorizontalAlignment="Center"
+                            HorizontalAlignment="Stretch" Margin="4,0,0,0"
                             Content="Save as"
                             Click="SaveAsButton_Click" IsEnabled="False"/>
                 </Grid>
