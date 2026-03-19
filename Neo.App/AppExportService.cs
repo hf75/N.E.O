@@ -244,12 +244,17 @@ namespace Neo.App
                     .ToList();
             }
 
+            // Avalonia cross-platform exports use CONSOLE (not WINDOWS)
+            string compileType = data.ExportSettings.Cpe != CrossPlatformExport.NONE
+                ? "CONSOLE" : "WINDOWS";
+
+
             agent.SetInput("Code", codes);
             agent.SetInput("ForceNamespace", "Neo");
             agent.SetInput("OutputPath", exportPath);
             agent.SetInput("AssemblyName", assemblyName);
             agent.SetInput("NuGetDlls", data.NuGetDlls);
-            agent.SetInput("CompileType", "WINDOWS");
+            agent.SetInput("CompileType", compileType);
             agent.SetInput("AdditionalDlls", additionalDlls);
             agent.SetInput("MainTypeName", "Neo." + appNamePostfix);
             agent.SetInput("AppHostApp", Path.Combine(AppContext.BaseDirectory, "AppHostTemplates", appHostApp));

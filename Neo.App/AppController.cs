@@ -107,6 +107,8 @@ namespace Neo.App
                 var requiredNuget = GetAIQueryNuGetPackage(value.AIQueryProvider);
                 DefaultNugets.Clear();
                 DefaultNugets.Add(requiredNuget);
+                if (value.UseAvalonia)
+                    DefaultNugets.Add("Avalonia.Desktop|default");
                 if (value.UsePython)
                     DefaultNugets.Add("pythonnet|default");
 
@@ -148,6 +150,9 @@ namespace Neo.App
             }
             AdditionalDlls.Add(ResolveAppDll(GetAIQueryAgentDll(Settings.AIQueryProvider)));
             DefaultNugets.Add(GetAIQueryNuGetPackage(Settings.AIQueryProvider));
+
+            if (Settings.UseAvalonia)
+                DefaultNugets.Add("Avalonia.Desktop|default");
 
             if (Settings.UsePython)
                 DefaultNugets.Add("pythonnet|default");
