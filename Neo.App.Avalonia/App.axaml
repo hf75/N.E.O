@@ -103,12 +103,6 @@
             <Setter Property="Background" Value="#D8D8D8"/>
             <Setter Property="Opacity" Value="1"/>
         </Style>
-        <Style Selector="Button.minimalist:disabled /template/ ContentPresenter">
-            <Setter Property="Opacity" Value="1"/>
-        </Style>
-        <Style Selector="Button.minimalist:disabled">
-            <Setter Property="Opacity" Value="0.4"/>
-        </Style>
 
         <!-- Minimalist Popup Button -->
         <Style Selector="Button.popup">
@@ -148,12 +142,6 @@
             <Setter Property="Background" Value="#E6F5E6"/>
             <Setter Property="BorderBrush" Value="#70AD70"/>
             <Setter Property="Opacity" Value="1"/>
-        </Style>
-        <Style Selector="ToggleButton.minimalist:disabled /template/ ContentPresenter">
-            <Setter Property="Opacity" Value="1"/>
-        </Style>
-        <Style Selector="ToggleButton.minimalist:disabled">
-            <Setter Property="Opacity" Value="0.4"/>
         </Style>
 
         <!-- Options ToggleButton (no checked highlight) -->
