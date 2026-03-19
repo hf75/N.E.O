@@ -320,7 +320,7 @@ namespace Neo.App
                 var msg = new ParentWindowBoundsMessage(
                     pos.X, pos.Y,
                     _mainWindow.Width, _mainWindow.Height,
-                    _mainWindow.WindowState != global::Avalonia.Controls.WindowState.Minimized);
+                    _allowChildVisible && _mainWindow.WindowState != global::Avalonia.Controls.WindowState.Minimized);
 
                 await SafeSendControlAsync(new IpcEnvelope(
                     IpcTypes.ParentWindowBounds,
