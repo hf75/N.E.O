@@ -18,7 +18,9 @@ namespace Neo.App
             var rewriter = new LoopUnrollRewriter();
             var newRoot = rewriter.Visit(root);
 
-            return newRoot.NormalizeWhitespace().ToFullString();
+            // Don't use NormalizeWhitespace() — it can lose named tuple element
+            // names and break code that uses item.name, item.val, etc.
+            return newRoot.ToFullString();
         }
 
         private class LoopUnrollRewriter : CSharpSyntaxRewriter
