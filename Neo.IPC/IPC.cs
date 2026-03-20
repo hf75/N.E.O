@@ -47,6 +47,7 @@ namespace Neo.IPC
         public const string DesignerSelection = "DesignerSelection";
         public const string UnloadControl = "UnloadControl";
         public const string ParentWindowBounds = "ParentWindowBounds";
+        public const string ToggleChildFullScreen = "ToggleChildFullScreen";
     }
 
     public enum LogLevel

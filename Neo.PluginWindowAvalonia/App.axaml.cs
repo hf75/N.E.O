@@ -399,6 +399,29 @@ namespace Neo.PluginWindowAvalonia
                         break;
                     }
 
+                case IpcTypes.ToggleChildFullScreen:
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (MainWin.WindowState == WindowState.FullScreen)
+                            {
+                                MainWin.WindowState = WindowState.Normal;
+                                MainWin.SystemDecorations = SystemDecorations.Full;
+                            }
+                            else
+                            {
+                                MainWin.SystemDecorations = SystemDecorations.None;
+                                MainWin.WindowState = WindowState.FullScreen;
+                            }
+                        });
+
+                        await SafeSendAsync(new IpcEnvelope(
+                            IpcTypes.Ack, env.CorrelationId,
+                            Json.ToJson(new AckMessage("Fullscreen toggled."))
+                        ));
+                        break;
+                    }
+
                 case IpcTypes.UnloadControl:
                     {
                         await Dispatcher.UIThread.InvokeAsync(() =>

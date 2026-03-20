@@ -348,6 +348,15 @@ namespace Neo.App
                     return;
                 }
 
+                if (e.Key == Key.F)
+                {
+                    // Toggle child window fullscreen
+                    if (_appController?.ChildProcessService?.HasLoadedControl == true)
+                        ToggleChildFullScreen();
+                    e.Handled = true;
+                    return;
+                }
+
                 if (e.Key == Key.Z)
                 {
                     if (await _appController.Undo())
@@ -423,6 +432,12 @@ namespace Neo.App
                 _isFullScreen = true;
                 SetViewMode(ViewMode.ContentOnly);
             }
+        }
+
+        private void ToggleChildFullScreen()
+        {
+            if (_appController?.ChildProcessService is AvaloniaChildProcessService svc)
+                svc.SendToggleFullScreenAsync();
         }
 
         private void SwitchAI()

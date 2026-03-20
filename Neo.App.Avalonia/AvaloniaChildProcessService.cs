@@ -450,6 +450,14 @@ namespace Neo.App
 
         public object? CaptureChildScreenshot() => null;
 
+        public void SendToggleFullScreenAsync()
+        {
+            SafeSendControlAsync(new IpcEnvelope(
+                IpcTypes.ToggleChildFullScreen,
+                Guid.NewGuid().ToString("N"),
+                "{}")).ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnFaulted);
+        }
+
         public void HideChild()
         {
             _allowChildVisible = false;
