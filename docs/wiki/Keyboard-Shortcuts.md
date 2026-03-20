@@ -13,8 +13,8 @@
 |----------|--------|-----|----------|
 | **Ctrl+Shift+C** | Toggle code editor | Yes | Yes |
 | **Ctrl+2** | Cycle view mode | Default / Prompt-Only / Content-Only | Default / Prompt-Only |
-| **Ctrl+Shift+F** | Toggle fullscreen (content-only view) | Yes | — |
-| **F11** | Toggle fullscreen | — | Yes |
+| **Ctrl+Shift+F** | Toggle fullscreen | WPF: content-only view | Avalonia: Live Preview fullscreen |
+| **F11** | Toggle main window fullscreen | — | Yes |
 | **Escape** | Cancel current operation / exit fullscreen / close code editor | Yes | Yes |
 
 ## AI

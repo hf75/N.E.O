@@ -42,11 +42,13 @@
 2. Try a simple prompt like "Create a button that says Hello"
 3. If the problem persists, check that no antivirus is blocking the child process
 
-## Hotkey Ctrl+Shift+F Not Working
+## Hotkey Ctrl+Shift+F Not Working (WPF Host Only)
 
-**Cause:** Another application has registered the same global hotkey.
+**Cause:** Another application has registered the same global hotkey. This only affects the WPF host which uses a Windows global hotkey.
 
 **Fix:** Close the conflicting application or use the toolbar/Ctrl+2 to switch view modes instead.
+
+**Note:** The Avalonia host uses F11 for main window fullscreen and Ctrl+Shift+F for Live Preview fullscreen — these do not use global hotkeys and should always work.
 
 ## Python Mode: "Python runtime not found"
 
