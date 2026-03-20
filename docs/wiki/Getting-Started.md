@@ -93,9 +93,9 @@ N.E.O. will:
 2. Receive generated C# code
 3. Download any required NuGet packages
 4. Compile the code with Roslyn
-5. Display the result in the preview panel
+5. Display the result in the Live Preview (embedded panel in WPF, separate window in Avalonia)
 
-The entire process takes a few seconds.
+The entire process takes a few seconds. On the first run, NuGet packages are downloaded which may take longer.
 
 ## 5. Iterate
 

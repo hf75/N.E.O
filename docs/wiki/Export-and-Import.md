@@ -9,7 +9,7 @@ Click the **Export** button in the toolbar to open the Export Dialog.
 - **Project Name**: Name for your exported application
 - **Output Directory**: Where to save the exported files
 - **Custom Icon**: Optional `.ico` file for the executable
-- **Shortcuts**: Create Windows Start Menu and/or Desktop shortcuts
+- **Shortcuts**: Create Windows Start Menu and/or Desktop shortcuts (WPF host only)
 
 ### What Gets Exported
 
@@ -28,7 +28,30 @@ When using Avalonia mode, you can export for multiple platforms:
 | Linux (linux-x64) | Binary executable |
 | macOS (osx-arm64) | Binary executable |
 
-Each platform gets its own AppHost template bundled with the project.
+Each platform gets its own AppHost template bundled with the project. The export dialog automatically selects the current platform as the default target.
+
+### Running Exported Apps
+
+**Windows:**
+Double-click the `.exe` file, or run from a terminal:
+```bash
+.\MyApp.exe
+```
+
+**Linux:**
+```bash
+chmod +x ./MyApp
+./MyApp
+```
+Or alternatively: `dotnet ./MyApp.dll`
+
+**macOS:**
+```bash
+chmod +x ./MyApp
+./MyApp
+```
+
+All exported apps require the [.NET Runtime](https://dotnet.microsoft.com/download/dotnet/9.0) (not the SDK) installed on the target machine.
 
 ### Export Size
 
