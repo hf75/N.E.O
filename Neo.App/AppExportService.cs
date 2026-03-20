@@ -256,6 +256,7 @@ namespace Neo.App
             string compileType = data.ExportSettings.UseAvalonia ? "CONSOLE" : "WINDOWS";
 
 
+
             agent.SetInput("Code", codes);
             agent.SetInput("ForceNamespace", "Neo");
             agent.SetInput("OutputPath", exportPath);

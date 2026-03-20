@@ -47,7 +47,7 @@
                                Text="The project path appears here."/>
 
                     <!-- Cross-platform Export -->
-                    <Grid Name="crossPlattformExport" Margin="0,0,0,6" IsVisible="False">
+                    <Grid Name="crossPlattformExport" Margin="0,0,0,6" IsVisible="True">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="*"/>

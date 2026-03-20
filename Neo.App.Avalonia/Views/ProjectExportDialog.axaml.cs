@@ -46,6 +46,18 @@ namespace Neo.App
             if (_settings != null && !string.IsNullOrWhiteSpace(_settings.ExportBasePath))
                 BasePathTextBox.Text = _settings.ExportBasePath;
 
+            // Pre-select export target based on current platform
+            if (OperatingSystem.IsLinux())
+            {
+                targetWin.IsChecked = false;
+                targetLinux.IsChecked = true;
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                targetWin.IsChecked = false;
+                targetOSX.IsChecked = true;
+            }
+
             _isInitializing = false;
             UpdateHintAndValidate();
         }
