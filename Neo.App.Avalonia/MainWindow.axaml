@@ -16,20 +16,25 @@
             </Grid.RowDefinitions>
 
             <!-- Cancel button (shown during long operations, centered over chat) -->
-            <Button Name="btnCancel" Grid.Row="0"
-                    IsVisible="False" ZIndex="9999"
-                    Width="48" Height="48"
-                    Padding="0"
+            <Border Grid.Row="0" IsVisible="False" ZIndex="9999" Name="btnCancelContainer"
                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                    CornerRadius="24"
-                    Background="#CC3B3B"
-                    Foreground="White"
-                    ToolTip.Tip="Cancel"
-                    Click="btnCancel_Click">
-                <TextBlock Text="✕" FontSize="18" FontWeight="Bold"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Button>
+                    CornerRadius="22" Background="#E8CC3B3B"
+                    BoxShadow="0 4 16 0 #40000000"
+                    Padding="0">
+                <Button Name="btnCancel"
+                        Background="Transparent" BorderThickness="0"
+                        Padding="20,10"
+                        Cursor="Hand"
+                        HorizontalContentAlignment="Center"
+                        Click="btnCancel_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="✕" FontSize="14" FontWeight="Bold"
+                                   Foreground="White" VerticalAlignment="Center"/>
+                        <TextBlock Text="Cancel" FontSize="14"
+                                   Foreground="White" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </Border>
 
             <!-- Repair Overlay (full-window) -->
             <Border x:Name="RepairOverlay" Grid.Row="0" Grid.RowSpan="3"

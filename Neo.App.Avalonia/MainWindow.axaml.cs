@@ -228,7 +228,7 @@ namespace Neo.App
             txtPrompt.IsEnabled = !isBusy;
             optionsHub.IsEnabled = !isBusy;
             isCycleViewLocked = isBusy;
-            btnCancel.IsVisible = isBusy && showCancel;
+            btnCancelContainer.IsVisible = isBusy && showCancel;
 
             // Yield to let Avalonia render before heavy sync operations
             await Task.Delay(1);
