@@ -138,6 +138,12 @@ namespace Neo.App
             try
             {
                 FileHelper.ClearDirectory(_appController.NuGetPackageDirectory);
+
+                // Register Avalonia DLLs from the host's bin directory instead of
+                // downloading them from NuGet. This is instant, works offline, and
+                // guarantees version consistency with the host.
+                RegisterHostAvaloniaDlls();
+
                 await _appController.PreloadMandatoryNugetPacks();
 
                 titleBase = Title;
@@ -164,6 +170,43 @@ namespace Neo.App
             catch (Exception ex)
             {
                 Debug.WriteLine($"[MainWindow_Loaded] Fatal error: {ex}");
+            }
+        }
+
+        private void RegisterHostAvaloniaDlls()
+        {
+            // Use Avalonia DLLs from the host's own bin directory instead of
+            // downloading them from NuGet. Faster, offline-capable, version-consistent.
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            var avaloniaDlls = new List<string>();
+
+            foreach (var pattern in new[] { "Avalonia*.dll", "HarfBuzzSharp*.dll",
+                "SkiaSharp*.dll", "MicroCom.Runtime.dll", "Tmds.DBus.Protocol.dll" })
+            {
+                try
+                {
+                    foreach (var dll in Directory.GetFiles(baseDir, pattern))
+                    {
+                        avaloniaDlls.Add(dll);
+                    }
+                }
+                catch { }
+            }
+
+            if (avaloniaDlls.Count > 0)
+            {
+                // Add to AppState so they're available for compilation and export
+                var existing = new HashSet<string>(
+                    _appController.AppState.NuGetDlls ?? new List<string>(),
+                    StringComparer.OrdinalIgnoreCase);
+
+                foreach (var dll in avaloniaDlls)
+                {
+                    if (existing.Add(dll))
+                        _appController.AppState.NuGetDlls.Add(dll);
+                }
+
+                Debug.WriteLine($"[Startup] Registered {avaloniaDlls.Count} Avalonia DLLs from host bin directory");
             }
         }
 

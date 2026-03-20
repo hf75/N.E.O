@@ -107,12 +107,8 @@ namespace Neo.App
                 var requiredNuget = GetAIQueryNuGetPackage(value.AIQueryProvider);
                 DefaultNugets.Clear();
                 DefaultNugets.Add(requiredNuget);
-                if (value.UseAvalonia)
-                {
-                    DefaultNugets.Add("Avalonia.Desktop|default");
-                    DefaultNugets.Add("Avalonia.Themes.Fluent|default");
-                    DefaultNugets.Add("Avalonia.Fonts.Inter|default");
-                }
+                // Note: Avalonia DLLs are NOT loaded from NuGet — Neo.App.Avalonia
+                // registers them from its own bin directory (RegisterHostAvaloniaDlls).
                 if (value.UsePython)
                     DefaultNugets.Add("pythonnet|default");
 
@@ -155,12 +151,8 @@ namespace Neo.App
             AdditionalDlls.Add(ResolveAppDll(GetAIQueryAgentDll(Settings.AIQueryProvider)));
             DefaultNugets.Add(GetAIQueryNuGetPackage(Settings.AIQueryProvider));
 
-            if (Settings.UseAvalonia)
-            {
-                DefaultNugets.Add("Avalonia.Desktop|default");
-                DefaultNugets.Add("Avalonia.Themes.Fluent|default");
-                DefaultNugets.Add("Avalonia.Fonts.Inter|default");
-            }
+            // Note: Avalonia DLLs are NOT loaded from NuGet — Neo.App.Avalonia
+            // registers them from its own bin directory (RegisterHostAvaloniaDlls).
 
             if (Settings.UsePython)
                 DefaultNugets.Add("pythonnet|default");
