@@ -244,9 +244,14 @@ namespace Neo.App
                     .ToList();
             }
 
-            // Avalonia cross-platform exports use CONSOLE (not WINDOWS)
-            string compileType = data.ExportSettings.Cpe != CrossPlatformExport.NONE
-                ? "CONSOLE" : "WINDOWS";
+            // Windows exports use WINDOWS (no console window on double-click).
+            // Linux/macOS exports use CONSOLE (WINDOWS OutputKind not supported).
+            string compileType = data.ExportSettings.Cpe switch
+            {
+                CrossPlatformExport.LINUX => "CONSOLE",
+                CrossPlatformExport.OSX => "CONSOLE",
+                _ => "WINDOWS",
+            };
 
 
             agent.SetInput("Code", codes);
