@@ -217,11 +217,18 @@ namespace Neo.App
             else
                 codes.Add(ExportWindowBaseCode.CreateBaseCodeForExport(assemblyName));
 
-            string appHostApp = "apphost-template-windows.exe";
-            if (data.ExportSettings.Cpe == CrossPlatformExport.LINUX )
+            // Select AppHost template: explicit target if set, otherwise current OS
+            string appHostApp;
+            if (data.ExportSettings.Cpe == CrossPlatformExport.LINUX)
                 appHostApp = "apphost-template-linux";
-            else if(data.ExportSettings.Cpe == CrossPlatformExport.OSX )
+            else if (data.ExportSettings.Cpe == CrossPlatformExport.OSX)
                 appHostApp = "apphost-template-osx";
+            else if (data.ExportSettings.Cpe == CrossPlatformExport.NONE && OperatingSystem.IsLinux())
+                appHostApp = "apphost-template-linux";
+            else if (data.ExportSettings.Cpe == CrossPlatformExport.NONE && OperatingSystem.IsMacOS())
+                appHostApp = "apphost-template-osx";
+            else
+                appHostApp = "apphost-template-windows.exe";
 
             var dllPaths = new List<string> { _coreRefPath! };
             if (!string.IsNullOrEmpty(_desktopRefPath))
