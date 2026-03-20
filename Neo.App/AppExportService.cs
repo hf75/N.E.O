@@ -249,11 +249,12 @@ namespace Neo.App
                     .ToList();
             }
 
-            // Avalonia apps use CONSOLE → Microsoft.NETCore.App in runtimeconfig (all platforms).
-            // WPF apps on Windows use WINDOWS → Microsoft.WindowsDesktop.App (no console window).
-            string compileType = data.ExportSettings.UseAvalonia ? "CONSOLE" : "WINDOWS";
-
-
+            // CompileType controls OutputKind:
+            //   WINDOWS → no console window (Windows targets)
+            //   CONSOLE → console-based (Linux/macOS targets)
+            // ForceNetCoreRuntime ensures Avalonia apps get NETCore.App (not WindowsDesktop.App)
+            bool isWindowsTarget = appHostApp.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+            string compileType = isWindowsTarget ? "WINDOWS" : "CONSOLE";
 
             agent.SetInput("Code", codes);
             agent.SetInput("ForceNamespace", "Neo");
@@ -263,6 +264,7 @@ namespace Neo.App
             agent.SetInput("CompileType", compileType);
             agent.SetInput("AdditionalDlls", additionalDlls);
             agent.SetInput("MainTypeName", "Neo." + appNamePostfix);
+            agent.SetInput("ForceNetCoreRuntime", data.ExportSettings.UseAvalonia);
             agent.SetInput("AppHostApp", Path.Combine(AppContext.BaseDirectory, "AppHostTemplates", appHostApp));
 
             await agent.ExecuteAsync();

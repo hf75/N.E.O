@@ -414,14 +414,20 @@ namespace Neo.Agents
                 throw new Exception("Kein Einstiegspunkt gefunden!");
             }
 
-            bool isWindows = appHostApp.EndsWith("windows.exe") && compileType != "CONSOLE";
+            // Determine runtime framework for runtimeconfig.json:
+            // ForceNetCoreRuntime (e.g. Avalonia apps) → always NETCore.App
+            // Otherwise: Windows AppHost + non-CONSOLE → WindowsDesktop.App
+            var forceNetCore = GetInput<bool?>("ForceNetCoreRuntime") ?? false;
+            bool useWindowsDesktopRuntime = !forceNetCore
+                && appHostApp.EndsWith("windows.exe")
+                && compileType != "CONSOLE";
 
-            CreateRuntimeConfigFile(outputPath, assemblyName, isWindows);
+            CreateRuntimeConfigFile(outputPath, assemblyName, useWindowsDesktopRuntime);
 
-            // Only generate deps.json for GUI apps. For console apps, omitting deps.json
-            // lets the .NET host probe the app base directory for all assemblies (including NuGet DLLs).
-            if (compileType != "CONSOLE")
-                CreateDepsJsonFile(outputPath, assemblyName, isWindows, nuGetDlls);
+            // Generate deps.json for GUI apps and Avalonia apps (ForceNetCoreRuntime).
+            // For pure console apps, omitting deps.json lets the host probe the app directory.
+            if (compileType != "CONSOLE" || forceNetCore)
+                CreateDepsJsonFile(outputPath, assemblyName, useWindowsDesktopRuntime, nuGetDlls);
 
             if (result.Success)
             {
@@ -449,7 +455,7 @@ namespace Neo.Agents
                             appHostDestinationFilePath: outputExePath,      // Die fertige 'CompiledWpfApp.exe'
                             appBinaryFilePath: appBinaryFileName,            // Der Name der DLL ('CompiledWpfApp.dll')
                                                                              // Optional: windowsGraphicalUserInterface: true (oft nicht nötig bei OutputKind.WindowsApplication)
-                            windowsGraphicalUserInterface: isWindows
+                            windowsGraphicalUserInterface: isWindowsAppHost
                         );
                 }
                 catch (Exception ex)
