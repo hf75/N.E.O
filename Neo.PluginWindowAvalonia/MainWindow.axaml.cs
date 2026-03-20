@@ -37,8 +37,27 @@ namespace Neo.PluginWindowAvalonia
             InitializeComponent();
             InitWaitTimer();
 
-            // Entspricht WPFs Activated; in Avalonia vorhanden.
             this.Activated += OnActivated;
+            this.KeyDown += OnKeyDown;
+        }
+
+        private void OnKeyDown(object? sender, global::Avalonia.Input.KeyEventArgs e)
+        {
+            // Escape or Ctrl+Shift+F exits fullscreen
+            if (WindowState == WindowState.FullScreen)
+            {
+                bool isEscape = e.Key == global::Avalonia.Input.Key.Escape;
+                bool isCtrlShiftF = e.Key == global::Avalonia.Input.Key.F
+                    && e.KeyModifiers.HasFlag(global::Avalonia.Input.KeyModifiers.Control)
+                    && e.KeyModifiers.HasFlag(global::Avalonia.Input.KeyModifiers.Shift);
+
+                if (isEscape || isCtrlShiftF)
+                {
+                    WindowState = WindowState.Normal;
+                    SystemDecorations = SystemDecorations.Full;
+                    e.Handled = true;
+                }
+            }
         }
 
         private void InitWaitTimer()
