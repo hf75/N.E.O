@@ -225,6 +225,7 @@ namespace Neo.App
                     _appController.AppState.NuGetDlls ?? new List<string>(),
                     StringComparer.OrdinalIgnoreCase);
 
+                _appController.AppState.NuGetDlls ??= new List<string>();
                 foreach (var dll in avaloniaDlls)
                 {
                     if (existing.Add(dll))
