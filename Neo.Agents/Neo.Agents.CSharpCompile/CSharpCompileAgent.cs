@@ -192,6 +192,11 @@ namespace Neo.Agents
                 isRequired: true,
                 description: @"The name of the entrypoint including namespace name."));
 
+            metadata.InputParameters.Add(new InputParameter<bool>(
+                name: "ForceNetCoreRuntime",
+                isRequired: false,
+                description: @"If true, forces Microsoft.NETCore.App in runtimeconfig (for Avalonia apps)."));
+
             // =========== Ausgabeparameter ===========
             metadata.OutputParameters.Add(new OutputParameter<string>(
                 name: "CompiledPath",
@@ -417,9 +422,7 @@ namespace Neo.Agents
             // Determine runtime framework for runtimeconfig.json:
             // ForceNetCoreRuntime (e.g. Avalonia apps) → always NETCore.App
             // Otherwise: Windows AppHost + non-CONSOLE → WindowsDesktop.App
-            bool forceNetCore;
-            try { forceNetCore = GetInput<bool>("ForceNetCoreRuntime"); }
-            catch { forceNetCore = false; }
+            var forceNetCore = GetInput<bool>("ForceNetCoreRuntime");
             bool useWindowsDesktopRuntime = !forceNetCore
                 && appHostApp.EndsWith("windows.exe")
                 && compileType != "CONSOLE";
