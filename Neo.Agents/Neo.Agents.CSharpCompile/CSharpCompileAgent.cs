@@ -356,8 +356,11 @@ namespace Neo.Agents
             string outputDir = outputPath;
             // Die kompilierte Assembly (enthält IL-Code und EntryPoint-Metadaten)
             string outputDllPath = Path.Combine(outputDir, $"{baseName}.dll");
-            // Der native AppHost (wird erstellt und an die DLL gebunden)
-            string outputExePath = Path.Combine(outputDir, $"{baseName}.exe");
+            // Der native AppHost — .exe on Windows, no extension on Linux/macOS
+            bool isWindowsAppHost = appHostApp.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+            string outputExePath = isWindowsAppHost
+                ? Path.Combine(outputDir, $"{baseName}.exe")
+                : Path.Combine(outputDir, baseName);
 
             if (Directory.Exists(outputPath))
             {
