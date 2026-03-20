@@ -578,7 +578,7 @@ namespace Neo.App
                     cpe = dialog.SelectedExportTarget;
                 }
 
-                ExportSettings exportSettings = new ExportSettings(cpe, _appController.Settings.UsePython);
+                ExportSettings exportSettings = new ExportSettings(cpe, _appController.Settings.UsePython, UseAvalonia: true);
 
                 await _appController.ExportProjectAsync(
                     dialog.ProjectName!,

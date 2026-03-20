@@ -9,7 +9,7 @@ using Neo.AssemblyForge;
 
 namespace Neo.App
 {
-    public record ExportSettings(CrossPlatformExport Cpe, bool UsePython);
+    public record ExportSettings(CrossPlatformExport Cpe, bool UsePython, bool UseAvalonia = false);
 
     /// <summary>
     /// Stellt das Ergebnis eines erfolgreichen Exportvorgangs dar.
@@ -212,10 +212,10 @@ namespace Neo.App
 
             List<string> codes = data.VirtualProjectFiles.GetSourceCodeAsStrings();
             
-            if( data.ExportSettings.Cpe == CrossPlatformExport.NONE )
-                codes.Add(ExportWindowBaseCode.CreateBaseCodeForExport(assemblyName));
-            else
+            if (data.ExportSettings.UseAvalonia)
                 codes.Add(ExportWindowBaseCode.CreateBaseCodeForExportAvalonia(assemblyName));
+            else
+                codes.Add(ExportWindowBaseCode.CreateBaseCodeForExport(assemblyName));
 
             string appHostApp = "apphost-template-windows.exe";
             if (data.ExportSettings.Cpe == CrossPlatformExport.LINUX )
@@ -244,14 +244,9 @@ namespace Neo.App
                     .ToList();
             }
 
-            // Windows exports use WINDOWS (no console window on double-click).
-            // Linux/macOS exports use CONSOLE (WINDOWS OutputKind not supported).
-            string compileType = data.ExportSettings.Cpe switch
-            {
-                CrossPlatformExport.LINUX => "CONSOLE",
-                CrossPlatformExport.OSX => "CONSOLE",
-                _ => "WINDOWS",
-            };
+            // Avalonia apps use CONSOLE → Microsoft.NETCore.App in runtimeconfig (all platforms).
+            // WPF apps on Windows use WINDOWS → Microsoft.WindowsDesktop.App (no console window).
+            string compileType = data.ExportSettings.UseAvalonia ? "CONSOLE" : "WINDOWS";
 
 
             agent.SetInput("Code", codes);
