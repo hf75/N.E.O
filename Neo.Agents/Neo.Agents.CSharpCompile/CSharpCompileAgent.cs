@@ -417,7 +417,9 @@ namespace Neo.Agents
             // Determine runtime framework for runtimeconfig.json:
             // ForceNetCoreRuntime (e.g. Avalonia apps) → always NETCore.App
             // Otherwise: Windows AppHost + non-CONSOLE → WindowsDesktop.App
-            var forceNetCore = GetInput<bool?>("ForceNetCoreRuntime") ?? false;
+            bool forceNetCore;
+            try { forceNetCore = GetInput<bool>("ForceNetCoreRuntime"); }
+            catch { forceNetCore = false; }
             bool useWindowsDesktopRuntime = !forceNetCore
                 && appHostApp.EndsWith("windows.exe")
                 && compileType != "CONSOLE";
