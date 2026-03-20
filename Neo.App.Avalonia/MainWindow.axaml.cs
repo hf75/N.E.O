@@ -193,9 +193,34 @@ namespace Neo.App
                 catch { }
             }
 
+            // Also include native libraries for the current platform (libSkiaSharp.so, etc.)
+            // These are in runtimes/<rid>/native/ subdirectories
+            var rid = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
+            var nativePath = Path.Combine(baseDir, "runtimes", rid, "native");
+            if (Directory.Exists(nativePath))
+            {
+                foreach (var file in Directory.GetFiles(nativePath))
+                    avaloniaDlls.Add(file);
+            }
+            else
+            {
+                // Try broader RID (e.g. linux-x64 if kali-x64 doesn't exist)
+                var arch = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLower();
+                string broadRid;
+                if (OperatingSystem.IsLinux()) broadRid = $"linux-{arch}";
+                else if (OperatingSystem.IsMacOS()) broadRid = $"osx-{arch}";
+                else broadRid = $"win-{arch}";
+
+                nativePath = Path.Combine(baseDir, "runtimes", broadRid, "native");
+                if (Directory.Exists(nativePath))
+                {
+                    foreach (var file in Directory.GetFiles(nativePath))
+                        avaloniaDlls.Add(file);
+                }
+            }
+
             if (avaloniaDlls.Count > 0)
             {
-                // Add to AppState so they're available for compilation and export
                 var existing = new HashSet<string>(
                     _appController.AppState.NuGetDlls ?? new List<string>(),
                     StringComparer.OrdinalIgnoreCase);
@@ -206,7 +231,7 @@ namespace Neo.App
                         _appController.AppState.NuGetDlls.Add(dll);
                 }
 
-                Debug.WriteLine($"[Startup] Registered {avaloniaDlls.Count} Avalonia DLLs from host bin directory");
+                Debug.WriteLine($"[Startup] Registered {avaloniaDlls.Count} Avalonia files (managed + native) from host");
             }
         }
 
