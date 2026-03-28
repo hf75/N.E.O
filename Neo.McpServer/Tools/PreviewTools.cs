@@ -24,56 +24,67 @@ public sealed class PreviewTools
         [Description("NuGet packages required. Key = package name, Value = version or 'default'. " +
             "Avalonia packages are added automatically.")] Dictionary<string, string>? nugetPackages = null)
     {
-        // Ensure Avalonia packages are included
-        var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (nugetPackages != null)
+        try
         {
-            foreach (var (key, value) in nugetPackages)
-                packages[key] = value;
-        }
-        EnsureAvaloniaPackages(packages);
-
-        // Compile
-        var result = await compilation.CompileAsync(sourceCode, packages);
-        if (!result.Success)
-        {
-            return $"COMPILATION FAILED:\n{string.Join("\n", result.Errors)}\n\n" +
-                   "Fix the errors and try again.";
-        }
-
-        // Start preview if not running
-        if (!preview.IsRunning)
-        {
-            var started = await preview.StartAsync();
-            if (!started)
+            // Sanitize NuGet packages — handle null values from JSON deserialization
+            var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (nugetPackages != null)
             {
-                return $"Compilation succeeded but preview window failed to start.\n" +
+                foreach (var (key, value) in nugetPackages)
+                {
+                    if (!string.IsNullOrWhiteSpace(key))
+                        packages[key] = string.IsNullOrWhiteSpace(value) ? "default" : value;
+                }
+            }
+            EnsureAvaloniaPackages(packages);
+
+            // Compile
+            var result = await compilation.CompileAsync(sourceCode, packages);
+            if (!result.Success)
+            {
+                return $"COMPILATION FAILED:\n{string.Join("\n", result.Errors)}\n\n" +
+                       "Fix the errors and try again.";
+            }
+
+            // Start preview if not running
+            if (!preview.IsRunning)
+            {
+                var started = await preview.StartAsync();
+                if (!started)
+                {
+                    return $"Compilation succeeded but preview window failed to start.\n" +
+                           $"Logs: {string.Join("\n", preview.ChildLogs)}";
+                }
+            }
+
+            // Load dependency DLLs as byte arrays
+            var deps = new Dictionary<string, byte[]>();
+            foreach (var dllPath in result.DependencyDllPaths)
+            {
+                if (File.Exists(dllPath))
+                    deps[Path.GetFileName(dllPath)] = await File.ReadAllBytesAsync(dllPath);
+            }
+
+            // Send to preview
+            var sent = await preview.SendDllAsync(
+                result.DllBytes!,
+                "DynamicUserControl.dll",
+                deps);
+
+            if (!sent)
+            {
+                return $"Compilation succeeded but failed to send DLL to preview window.\n" +
                        $"Logs: {string.Join("\n", preview.ChildLogs)}";
             }
-        }
 
-        // Load dependency DLLs as byte arrays
-        var deps = new Dictionary<string, byte[]>();
-        foreach (var dllPath in result.DependencyDllPaths)
+            return $"SUCCESS: App compiled and displayed in live preview window.\n" +
+                   $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}";
+        }
+        catch (Exception ex)
         {
-            if (File.Exists(dllPath))
-                deps[Path.GetFileName(dllPath)] = await File.ReadAllBytesAsync(dllPath);
+            return $"ERROR in compile_and_preview: {ex.GetType().Name}: {ex.Message}\n" +
+                   $"Stack: {ex.StackTrace?.Split('\n').FirstOrDefault()}";
         }
-
-        // Send to preview
-        var sent = await preview.SendDllAsync(
-            result.DllBytes!,
-            "DynamicUserControl.dll",
-            deps);
-
-        if (!sent)
-        {
-            return $"Compilation succeeded but failed to send DLL to preview window.\n" +
-                   $"Logs: {string.Join("\n", preview.ChildLogs)}";
-        }
-
-        return $"SUCCESS: App compiled and displayed in live preview window.\n" +
-               $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}";
     }
 
     /// <summary>
@@ -88,15 +99,20 @@ public sealed class PreviewTools
         [Description("Updated C# source code files.")] string[] sourceCode,
         [Description("NuGet packages required.")] Dictionary<string, string>? nugetPackages = null)
     {
+        try
+        {
         if (!preview.IsRunning)
             return await CompileAndPreview(compilation, preview, sourceCode, nugetPackages);
 
-        // Ensure Avalonia packages are included
+        // Sanitize NuGet packages
         var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (nugetPackages != null)
         {
             foreach (var (key, value) in nugetPackages)
-                packages[key] = value;
+            {
+                if (!string.IsNullOrWhiteSpace(key))
+                    packages[key] = string.IsNullOrWhiteSpace(value) ? "default" : value;
+            }
         }
         EnsureAvaloniaPackages(packages);
 
@@ -127,6 +143,12 @@ public sealed class PreviewTools
 
         return $"SUCCESS: Preview updated live.\n" +
                $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}";
+        }
+        catch (Exception ex)
+        {
+            return $"ERROR in update_preview: {ex.GetType().Name}: {ex.Message}\n" +
+                   $"Stack: {ex.StackTrace?.Split('\n').FirstOrDefault()}";
+        }
     }
 
     /// <summary>
