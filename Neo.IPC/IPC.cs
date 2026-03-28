@@ -50,9 +50,28 @@ namespace Neo.IPC
         public const string ToggleChildFullScreen = "ToggleChildFullScreen";
         public const string CaptureScreenshot = "CaptureScreenshot";
         public const string ScreenshotResult = "ScreenshotResult";
+        public const string SetProperty = "SetProperty";
+        public const string SetPropertyResult = "SetPropertyResult";
     }
 
     public record ScreenshotResultMessage(string Base64Png, int Width, int Height);
+
+    /// <summary>
+    /// Sets a property on a control in the running app without recompilation.
+    /// Target can be: control type ("TextBlock"), Name ("myButton"), or index ("TextBlock:0").
+    /// </summary>
+    public record SetPropertyRequest(
+        string Target,        // e.g. "TextBlock", "Button:2", or a Name/Tag
+        string PropertyName,  // e.g. "Foreground", "FontSize", "Text", "IsVisible"
+        string Value          // e.g. "Red", "#FF0000", "24", "Hello", "true"
+    );
+
+    public record SetPropertyResultMessage(
+        bool Success,
+        string Message,
+        string? OldValue = null,
+        string? NewValue = null
+    );
 
     public enum LogLevel
     {

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
+using Neo.IPC;
 using Neo.McpServer.Services;
 
 namespace Neo.McpServer.Tools;
@@ -223,6 +224,42 @@ public sealed class PreviewTools
         return $"RUNTIME ERRORS ({preview.RuntimeErrors.Count}):\n\n" +
                string.Join("\n---\n", preview.RuntimeErrors) +
                "\n\nFix the code and call update_preview to hot-reload.";
+    }
+
+    /// <summary>
+    /// Modifies a property on a running control without recompilation.
+    /// Instant change, preserves app state (scroll position, user input, timers).
+    /// </summary>
+    [McpServerTool(Name = "set_property")]
+    [Description("Changes a property on a control in the running app WITHOUT recompilation. " +
+        "Instant change that preserves app state (scroll positions, user input, timers). " +
+        "Use for visual tweaks like colors, font sizes, text, margins, visibility. " +
+        "For structural changes (adding controls, changing logic), use update_preview instead.")]
+    public static async Task<string> SetProperty(
+        PreviewSessionManager preview,
+        [Description("Target control. Can be: a Name (e.g. 'myButton'), " +
+            "a type name (e.g. 'TextBlock' for first match), " +
+            "or type:index (e.g. 'TextBlock:2' for third TextBlock).")] string target,
+        [Description("Property name, e.g. 'Foreground', 'FontSize', 'Text', 'IsVisible', 'Opacity', " +
+            "'Background', 'Margin', 'FontWeight', 'Width', 'Height'.")] string propertyName,
+        [Description("New value as string. Examples: 'Red', '#FF5500', '24', 'Hello World', 'true', " +
+            "'10,5,10,5' (for Thickness/Margin), 'Bold' (for FontWeight).")] string value)
+    {
+        if (!preview.IsRunning)
+            return "No preview is running. Call compile_and_preview first.";
+
+        var request = new SetPropertyRequest(target, propertyName, value);
+        var result = await preview.SetPropertyAsync(request);
+
+        if (result == null)
+            return "SetProperty failed: no response from preview window.";
+
+        if (!result.Success)
+            return $"SetProperty FAILED: {result.Message}";
+
+        return $"OK: {result.Message}" +
+               (result.OldValue != null ? $"\n  Old: {result.OldValue}" : "") +
+               (result.NewValue != null ? $"\n  New: {result.NewValue}" : "");
     }
 
     /// <summary>

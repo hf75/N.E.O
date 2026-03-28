@@ -257,6 +257,49 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Sets a property on a control in the running app without recompilation.
+    /// </summary>
+    public async Task<SetPropertyResultMessage?> SetPropertyAsync(
+        SetPropertyRequest request, CancellationToken ct = default)
+    {
+        if (!IsRunning || _messenger == null)
+            return new SetPropertyResultMessage(false, "No preview is running.");
+
+        var corrId = Guid.NewGuid().ToString("N");
+        var tcs = new TaskCompletionSource<IpcEnvelope>();
+        _pendingRequests[corrId] = tcs;
+
+        try
+        {
+            await SafeSendControlAsync(new IpcEnvelope(
+                IpcTypes.SetProperty, corrId, Json.ToJson(request)));
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(5));
+            cts.Token.Register(() => tcs.TrySetCanceled());
+
+            var response = await tcs.Task;
+
+            if (response.Type == IpcTypes.SetPropertyResult)
+                return Json.FromJson<SetPropertyResultMessage>(response.PayloadJson);
+
+            return new SetPropertyResultMessage(false, "Unexpected response.");
+        }
+        catch (OperationCanceledException)
+        {
+            return new SetPropertyResultMessage(false, "SetProperty timed out.");
+        }
+        catch (Exception ex)
+        {
+            return new SetPropertyResultMessage(false, $"SetProperty failed: {ex.Message}");
+        }
+        finally
+        {
+            _pendingRequests.TryRemove(corrId, out _);
+        }
+    }
+
+    /// <summary>
     /// Closes the preview window and cleans up.
     /// </summary>
     public async Task StopAsync()
@@ -365,10 +408,11 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                             break;
 
                         case IpcTypes.ScreenshotResult:
-                            // Complete pending screenshot request
+                        case IpcTypes.SetPropertyResult:
+                            // Complete pending request
                             if (!string.IsNullOrEmpty(env.CorrelationId) &&
-                                _pendingRequests.TryRemove(env.CorrelationId, out var screenshotTcs))
-                                screenshotTcs.TrySetResult(env);
+                                _pendingRequests.TryRemove(env.CorrelationId, out var resultTcs))
+                                resultTcs.TrySetResult(env);
                             break;
 
                         case IpcTypes.Heartbeat:
