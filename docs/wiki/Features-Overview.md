@@ -172,3 +172,14 @@ Switch between frameworks in **Settings**:
 | WPF (default) | — | Native Windows desktop apps |
 | Avalonia | Enable Avalonia | Cross-platform apps (Win/Linux/macOS) |
 | React | Enable REACT-UI | Web-based UIs, JavaScript ecosystem |
+
+## MCP Server (Claude Cowork / Claude Code)
+
+N.E.O. includes an MCP server (`Neo.McpServer`) that lets Claude Cowork or Claude Code compile and display live Avalonia apps directly on your desktop — without running the full N.E.O. host application.
+
+- Claude generates C# code and calls `compile_and_preview`
+- The MCP server compiles via Roslyn in under 2 seconds
+- A real Avalonia preview window appears on your desktop
+- Subsequent changes are hot-reloaded with `update_preview`
+
+No SDK required — only the .NET 9 runtime. See [[MCP Server]] for setup instructions.

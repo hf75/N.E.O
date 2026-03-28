@@ -20,6 +20,7 @@ N.E.O. is a .NET desktop application that lets you create small, ready-to-use ut
 - Incremental updates through unified diff patches
 - Export WPF apps as native Windows executables
 - Export Avalonia apps for Windows, Linux, and macOS
+- **MCP Server for Claude Cowork/Code** — Claude generates and previews live Avalonia apps on your desktop
 - Branching undo/redo history
 - Visual designer mode (click-to-edit)
 - Optional sandboxed execution via Windows AppContainer
@@ -119,9 +120,52 @@ Neo.App.Avalonia (Cross-plat) ─┘       |
   |-- Neo.IPC (Named Pipes with framed protocol)
   |-- Neo.PluginWindowWPF (WPF child process)
   |-- Neo.PluginWindowAvalonia (Avalonia child process)
+  |-- Neo.McpServer (MCP Server for Claude Cowork / Claude Code)
 ```
 
 The host application sends prompts to an AI agent, receives structured responses (code or patches), compiles them into DLLs via Roslyn, and streams the binaries over named pipes to a child process for display.
+
+## MCP Server (Claude Cowork / Claude Code)
+
+N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that lets **Claude Cowork** or **Claude Code** compile and display live Avalonia apps on your desktop — without running the full N.E.O. host application.
+
+**How it works:** You describe an app in Claude Cowork, Claude generates C# code and calls `compile_and_preview`, and a real Avalonia window appears on your desktop — compiled at runtime via Roslyn, streamed over Named Pipes.
+
+### Quick Setup
+
+1. Build the MCP server and the Avalonia preview window:
+   ```bash
+   dotnet build Neo.McpServer
+   dotnet build Neo.PluginWindowAvalonia
+   ```
+
+2. Add to your Claude settings (Claude Code: `.claude/settings.json`, Claude Desktop: MCP config):
+   ```json
+   {
+     "mcpServers": {
+       "neo-preview": {
+         "command": "dotnet",
+         "args": ["/path/to/Neo.McpServer/bin/Debug/net9.0/Neo.McpServer.dll"],
+         "env": {
+           "NEO_PLUGIN_PATH": "/path/to/Neo.PluginWindowAvalonia/bin/Debug/net9.0"
+         }
+       }
+     }
+   }
+   ```
+
+3. In Claude Cowork, say: *"Create a calculator app with dark theme"* — the app appears live on your desktop.
+
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `compile_and_preview` | Compile C# code and show it in a live preview window |
+| `update_preview` | Hot-reload modified code in the existing preview window |
+| `close_preview` | Close the preview window |
+| `get_preview_status` | Check if a preview window is running |
+
+See the [Wiki: MCP Server](https://github.com/hf75/N.E.O/wiki/MCP-Server) for full documentation.
 
 ## Documentation
 
