@@ -48,7 +48,11 @@ namespace Neo.IPC
         public const string UnloadControl = "UnloadControl";
         public const string ParentWindowBounds = "ParentWindowBounds";
         public const string ToggleChildFullScreen = "ToggleChildFullScreen";
+        public const string CaptureScreenshot = "CaptureScreenshot";
+        public const string ScreenshotResult = "ScreenshotResult";
     }
+
+    public record ScreenshotResultMessage(string Base64Png, int Width, int Height);
 
     public enum LogLevel
     {

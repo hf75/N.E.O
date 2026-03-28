@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Neo.McpServer.Services;
 
@@ -167,10 +168,61 @@ public sealed class PreviewTools
             ? string.Join("\n", preview.ChildLogs.TakeLast(20))
             : "(no logs)";
 
+        var errorsSection = preview.RuntimeErrors.Count > 0
+            ? $"\nRuntime Errors ({preview.RuntimeErrors.Count}):\n{string.Join("\n", preview.RuntimeErrors.TakeLast(10))}"
+            : "\nRuntime Errors: none";
+
         return $"Preview Status: {status}\n" +
                $"Avalonia Version: 11.3.12\n" +
                $"Framework: .NET 9\n" +
-               $"Recent Logs:\n{logs}";
+               $"Recent Logs:\n{logs}{errorsSection}";
+    }
+
+    /// <summary>
+    /// Captures a screenshot of the live preview window. Returns a Base64-encoded PNG image.
+    /// Claude can use this to SEE what the app looks like and suggest visual improvements.
+    /// </summary>
+    [McpServerTool(Name = "capture_screenshot")]
+    [Description("Captures a screenshot of the running preview window and returns it as a PNG image. " +
+        "Use this to SEE what the generated app looks like and suggest visual improvements. " +
+        "The preview must be running (call compile_and_preview first).")]
+    public static async Task<IEnumerable<ContentBlock>> CaptureScreenshot(PreviewSessionManager preview)
+    {
+        if (!preview.IsRunning)
+            return [new TextContentBlock { Text = "No preview window is running. Call compile_and_preview first." }];
+
+        var result = await preview.CaptureScreenshotAsync();
+        if (result == null)
+            return [new TextContentBlock { Text = "Screenshot capture failed. The preview window may not be visible." }];
+
+        var pngBytes = Convert.FromBase64String(result.Base64Png);
+
+        return [
+            ImageContentBlock.FromBytes(pngBytes, "image/png"),
+            new TextContentBlock
+            {
+                Text = $"Screenshot captured: {result.Width}x{result.Height} pixels."
+            }
+        ];
+    }
+
+    /// <summary>
+    /// Returns runtime errors from the running app. Claude can use these to auto-fix code.
+    /// </summary>
+    [McpServerTool(Name = "get_runtime_errors")]
+    [Description("Returns runtime errors thrown by the generated app since the last compile_and_preview. " +
+        "Use this to detect crashes and auto-fix the code. Returns empty if no errors occurred.")]
+    public static string GetRuntimeErrors(PreviewSessionManager preview)
+    {
+        if (!preview.IsRunning)
+            return "No preview is running.";
+
+        if (preview.RuntimeErrors.Count == 0)
+            return "No runtime errors. The app is running cleanly.";
+
+        return $"RUNTIME ERRORS ({preview.RuntimeErrors.Count}):\n\n" +
+               string.Join("\n---\n", preview.RuntimeErrors) +
+               "\n\nFix the code and call update_preview to hot-reload.";
     }
 
     /// <summary>

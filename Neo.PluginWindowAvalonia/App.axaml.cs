@@ -438,6 +438,46 @@ namespace Neo.PluginWindowAvalonia
                         break;
                     }
 
+                case IpcTypes.CaptureScreenshot:
+                    {
+                        try
+                        {
+                            var base64 = await Dispatcher.UIThread.InvokeAsync(async () =>
+                            {
+                                var target = MainWin;
+                                var pixelSize = new PixelSize(
+                                    Math.Max(1, (int)target.Bounds.Width),
+                                    Math.Max(1, (int)target.Bounds.Height));
+                                var dpi = new Vector(96, 96);
+
+                                using var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(pixelSize, dpi);
+                                bitmap.Render(target);
+
+                                using var ms = new MemoryStream();
+                                bitmap.Save(ms);
+                                return Convert.ToBase64String(ms.ToArray());
+                            });
+
+                            var result = new ScreenshotResultMessage(
+                                base64,
+                                (int)MainWin.Bounds.Width,
+                                (int)MainWin.Bounds.Height);
+
+                            await SafeSendAsync(new IpcEnvelope(
+                                IpcTypes.ScreenshotResult, env.CorrelationId,
+                                Json.ToJson(result)));
+                        }
+                        catch (Exception ex)
+                        {
+                            await SafeSendAsync(new IpcEnvelope(
+                                IpcTypes.Error, env.CorrelationId,
+                                Json.ToJson(new ErrorMessage(
+                                    $"Screenshot failed: {ex.Message}",
+                                    ex.GetType().FullName, ex.ToString()))));
+                        }
+                        break;
+                    }
+
                 default:
                     await SafeSendAsync(new IpcEnvelope(
                         IpcTypes.Ack, env.CorrelationId,

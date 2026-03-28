@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Pipes;
 using Neo.IPC;
@@ -20,9 +21,17 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     private bool _isShuttingDown;
     private volatile bool _helloReceived;
     private readonly List<string> _childLogs = new();
+    private readonly List<string> _runtimeErrors = new();
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<IpcEnvelope>> _pendingRequests = new();
 
     public bool IsRunning => _childProcess is { HasExited: false } && _pipeStream is { IsConnected: true };
     public IReadOnlyList<string> ChildLogs => _childLogs;
+
+    /// <summary>
+    /// Runtime errors received from the child process since the last DLL load.
+    /// These are exceptions thrown by the user's generated code.
+    /// </summary>
+    public IReadOnlyList<string> RuntimeErrors => _runtimeErrors;
 
     /// <summary>
     /// Starts Neo.PluginWindowAvalonia in standalone mode and connects via Named Pipe.
@@ -139,7 +148,8 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
         try
         {
-            System.Diagnostics.Debug.WriteLine($"[PreviewSession] SendDll: {mainDllName} ({mainDllBytes.Length} bytes), deps={dependencyDlls?.Count ?? 0}");
+            // Clear runtime errors from previous load
+            _runtimeErrors.Clear();
 
             // Send all dependency DLLs first
             if (dependencyDlls != null)
@@ -199,6 +209,51 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         await Task.Delay(100, ct);
 
         return await SendDllAsync(mainDllBytes, mainDllName, dependencyDlls, ct);
+    }
+
+    /// <summary>
+    /// Captures a screenshot of the running preview window as Base64 PNG.
+    /// </summary>
+    public async Task<ScreenshotResultMessage?> CaptureScreenshotAsync(CancellationToken ct = default)
+    {
+        if (!IsRunning || _messenger == null)
+            return null;
+
+        var corrId = Guid.NewGuid().ToString("N");
+        var tcs = new TaskCompletionSource<IpcEnvelope>();
+        _pendingRequests[corrId] = tcs;
+
+        try
+        {
+            await SafeSendControlAsync(new IpcEnvelope(
+                IpcTypes.CaptureScreenshot, corrId, "{}"));
+
+            // Wait for ScreenshotResult with timeout
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(5));
+            cts.Token.Register(() => tcs.TrySetCanceled());
+
+            var response = await tcs.Task;
+
+            if (response.Type == IpcTypes.ScreenshotResult)
+                return Json.FromJson<ScreenshotResultMessage>(response.PayloadJson);
+
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            _childLogs.Add("Screenshot timed out.");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _childLogs.Add($"Screenshot failed: {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            _pendingRequests.TryRemove(corrId, out _);
+        }
     }
 
     /// <summary>
@@ -297,7 +352,23 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                         case IpcTypes.Error:
                             var errMsg = Json.FromJson<ErrorMessage>(env.PayloadJson);
                             if (errMsg != null)
-                                _childLogs.Add($"[CHILD ERROR] {errMsg.Message}\n{errMsg.StackTrace}");
+                            {
+                                var errorText = $"{errMsg.ExceptionType}: {errMsg.Message}";
+                                _childLogs.Add($"[CHILD ERROR] {errorText}\n{errMsg.StackTrace}");
+                                _runtimeErrors.Add(errorText);
+
+                                // Complete pending request if this was a response
+                                if (!string.IsNullOrEmpty(env.CorrelationId) &&
+                                    _pendingRequests.TryRemove(env.CorrelationId, out var errTcs))
+                                    errTcs.TrySetResult(env);
+                            }
+                            break;
+
+                        case IpcTypes.ScreenshotResult:
+                            // Complete pending screenshot request
+                            if (!string.IsNullOrEmpty(env.CorrelationId) &&
+                                _pendingRequests.TryRemove(env.CorrelationId, out var screenshotTcs))
+                                screenshotTcs.TrySetResult(env);
                             break;
 
                         case IpcTypes.Heartbeat:
