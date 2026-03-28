@@ -263,6 +263,58 @@ public sealed class PreviewTools
     }
 
     /// <summary>
+    /// Exports the current app as a standalone executable that can be shared and run without N.E.O.
+    /// </summary>
+    [McpServerTool(Name = "export_app")]
+    [Description("Exports the generated app as a standalone executable. " +
+        "The exported app runs independently — no N.E.O., no MCP server, no .NET SDK needed (only the .NET runtime). " +
+        "All dependencies (Avalonia, NuGet packages) are included in the export directory.")]
+    public static async Task<string> ExportApp(
+        CompilationPipeline compilation,
+        [Description("Complete C# source code files (same as compile_and_preview).")] string[] sourceCode,
+        [Description("Name for the exported application (used as folder name and window title).")] string appName,
+        [Description("Directory where the app should be exported to. " +
+            "A subfolder with the app name will be created.")] string exportPath,
+        [Description("Target platform: 'windows', 'linux', or 'osx'. Defaults to 'windows'.")] string platform = "windows",
+        [Description("NuGet packages as JSON object string, e.g. '{\"Humanizer\": \"default\"}'. " +
+            "Omit if no extra packages needed.")] string? nugetPackages = null)
+    {
+        try
+        {
+            Console.Error.WriteLine($"[export_app] Exporting '{appName}' to {exportPath} for {platform}...");
+
+            var packages = ParseNuGetPackages(nugetPackages);
+
+            var result = await compilation.ExportAsync(
+                sourceCode, appName, exportPath, platform, packages);
+
+            if (!result.Success)
+            {
+                return $"EXPORT FAILED:\n{string.Join("\n", result.Errors)}";
+            }
+
+            // Count files in export directory
+            var fileCount = Directory.GetFiles(result.ExportDirectory!, "*", SearchOption.AllDirectories).Length;
+            var dirSize = new DirectoryInfo(result.ExportDirectory!)
+                .EnumerateFiles("*", SearchOption.AllDirectories)
+                .Sum(f => f.Length);
+
+            Console.Error.WriteLine($"[export_app] Exported to {result.ExportDirectory}");
+
+            return $"SUCCESS: App exported as standalone executable.\n" +
+                   $"Executable: {result.ExePath}\n" +
+                   $"Directory: {result.ExportDirectory}\n" +
+                   $"Files: {fileCount}, Size: {dirSize / 1024.0 / 1024.0:F1} MB\n\n" +
+                   $"The user can run this app directly — no N.E.O. or MCP server needed.";
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[export_app] EXCEPTION: {ex}");
+            return $"ERROR in export_app: {ex.GetType().Name}: {ex.Message}";
+        }
+    }
+
+    /// <summary>
     /// Parses NuGet packages from a JSON string like '{"Humanizer": "default", "Bogus": "35.6.1"}'.
     /// Using string instead of Dictionary parameter to avoid MCP SDK deserialization issues.
     /// </summary>
