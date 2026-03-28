@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json;
 using ModelContextProtocol.Server;
 using Neo.McpServer.Services;
 
@@ -14,34 +15,23 @@ public sealed class PreviewTools
     [McpServerTool(Name = "compile_and_preview")]
     [Description("Compiles C# Avalonia UserControl code and shows it in a live preview window on the user's desktop. " +
         "The code must define a class 'DynamicUserControl' inheriting from Avalonia.Controls.UserControl. " +
-        "Pass all required NuGet packages as a dictionary of packageName -> version (use 'default' for latest). " +
         "Avalonia 11.3.12 packages are always included automatically.")]
     public static async Task<string> CompileAndPreview(
         CompilationPipeline compilation,
         PreviewSessionManager preview,
         [Description("Complete C# source code files. Each string is one .cs file. " +
             "The main file must contain a class 'DynamicUserControl : UserControl'.")] string[] sourceCode,
-        [Description("NuGet packages required. Key = package name, Value = version or 'default'. " +
-            "Avalonia packages are added automatically.")] Dictionary<string, string>? nugetPackages = null)
+        [Description("NuGet packages as JSON object string, e.g. '{\"Humanizer\": \"default\", \"Bogus\": \"35.6.1\"}'. " +
+            "Use 'default' for latest stable version. Avalonia packages are added automatically. " +
+            "Omit or pass empty string if no extra packages needed.")] string? nugetPackages = null)
     {
         try
         {
+            var packages = ParseNuGetPackages(nugetPackages);
             Console.Error.WriteLine($"[compile_and_preview] Called with {sourceCode.Length} source file(s), " +
-                $"nugetPackages={(nugetPackages == null ? "null" : string.Join(", ", nugetPackages.Select(kv => $"{kv.Key}={kv.Value}")))}");
+                $"packages={string.Join(", ", packages.Select(kv => $"{kv.Key}={kv.Value}"))}");
 
-            // Sanitize NuGet packages — handle null values from JSON deserialization
-            var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (nugetPackages != null)
-            {
-                foreach (var (key, value) in nugetPackages)
-                {
-                    if (!string.IsNullOrWhiteSpace(key))
-                        packages[key] = string.IsNullOrWhiteSpace(value) ? "default" : value;
-                }
-            }
             EnsureAvaloniaPackages(packages);
-            Console.Error.WriteLine($"[compile_and_preview] Packages after sanitize: {string.Join(", ", packages.Select(kv => $"{kv.Key}={kv.Value}"))}");
-            Console.Error.WriteLine("[compile_and_preview] Starting compilation...");
 
             // Compile
             var result = await compilation.CompileAsync(sourceCode, packages);
@@ -103,55 +93,48 @@ public sealed class PreviewTools
         CompilationPipeline compilation,
         PreviewSessionManager preview,
         [Description("Updated C# source code files.")] string[] sourceCode,
-        [Description("NuGet packages required.")] Dictionary<string, string>? nugetPackages = null)
+        [Description("NuGet packages as JSON object string, e.g. '{\"Humanizer\": \"default\"}'. " +
+            "Omit or pass empty string if no extra packages needed.")] string? nugetPackages = null)
     {
         try
         {
-        if (!preview.IsRunning)
-            return await CompileAndPreview(compilation, preview, sourceCode, nugetPackages);
+            if (!preview.IsRunning)
+                return await CompileAndPreview(compilation, preview, sourceCode, nugetPackages);
 
-        // Sanitize NuGet packages
-        var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (nugetPackages != null)
-        {
-            foreach (var (key, value) in nugetPackages)
+            var packages = ParseNuGetPackages(nugetPackages);
+            EnsureAvaloniaPackages(packages);
+
+            var result = await compilation.CompileAsync(sourceCode, packages);
+            if (!result.Success)
             {
-                if (!string.IsNullOrWhiteSpace(key))
-                    packages[key] = string.IsNullOrWhiteSpace(value) ? "default" : value;
+                return $"COMPILATION FAILED:\n{string.Join("\n", result.Errors)}\n\n" +
+                       "Fix the errors and try again. The previous preview is still showing.";
             }
-        }
-        EnsureAvaloniaPackages(packages);
 
-        var result = await compilation.CompileAsync(sourceCode, packages);
-        if (!result.Success)
-        {
-            return $"COMPILATION FAILED:\n{string.Join("\n", result.Errors)}\n\n" +
-                   "Fix the errors and try again. The previous preview is still showing.";
-        }
+            var deps = new Dictionary<string, byte[]>();
+            foreach (var dllPath in result.DependencyDllPaths)
+            {
+                if (File.Exists(dllPath))
+                    deps[Path.GetFileName(dllPath)] = await File.ReadAllBytesAsync(dllPath);
+            }
 
-        var deps = new Dictionary<string, byte[]>();
-        foreach (var dllPath in result.DependencyDllPaths)
-        {
-            if (File.Exists(dllPath))
-                deps[Path.GetFileName(dllPath)] = await File.ReadAllBytesAsync(dllPath);
-        }
+            var updated = await preview.UpdateAsync(
+                result.DllBytes!,
+                "DynamicUserControl.dll",
+                deps);
 
-        var updated = await preview.UpdateAsync(
-            result.DllBytes!,
-            "DynamicUserControl.dll",
-            deps);
+            if (!updated)
+            {
+                return $"Compilation succeeded but hot-reload failed.\n" +
+                       $"Logs: {string.Join("\n", preview.ChildLogs)}";
+            }
 
-        if (!updated)
-        {
-            return $"Compilation succeeded but hot-reload failed.\n" +
-                   $"Logs: {string.Join("\n", preview.ChildLogs)}";
-        }
-
-        return $"SUCCESS: Preview updated live.\n" +
-               $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}";
+            return $"SUCCESS: Preview updated live.\n" +
+                   $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}";
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[update_preview] EXCEPTION: {ex}");
             return $"ERROR in update_preview: {ex.GetType().Name}: {ex.Message}\n" +
                    $"Stack: {ex.StackTrace?.Split('\n').FirstOrDefault()}";
         }
@@ -188,6 +171,46 @@ public sealed class PreviewTools
                $"Avalonia Version: 11.3.12\n" +
                $"Framework: .NET 9\n" +
                $"Recent Logs:\n{logs}";
+    }
+
+    /// <summary>
+    /// Parses NuGet packages from a JSON string like '{"Humanizer": "default", "Bogus": "35.6.1"}'.
+    /// Using string instead of Dictionary parameter to avoid MCP SDK deserialization issues.
+    /// </summary>
+    private static Dictionary<string, string> ParseNuGetPackages(string? nugetPackagesJson)
+    {
+        var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (string.IsNullOrWhiteSpace(nugetPackagesJson))
+            return packages;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(nugetPackagesJson);
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                var name = prop.Name;
+                var version = prop.Value.ValueKind == JsonValueKind.String
+                    ? prop.Value.GetString()
+                    : null;
+
+                if (!string.IsNullOrWhiteSpace(name))
+                    packages[name] = string.IsNullOrWhiteSpace(version) ? "default" : version;
+            }
+        }
+        catch (JsonException ex)
+        {
+            Console.Error.WriteLine($"[ParseNuGetPackages] Failed to parse: {nugetPackagesJson} — {ex.Message}");
+            // Try fallback: comma-separated "Name|Version" format
+            foreach (var entry in nugetPackagesJson.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var parts = entry.Split('|', 2);
+                if (parts.Length >= 1 && !string.IsNullOrWhiteSpace(parts[0]))
+                    packages[parts[0].Trim()] = parts.Length > 1 ? parts[1].Trim() : "default";
+            }
+        }
+
+        return packages;
     }
 
     private static void EnsureAvaloniaPackages(Dictionary<string, string> packages)
