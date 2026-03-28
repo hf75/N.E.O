@@ -1,0 +1,61 @@
+{
+  "manifest_version": "0.3",
+  "name": "neo-live-preview",
+  "display_name": "N.E.O. Live Preview",
+  "version": "0.1.0",
+  "description": "Compile and display live Avalonia desktop apps from natural language. Describe an app — Claude generates C# code, compiles it via Roslyn in ~1 second, and shows it in a real native window on your desktop.",
+  "long_description": "N.E.O. (Native Executable Orchestrator) MCP Server enables Claude to create real, native desktop applications on the fly. Claude writes C# Avalonia code, the server compiles it at runtime using Roslyn, and streams the compiled DLL to a live preview window via Named Pipes. No SDK required — the server is fully self-contained. Supports hot-reload: ask for changes and the preview updates in place.",
+  "author": {
+    "name": "hf75",
+    "url": "https://github.com/hf75"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hf75/N.E.O"
+  },
+  "homepage": "https://github.com/hf75/N.E.O",
+  "documentation": "https://github.com/hf75/N.E.O/wiki/MCP-Server",
+  "support": "https://github.com/hf75/N.E.O/issues",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/Neo.McpServer",
+    "mcp_config": {
+      "command": "${__dirname}/server/Neo.McpServer",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "compile_and_preview",
+      "description": "Compile C# Avalonia code and show it in a live desktop window"
+    },
+    {
+      "name": "update_preview",
+      "description": "Hot-reload modified code in the existing preview window"
+    },
+    {
+      "name": "close_preview",
+      "description": "Close the preview window"
+    },
+    {
+      "name": "get_preview_status",
+      "description": "Check if a preview window is running"
+    }
+  ],
+  "keywords": [
+    "avalonia",
+    "desktop",
+    "live-preview",
+    "roslyn",
+    "csharp",
+    "native",
+    "gui",
+    "app-builder"
+  ],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": ["win32"],
+    "runtimes": {}
+  }
+}
