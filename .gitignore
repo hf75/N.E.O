@@ -20,6 +20,10 @@ release/
 # Publish profiles
 *.pubxml.user
 
+# MCP Server build artifacts (use publish-selfcontained.sh / build-mcpb.sh to create)
+dist/
+publish/
+
 # Embedded Python runtimes (downloaded on-demand via PythonDownloadService)
 Neo.App/PythonInterop/python311-win/
 Neo.App/PythonInterop/python311-linux/
