@@ -26,6 +26,9 @@ public sealed class PreviewTools
     {
         try
         {
+            Console.Error.WriteLine($"[compile_and_preview] Called with {sourceCode.Length} source file(s), " +
+                $"nugetPackages={(nugetPackages == null ? "null" : string.Join(", ", nugetPackages.Select(kv => $"{kv.Key}={kv.Value}")))}");
+
             // Sanitize NuGet packages — handle null values from JSON deserialization
             var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (nugetPackages != null)
@@ -37,6 +40,8 @@ public sealed class PreviewTools
                 }
             }
             EnsureAvaloniaPackages(packages);
+            Console.Error.WriteLine($"[compile_and_preview] Packages after sanitize: {string.Join(", ", packages.Select(kv => $"{kv.Key}={kv.Value}"))}");
+            Console.Error.WriteLine("[compile_and_preview] Starting compilation...");
 
             // Compile
             var result = await compilation.CompileAsync(sourceCode, packages);
@@ -82,6 +87,7 @@ public sealed class PreviewTools
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[compile_and_preview] EXCEPTION: {ex}");
             return $"ERROR in compile_and_preview: {ex.GetType().Name}: {ex.Message}\n" +
                    $"Stack: {ex.StackTrace?.Split('\n').FirstOrDefault()}";
         }
