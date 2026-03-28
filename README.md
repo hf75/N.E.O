@@ -135,8 +135,8 @@ N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.i
 
 1. Build the MCP server and the Avalonia preview window:
    ```bash
-   dotnet build Neo.McpServer
-   dotnet build Neo.PluginWindowAvalonia
+   dotnet build Neo.McpServer -c Release
+   dotnet build Neo.PluginWindowAvalonia -c Release
    ```
 
 2. Add to your Claude settings (Claude Code: `.claude/settings.json`, Claude Desktop: MCP config):
@@ -145,14 +145,16 @@ N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.i
      "mcpServers": {
        "neo-preview": {
          "command": "dotnet",
-         "args": ["/path/to/Neo.McpServer/bin/Debug/net9.0/Neo.McpServer.dll"],
+         "args": ["/path/to/Neo.McpServer/bin/Release/net9.0/Neo.McpServer.dll"],
          "env": {
-           "NEO_PLUGIN_PATH": "/path/to/Neo.PluginWindowAvalonia/bin/Debug/net9.0"
+           "NEO_PLUGIN_PATH": "/path/to/Neo.PluginWindowAvalonia/bin/Release/net9.0"
          }
        }
      }
    }
    ```
+
+   > Both `Debug` and `Release` builds work. Use `Release` for better performance; use `Debug` if you want to attach a debugger. Just make sure both paths use the same configuration.
 
 3. In Claude Cowork, say: *"Create a calculator app with dark theme"* — the app appears live on your desktop.
 

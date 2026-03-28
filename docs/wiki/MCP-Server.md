@@ -33,9 +33,11 @@ Claude Cowork/Code                  Neo.McpServer
 
 ```bash
 cd N.E.O
-dotnet build Neo.McpServer
-dotnet build Neo.PluginWindowAvalonia
+dotnet build Neo.McpServer -c Release
+dotnet build Neo.PluginWindowAvalonia -c Release
 ```
+
+Both `Debug` and `Release` builds work. Use `Release` for better performance. Just make sure both paths below use the same configuration you built with.
 
 ### 2. Configure Claude
 
@@ -47,9 +49,9 @@ Add the MCP server to your Claude settings.
   "mcpServers": {
     "neo-preview": {
       "command": "dotnet",
-      "args": ["/full/path/to/Neo.McpServer/bin/Debug/net9.0/Neo.McpServer.dll"],
+      "args": ["/full/path/to/Neo.McpServer/bin/Release/net9.0/Neo.McpServer.dll"],
       "env": {
-        "NEO_PLUGIN_PATH": "/full/path/to/Neo.PluginWindowAvalonia/bin/Debug/net9.0"
+        "NEO_PLUGIN_PATH": "/full/path/to/Neo.PluginWindowAvalonia/bin/Release/net9.0"
       }
     }
   }
