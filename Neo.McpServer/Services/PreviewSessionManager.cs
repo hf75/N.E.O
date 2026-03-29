@@ -20,18 +20,22 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     private int _sessionCounter;
     private bool _isShuttingDown;
     private volatile bool _helloReceived;
+    private readonly object _logLock = new();
     private readonly List<string> _childLogs = new();
     private readonly List<string> _runtimeErrors = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<IpcEnvelope>> _pendingRequests = new();
 
     public bool IsRunning => _childProcess is { HasExited: false } && _pipeStream is { IsConnected: true };
-    public IReadOnlyList<string> ChildLogs => _childLogs;
+    public IReadOnlyList<string> ChildLogs { get { lock (_logLock) return _childLogs.ToList(); } }
 
     /// <summary>
     /// Runtime errors received from the child process since the last DLL load.
     /// These are exceptions thrown by the user's generated code.
     /// </summary>
-    public IReadOnlyList<string> RuntimeErrors => _runtimeErrors;
+    public IReadOnlyList<string> RuntimeErrors { get { lock (_logLock) return _runtimeErrors.ToList(); } }
+
+    private void AddLog(string message) { lock (_logLock) _childLogs.Add(message); }
+    private void AddRuntimeError(string error) { lock (_logLock) _runtimeErrors.Add(error); }
 
     /// <summary>
     /// Starts Neo.PluginWindowAvalonia in standalone mode and connects via Named Pipe.
@@ -46,7 +50,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         _sessionCounter++;
         _isShuttingDown = false;
         _helloReceived = false;
-        _childLogs.Clear();
+        lock (_logLock) { _childLogs.Clear(); _runtimeErrors.Clear(); }
 
         var pipeName = $"neo_mcp_{Environment.ProcessId}_{_sessionCounter}";
 
@@ -62,7 +66,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         var childPath = FindChildExecutable();
         if (childPath == null)
         {
-            _childLogs.Add("ERROR: Neo.PluginWindowAvalonia executable not found.");
+            AddLog("ERROR: Neo.PluginWindowAvalonia executable not found.");
             return false;
         }
 
@@ -84,7 +88,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
             _childProcess = Process.Start(psi);
             if (_childProcess == null)
             {
-                _childLogs.Add("ERROR: Failed to start child process.");
+                AddLog("ERROR: Failed to start child process.");
                 return false;
             }
             System.Diagnostics.Debug.WriteLine($"[PreviewSession] Child started PID={_childProcess.Id}, waiting for pipe...");
@@ -94,7 +98,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
             var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10), _pipeCts.Token);
             if (await Task.WhenAny(connectTask, timeoutTask) != connectTask)
             {
-                _childLogs.Add("ERROR: Child process connection timed out (10s).");
+                AddLog("ERROR: Child process connection timed out (10s).");
                 System.Diagnostics.Debug.WriteLine("[PreviewSession] TIMEOUT waiting for pipe connection!");
                 try { _pipeStream.Dispose(); } catch { }
                 _pipeStream = null;
@@ -123,13 +127,13 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                 System.Diagnostics.Debug.WriteLine("[PreviewSession] Hello received from child!");
             }
 
-            _childLogs.Add($"Preview window started (PID: {_childProcess.Id}).");
+            AddLog($"Preview window started (PID: {_childProcess.Id}).");
             System.Diagnostics.Debug.WriteLine($"[PreviewSession] Ready. Sending DLL next...");
             return true;
         }
         catch (Exception ex)
         {
-            _childLogs.Add($"ERROR: {ex.Message}");
+            AddLog($"ERROR: {ex.Message}");
             return false;
         }
     }
@@ -149,7 +153,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         try
         {
             // Clear runtime errors from previous load
-            _runtimeErrors.Clear();
+            lock (_logLock) _runtimeErrors.Clear();
 
             // Send all dependency DLLs first
             if (dependencyDlls != null)
@@ -177,12 +181,12 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                 Guid.NewGuid().ToString("N"),
                 Json.ToJson(req)));
 
-            _childLogs.Add($"DLL loaded: {mainDllName} ({mainDllBytes.Length:N0} bytes).");
+            AddLog($"DLL loaded: {mainDllName} ({mainDllBytes.Length:N0} bytes).");
             return true;
         }
         catch (Exception ex)
         {
-            _childLogs.Add($"ERROR sending DLL: {ex.Message}");
+            AddLog($"ERROR sending DLL: {ex.Message}");
             return false;
         }
     }
@@ -242,12 +246,12 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            _childLogs.Add("Screenshot timed out.");
+            AddLog("Screenshot timed out.");
             return null;
         }
         catch (Exception ex)
         {
-            _childLogs.Add($"Screenshot failed: {ex.Message}");
+            AddLog($"Screenshot failed: {ex.Message}");
             return null;
         }
         finally
@@ -343,7 +347,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     public async Task StopAsync()
     {
         await DisposeChildAsync();
-        _childLogs.Add("Preview window closed.");
+        AddLog("Preview window closed.");
     }
 
     // ========================================
@@ -373,12 +377,14 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                 read: async (buffer, token) => await fs.ReadAsync(buffer, token),
                 chunkSize: 512 * 1024,
                 ct: ct);
-            System.Diagnostics.Debug.WriteLine($"[PreviewSession] Blob sent: {name} ({data.Length} bytes)");
         }
         finally
         {
             _sendLock.Release();
         }
+
+        // Clean up temp file
+        try { File.Delete(tempPath); } catch { }
     }
 
     private async Task SafeSendControlAsync(IpcEnvelope env)
@@ -393,7 +399,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _childLogs.Add($"Send failed: {ex.Message}");
+            AddLog($"Send failed: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"[PreviewSession] SafeSendControl FAILED: {ex.Message}");
         }
         finally
@@ -427,7 +433,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                         case IpcTypes.Log:
                             var logMsg = Json.FromJson<LogMessage>(env.PayloadJson);
                             if (logMsg != null)
-                                _childLogs.Add($"[{logMsg.Level}] {logMsg.Message}");
+                                AddLog($"[{logMsg.Level}] {logMsg.Message}");
                             break;
 
                         case IpcTypes.Error:
@@ -435,8 +441,8 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                             if (errMsg != null)
                             {
                                 var errorText = $"{errMsg.ExceptionType}: {errMsg.Message}";
-                                _childLogs.Add($"[CHILD ERROR] {errorText}\n{errMsg.StackTrace}");
-                                _runtimeErrors.Add(errorText);
+                                AddLog($"[CHILD ERROR] {errorText}\n{errMsg.StackTrace}");
+                                AddRuntimeError(errorText);
 
                                 // Complete pending request if this was a response
                                 if (!string.IsNullOrEmpty(env.CorrelationId) &&
@@ -461,7 +467,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                             break;
 
                         default:
-                            _childLogs.Add($"[IPC] Unknown: {env.Type}");
+                            AddLog($"[IPC] Unknown: {env.Type}");
                             break;
                     }
                 },
@@ -475,7 +481,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         catch (IOException) when (_isShuttingDown) { }
         catch (Exception ex)
         {
-            _childLogs.Add($"[ListenLoop] Disconnected: {ex.Message}");
+            AddLog($"[ListenLoop] Disconnected: {ex.Message}");
         }
     }
 

@@ -509,6 +509,7 @@ namespace Neo.PluginWindowAvalonia
                             {
                                 var root = MainWin.dynamicContent.Content as Avalonia.Controls.Control;
                                 if (root == null) return "{\"error\": \"No control loaded.\"}";
+                                _serializedNodeCount = 0;
                                 return SerializeVisualTree(root, 0);
                             });
 
@@ -707,10 +708,15 @@ namespace Neo.PluginWindowAvalonia
         // =======================================================
         // Visual Tree Inspection
         // =======================================================
+        private int _serializedNodeCount;
+
         private string SerializeVisualTree(Avalonia.Controls.Control control, int depth)
         {
-            const int maxDepth = 20;
-            if (depth > maxDepth) return "{ \"type\": \"...\", \"truncated\": true }";
+            const int maxDepth = 15;
+            const int maxNodes = 500;
+            if (depth > maxDepth || _serializedNodeCount > maxNodes)
+                return "{ \"type\": \"...\", \"truncated\": true }";
+            _serializedNodeCount++;
 
             var sb = new StringBuilder();
             sb.Append("{ ");

@@ -152,8 +152,15 @@ public sealed class PreviewTools
         if (!preview.IsRunning)
             return "No preview window is currently running.";
 
-        await preview.StopAsync();
-        return "Preview window closed.";
+        try
+        {
+            await preview.StopAsync();
+            return "Preview window closed.";
+        }
+        catch (Exception ex)
+        {
+            return $"Preview window closed (with warnings: {ex.Message}).";
+        }
     }
 
     /// <summary>
@@ -303,6 +310,14 @@ public sealed class PreviewTools
     {
         try
         {
+            // Validate inputs
+            if (string.IsNullOrWhiteSpace(appName))
+                return "EXPORT FAILED: appName cannot be empty.";
+            if (string.IsNullOrWhiteSpace(exportPath))
+                return "EXPORT FAILED: exportPath cannot be empty. Use an absolute path like 'C:/tmp'.";
+            if (!Path.IsPathRooted(exportPath))
+                return $"EXPORT FAILED: exportPath must be an absolute path. Got: '{exportPath}'. Use e.g. 'C:/tmp'.";
+
             Console.Error.WriteLine($"[export_app] Exporting '{appName}' to {exportPath} for {platform}...");
 
             var packages = ParseNuGetPackages(nugetPackages);
@@ -353,9 +368,12 @@ public sealed class PreviewTools
             foreach (var prop in doc.RootElement.EnumerateObject())
             {
                 var name = prop.Name;
-                var version = prop.Value.ValueKind == JsonValueKind.String
-                    ? prop.Value.GetString()
-                    : null;
+                var version = prop.Value.ValueKind switch
+                {
+                    JsonValueKind.String => prop.Value.GetString(),
+                    JsonValueKind.Number => prop.Value.GetRawText(),
+                    _ => null,
+                };
 
                 if (!string.IsNullOrWhiteSpace(name))
                     packages[name] = string.IsNullOrWhiteSpace(version) ? "default" : version;
