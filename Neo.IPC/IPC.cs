@@ -52,6 +52,8 @@ namespace Neo.IPC
         public const string ScreenshotResult = "ScreenshotResult";
         public const string SetProperty = "SetProperty";
         public const string SetPropertyResult = "SetPropertyResult";
+        public const string InspectVisualTree = "InspectVisualTree";
+        public const string InspectVisualTreeResult = "InspectVisualTreeResult";
     }
 
     public record ScreenshotResultMessage(string Base64Png, int Width, int Height);

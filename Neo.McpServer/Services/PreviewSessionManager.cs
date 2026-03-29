@@ -257,6 +257,44 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Inspects the visual tree of the running app and returns a JSON representation.
+    /// </summary>
+    public async Task<string?> InspectVisualTreeAsync(CancellationToken ct = default)
+    {
+        if (!IsRunning || _messenger == null)
+            return null;
+
+        var corrId = Guid.NewGuid().ToString("N");
+        var tcs = new TaskCompletionSource<IpcEnvelope>();
+        _pendingRequests[corrId] = tcs;
+
+        try
+        {
+            await SafeSendControlAsync(new IpcEnvelope(
+                IpcTypes.InspectVisualTree, corrId, "{}"));
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(5));
+            cts.Token.Register(() => tcs.TrySetCanceled());
+
+            var response = await tcs.Task;
+
+            if (response.Type == IpcTypes.InspectVisualTreeResult)
+                return response.PayloadJson;
+
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        finally
+        {
+            _pendingRequests.TryRemove(corrId, out _);
+        }
+    }
+
+    /// <summary>
     /// Sets a property on a control in the running app without recompilation.
     /// </summary>
     public async Task<SetPropertyResultMessage?> SetPropertyAsync(
@@ -409,6 +447,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
                         case IpcTypes.ScreenshotResult:
                         case IpcTypes.SetPropertyResult:
+                        case IpcTypes.InspectVisualTreeResult:
                             // Complete pending request
                             if (!string.IsNullOrEmpty(env.CorrelationId) &&
                                 _pendingRequests.TryRemove(env.CorrelationId, out var resultTcs))

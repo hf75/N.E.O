@@ -227,6 +227,27 @@ public sealed class PreviewTools
     }
 
     /// <summary>
+    /// Inspects the visual tree of the running app and returns a structured JSON representation.
+    /// </summary>
+    [McpServerTool(Name = "inspect_visual_tree")]
+    [Description("Returns the complete visual tree of the running app as JSON. " +
+        "Shows all controls, their types, names, key properties (text, colors, font sizes, " +
+        "enabled state, item counts), bounds, and child hierarchy. " +
+        "Use this to understand the UI structure, diagnose layout issues, find controls for " +
+        "set_property, or verify changes. Much more precise than a screenshot.")]
+    public static async Task<string> InspectVisualTree(PreviewSessionManager preview)
+    {
+        if (!preview.IsRunning)
+            return "No preview is running. Call compile_and_preview first.";
+
+        var json = await preview.InspectVisualTreeAsync();
+        if (json == null)
+            return "Failed to inspect visual tree. The preview window may not be visible.";
+
+        return json;
+    }
+
+    /// <summary>
     /// Modifies a property on a running control without recompilation.
     /// Instant change, preserves app state (scroll position, user input, timers).
     /// </summary>
