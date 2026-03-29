@@ -299,6 +299,44 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Extracts the current visual state as compilable C# source code.
+    /// </summary>
+    public async Task<string?> ExtractCodeAsync(CancellationToken ct = default)
+    {
+        if (!IsRunning || _messenger == null)
+            return null;
+
+        var corrId = Guid.NewGuid().ToString("N");
+        var tcs = new TaskCompletionSource<IpcEnvelope>();
+        _pendingRequests[corrId] = tcs;
+
+        try
+        {
+            await SafeSendControlAsync(new IpcEnvelope(
+                IpcTypes.ExtractCode, corrId, "{}"));
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(10));
+            cts.Token.Register(() => tcs.TrySetCanceled());
+
+            var response = await tcs.Task;
+
+            if (response.Type == IpcTypes.ExtractCodeResult)
+                return response.PayloadJson; // Raw C# code string
+
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        finally
+        {
+            _pendingRequests.TryRemove(corrId, out _);
+        }
+    }
+
+    /// <summary>
     /// Injects data into controls in the running app.
     /// </summary>
     public async Task<InjectDataResult?> InjectDataAsync(
@@ -542,6 +580,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                         case IpcTypes.InspectVisualTreeResult:
                         case IpcTypes.InjectDataResult:
                         case IpcTypes.ReadDataResult:
+                        case IpcTypes.ExtractCodeResult:
                             // Complete pending request
                             if (!string.IsNullOrEmpty(env.CorrelationId) &&
                                 _pendingRequests.TryRemove(env.CorrelationId, out var resultTcs))

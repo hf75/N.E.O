@@ -58,6 +58,8 @@ namespace Neo.IPC
         public const string InjectDataResult = "InjectDataResult";
         public const string ReadData = "ReadData";
         public const string ReadDataResult = "ReadDataResult";
+        public const string ExtractCode = "ExtractCode";
+        public const string ExtractCodeResult = "ExtractCodeResult";
     }
 
     public record ScreenshotResultMessage(string Base64Png, int Width, int Height);

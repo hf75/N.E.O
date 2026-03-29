@@ -446,6 +446,28 @@ public sealed class PreviewTools
         }
     }
 
+    /// <summary>
+    /// Extracts the current visual state of the running app as compilable C# source code.
+    /// All set_property changes, inject_data modifications, and visual tweaks are captured.
+    /// </summary>
+    [McpServerTool(Name = "extract_code")]
+    [Description("Reverse-engineers the running app back into clean C# source code. " +
+        "Captures the CURRENT state — including all changes made via set_property, inject_data, " +
+        "and other live modifications. The generated code is a complete DynamicUserControl " +
+        "that can be compiled with compile_and_preview or exported with export_app. " +
+        "Use this after live-designing an app to get production-ready code.")]
+    public static async Task<string> ExtractCode(PreviewSessionManager preview)
+    {
+        if (!preview.IsRunning)
+            return "No preview is running. Call compile_and_preview first.";
+
+        var code = await preview.ExtractCodeAsync();
+        if (code == null)
+            return "Failed to extract code. The preview window may not be visible.";
+
+        return code;
+    }
+
     private static Dictionary<string, string> ParseNuGetPackages(string? nugetPackagesJson)
     {
         var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
