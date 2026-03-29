@@ -70,9 +70,9 @@ In Claude Code, you can verify with:
 claude mcp list
 ```
 
-The `neo-preview` server should appear with 4 tools.
+The `neo-preview` server should appear with 8 tools.
 
-## Available Tools
+## Available Tools (8)
 
 ### `compile_and_preview`
 
@@ -80,27 +80,64 @@ Compiles C# Avalonia UserControl code and shows it in a live preview window.
 
 **Parameters:**
 - `sourceCode` (string[], required) — Complete C# source files. The main file must contain a class `DynamicUserControl : UserControl`.
-- `nugetPackages` (object, optional) — Additional NuGet packages as `{ "PackageName": "version" }`. Avalonia packages are included automatically.
+- `nugetPackages` (string, optional) — NuGet packages as JSON object string, e.g. `'{"Humanizer": "default", "Bogus": "35.6.1"}'`. Use `"default"` for latest stable version. Avalonia packages are included automatically.
 
-**Example call from Claude:**
-```
-compile_and_preview({
-  sourceCode: ["using Avalonia.Controls;\nnamespace D;\npublic class DynamicUserControl : UserControl { ... }"],
-  nugetPackages: { "LiveChartsCore.SkiaSharpView.Avalonia": "2.0.0-rc3.3" }
-})
-```
+**Example prompt in Claude Cowork:**
+> "Create a calculator app with dark theme using the DynamicUserControl class."
 
 ### `update_preview`
 
-Hot-reloads modified code in the existing preview window. Same parameters as `compile_and_preview`. The preview window stays open — the user sees changes in place.
+Hot-reloads modified code in the existing preview window. Same parameters as `compile_and_preview`. The preview window stays open — the user sees changes in place. App state (timers, scroll positions) is reset with the new code.
 
-### `close_preview`
+### `capture_screenshot`
 
-Closes the preview window. No parameters.
+Takes a screenshot of the running preview window and returns it as a PNG image. Claude can **see** what the app looks like and suggest visual improvements. This creates a feedback loop: generate → compile → display → observe → refine.
+
+No parameters. The preview must be running.
+
+### `set_property`
+
+Changes a single property on a running control **without recompilation**. The change is instant and preserves all app state — scroll positions, user input, timer state, everything.
+
+**Parameters:**
+- `target` (string, required) — Control to modify. Can be a Name (`"myButton"`), a type (`"TextBlock"` for first match), or type:index (`"TextBlock:2"` for third TextBlock).
+- `propertyName` (string, required) — Property to change, e.g. `"Foreground"`, `"FontSize"`, `"Text"`, `"IsVisible"`, `"Opacity"`, `"Background"`, `"Margin"`, `"FontWeight"`.
+- `value` (string, required) — New value. Examples: `"Red"`, `"#FF5500"`, `"24"`, `"Hello World"`, `"true"`, `"10,5,10,5"` (for Thickness/Margin), `"Bold"` (for FontWeight).
+
+**Example prompt in Claude Cowork:**
+> "Change the header text color to red and increase the font size to 48."
+
+Claude will call `set_property` twice — one for `Foreground`, one for `FontSize`. Both changes are instant.
+
+### `get_runtime_errors`
+
+Returns runtime exceptions thrown by the generated app since the last `compile_and_preview`. Claude can read the exception type, message, and stack trace, fix the code, and call `update_preview` to hot-reload. This enables a **self-healing loop** where Claude automatically detects and repairs crashes.
+
+No parameters.
+
+### `export_app`
+
+Exports the generated app as a **standalone executable** that runs without N.E.O., without the MCP server, and without the .NET SDK (only the .NET runtime is needed on the target machine).
+
+**Parameters:**
+- `sourceCode` (string[], required) — Same source code as `compile_and_preview`.
+- `appName` (string, required) — Name for the exported app (used as folder name and window title).
+- `exportPath` (string, required) — **Absolute path** to the export directory, e.g. `"C:/Users/heiko/Desktop"` or `"C:/tmp"`. A subfolder with the app name will be created.
+- `platform` (string, optional) — Target platform: `"windows"` (default), `"linux"`, or `"osx"`. Cross-compilation is supported (e.g. build a Linux app on Windows).
+- `nugetPackages` (string, optional) — Same format as `compile_and_preview`.
+
+**Example prompt in Claude Cowork:**
+> "Export this app as MyCalculator to C:/tmp for Windows."
+
+The exported directory (~27 MB) contains the executable, all Avalonia DLLs, NuGet dependencies, and native libraries (SkiaSharp, HarfBuzz). Copy the folder to any machine with the .NET 9 runtime and it runs.
 
 ### `get_preview_status`
 
-Returns the current state: whether a preview window is running, recent child process logs, and the Avalonia version.
+Returns the current state of the preview system: whether a window is running, recent IPC logs, runtime error summary, and the Avalonia version.
+
+### `close_preview`
+
+Closes the preview window and cleans up. No parameters.
 
 ## Available Prompts
 
@@ -139,16 +176,34 @@ If the generated code needs additional NuGet packages (beyond Avalonia), the MCP
 
 Avalonia packages are **never downloaded** — they come from the local `NEO_PLUGIN_PATH` directory, which already contains all Avalonia assemblies.
 
+### Screenshot Capture
+
+When `capture_screenshot` is called, the MCP server sends a `CaptureScreenshot` command over the Named Pipe. The PluginWindow renders its content to an Avalonia `RenderTargetBitmap`, encodes it as PNG, and sends the bytes back. The MCP server returns it as an `ImageContentBlock` that Claude can analyze visually.
+
+### Live Property Editing
+
+The `set_property` tool sends a `SetProperty` command over the Named Pipe. The PluginWindow traverses the Avalonia visual tree to find the target control (by name, type, or index), looks up the property via `AvaloniaPropertyRegistry`, parses the value string into the correct type (brushes, colors, thickness, enums, primitives), and sets it. No assembly reload occurs — all app state is preserved.
+
+### Self-Healing (Runtime Error Feedback)
+
+The PluginWindow has global exception handlers (`Dispatcher_UnhandledException`, `TaskScheduler_UnobservedTaskException`, `AppDomain_UnhandledException`) that catch all unhandled exceptions in the generated code. These are serialized and sent back over the Named Pipe as `Error` messages. The MCP server collects them in `_runtimeErrors`. Claude can call `get_runtime_errors` to read the stack traces, fix the code, and hot-reload via `update_preview`.
+
+### Export
+
+The `export_app` tool compiles the user's source code together with an Avalonia app wrapper (window, FluentTheme, exception handler, assembly preloader) into a standalone executable using `CSharpCompileAgent` with embedded AppHost templates. All Avalonia DLLs, NuGet dependencies, and platform-specific native libraries (SkiaSharp, HarfBuzz) are copied to the export directory. The result is a ~27 MB folder that runs on any machine with the .NET 9 runtime.
+
+Cross-compilation is supported: you can build a Linux or macOS app on Windows.
+
 ## Project Structure
 
 ```
 Neo.McpServer/
   Program.cs                        — MCP host with STDIO transport
   Services/
-    CompilationPipeline.cs          — Roslyn + NuGet wrapper (runtime-only)
+    CompilationPipeline.cs          — Roslyn + NuGet wrapper + export pipeline
     PreviewSessionManager.cs        — PluginWindow lifecycle + Named Pipe IPC
   Tools/
-    PreviewTools.cs                 — MCP tool definitions (4 tools)
+    PreviewTools.cs                 — MCP tool definitions (8 tools)
     AvaloniaPrompt.cs               — MCP prompt for Avalonia coding conventions
 ```
 
