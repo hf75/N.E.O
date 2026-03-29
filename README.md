@@ -129,7 +129,7 @@ The host application sends prompts to an AI agent, receives structured responses
 
 N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that lets **Claude Cowork** or **Claude Code** compile and display live Avalonia apps on your desktop — without running the full N.E.O. host application.
 
-**How it works:** You describe an app in Claude Cowork, Claude writes C# code, the MCP server compiles it via Roslyn in ~1 second, and a real Avalonia window appears on your desktop — streamed over Named Pipes. Claude can then see what it built, fix its own crashes, tweak the UI live, and export the result as a standalone executable.
+**How it works:** You describe an app in Claude Cowork, Claude writes C# code, the MCP server compiles it via Roslyn in ~1 second, and a real Avalonia window appears on your desktop — streamed over Named Pipes. Claude can then see what it built, tweak the UI live, inject data, and export the result as a standalone executable.
 
 ### Quick Setup
 
@@ -158,15 +158,18 @@ N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.i
 
 3. In Claude Cowork, say: *"Create a calculator app with dark theme"* — the app appears live on your desktop.
 
-### MCP Tools (8)
+### MCP Tools (11)
 
 | Tool | Description |
 |------|-------------|
 | `compile_and_preview` | Compile C# code and show it in a live preview window |
 | `update_preview` | Hot-reload modified code in the existing preview window |
 | `capture_screenshot` | Take a screenshot — Claude can **see** the running app and suggest visual improvements |
+| `inspect_visual_tree` | Get the full UI control hierarchy as structured JSON |
 | `set_property` | Change colors, fonts, text **live** without recompiling — app state fully preserved |
-| `get_runtime_errors` | Read runtime exceptions for **self-healing** — Claude fixes crashes automatically |
+| `inject_data` | Push JSON data into ListBox/ItemsControl/forms at runtime — auto-generates templates |
+| `read_data` | Read current data back from controls (items, form values) |
+| `get_runtime_errors` | Read runtime exceptions from the running app |
 | `export_app` | Export as a **standalone executable** (Windows/Linux/macOS) that runs without N.E.O. |
 | `get_preview_status` | Check preview status, logs, and error summary |
 | `close_preview` | Close the preview window |

@@ -111,7 +111,9 @@ Claude will call `set_property` twice — one for `Foreground`, one for `FontSiz
 
 ### `get_runtime_errors`
 
-Returns runtime exceptions thrown by the generated app since the last `compile_and_preview`. Claude can read the exception type, message, and stack trace, fix the code, and call `update_preview` to hot-reload. This enables a **self-healing loop** where Claude automatically detects and repairs crashes.
+Returns runtime exceptions thrown by the generated app since the last `compile_and_preview`. Includes exception type, message, and stack trace. Claude can use this information to fix the code and call `update_preview` to hot-reload.
+
+> **Note:** MCP is a request-response protocol — Claude cannot be notified automatically when an error occurs. The user must ask Claude to check for errors (e.g. "are there any runtime errors?").
 
 No parameters.
 
@@ -184,9 +186,11 @@ When `capture_screenshot` is called, the MCP server sends a `CaptureScreenshot` 
 
 The `set_property` tool sends a `SetProperty` command over the Named Pipe. The PluginWindow traverses the Avalonia visual tree to find the target control (by name, type, or index), looks up the property via `AvaloniaPropertyRegistry`, parses the value string into the correct type (brushes, colors, thickness, enums, primitives), and sets it. No assembly reload occurs — all app state is preserved.
 
-### Self-Healing (Runtime Error Feedback)
+### Runtime Error Collection
 
-The PluginWindow has global exception handlers (`Dispatcher_UnhandledException`, `TaskScheduler_UnobservedTaskException`, `AppDomain_UnhandledException`) that catch all unhandled exceptions in the generated code. These are serialized and sent back over the Named Pipe as `Error` messages. The MCP server collects them in `_runtimeErrors`. Claude can call `get_runtime_errors` to read the stack traces, fix the code, and hot-reload via `update_preview`.
+The PluginWindow has global exception handlers (`Dispatcher_UnhandledException`, `TaskScheduler_UnobservedTaskException`, `AppDomain_UnhandledException`) that catch all unhandled exceptions in the generated code. These are serialized and sent back over the Named Pipe as `Error` messages. The MCP server collects them in `_runtimeErrors`. Claude can call `get_runtime_errors` to read the stack traces and fix the code.
+
+> **Note:** MCP is request-response only — Claude cannot be notified automatically when errors occur. The user must prompt Claude to check (e.g. "check for runtime errors").
 
 ### Export
 
