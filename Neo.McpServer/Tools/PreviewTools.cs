@@ -355,6 +355,97 @@ public sealed class PreviewTools
     /// Parses NuGet packages from a JSON string like '{"Humanizer": "default", "Bogus": "35.6.1"}'.
     /// Using string instead of Dictionary parameter to avoid MCP SDK deserialization issues.
     /// </summary>
+    /// <summary>
+    /// Injects live data into a running app's controls without recompilation.
+    /// </summary>
+    [McpServerTool(Name = "inject_data")]
+    [Description("Injects live data into a running app's controls WITHOUT recompilation. " +
+        "Three modes: 'replace' pushes JSON array data into ListBox/ItemsControl/ComboBox (replaces existing). " +
+        "'append' adds items to existing data (for live feeds). " +
+        "'fill' sets values on multiple form controls (TextBox, CheckBox, Slider, ComboBox) in one call. " +
+        "Auto-generates display templates for items controls. Preserves app state.")]
+    public static async Task<string> InjectData(
+        PreviewSessionManager preview,
+        [Description("Target control. For 'replace'/'append': the items control (e.g. 'myListBox', 'ListBox:0'). " +
+            "For 'fill': 'root' or a parent container name.")] string target,
+        [Description("Injection mode: 'replace' (set new items), 'append' (add to existing), " +
+            "or 'fill' (set form control values by name).")] string mode,
+        [Description("JSON data. For 'replace'/'append': a JSON array of objects, e.g. " +
+            "'[{\"name\":\"Alice\",\"age\":30},{\"name\":\"Bob\",\"age\":25}]'. " +
+            "For 'fill': a JSON object mapping control names to values, e.g. " +
+            "'{\"nameBox\":\"Alice\",\"ageSlider\":30,\"activeCheck\":true}'.")] string dataJson,
+        [Description("Auto-generate ItemTemplate if the control has none. Default true.")] bool autoTemplate = true,
+        [Description("Comma-separated field names for auto-template (shows only these fields). " +
+            "If omitted, all fields are shown. Example: 'name,email,role'.")] string? focusFields = null)
+    {
+        if (!preview.IsRunning)
+            return "No preview is running. Call compile_and_preview first.";
+
+        try
+        {
+            var request = new InjectDataRequest(target, mode, dataJson, autoTemplate, focusFields);
+            var result = await preview.InjectDataAsync(request);
+
+            if (result == null)
+                return "InjectData failed: no response from preview window.";
+
+            if (!result.Success)
+                return $"INJECT FAILED: {result.Message}";
+
+            var fieldsInfo = result.DetectedFields != null
+                ? $"\nFields: {string.Join(", ", result.DetectedFields)}"
+                : "";
+
+            return $"OK: {result.Message}" +
+                   (result.ItemCount.HasValue ? $"\nItem count: {result.ItemCount}" : "") +
+                   fieldsInfo;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[inject_data] EXCEPTION: {ex}");
+            return $"ERROR: {ex.GetType().Name}: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Reads current data from a running app's controls.
+    /// </summary>
+    [McpServerTool(Name = "read_data")]
+    [Description("Reads current data from a running app's controls. " +
+        "For items controls (ListBox, ComboBox): returns all items as JSON array. " +
+        "For form containers: returns all named children's current values as JSON object. " +
+        "For individual controls: returns the control's current value. " +
+        "Use this to see what the user typed, verify inject_data results, or read app state.")]
+    public static async Task<string> ReadData(
+        PreviewSessionManager preview,
+        [Description("Target control. A Name (e.g. 'myListBox'), type (e.g. 'ListBox'), " +
+            "type:index (e.g. 'TextBox:2'), or 'root' for the entire UserControl.")] string target,
+        [Description("What to read: 'items' (ItemsSource data), 'form' (all named children values), " +
+            "'value' (single control's value). If omitted, auto-detects based on control type.")] string? scope = null)
+    {
+        if (!preview.IsRunning)
+            return "No preview is running. Call compile_and_preview first.";
+
+        try
+        {
+            var request = new ReadDataRequest(target, scope);
+            var result = await preview.ReadDataAsync(request);
+
+            if (result == null)
+                return "ReadData failed: no response from preview window.";
+
+            if (!result.Success)
+                return $"READ FAILED: {result.Message}";
+
+            return $"{result.Message}\n{result.DataJson}";
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[read_data] EXCEPTION: {ex}");
+            return $"ERROR: {ex.GetType().Name}: {ex.Message}";
+        }
+    }
+
     private static Dictionary<string, string> ParseNuGetPackages(string? nugetPackagesJson)
     {
         var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

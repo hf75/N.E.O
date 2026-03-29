@@ -54,6 +54,10 @@ namespace Neo.IPC
         public const string SetPropertyResult = "SetPropertyResult";
         public const string InspectVisualTree = "InspectVisualTree";
         public const string InspectVisualTreeResult = "InspectVisualTreeResult";
+        public const string InjectData = "InjectData";
+        public const string InjectDataResult = "InjectDataResult";
+        public const string ReadData = "ReadData";
+        public const string ReadDataResult = "ReadDataResult";
     }
 
     public record ScreenshotResultMessage(string Base64Png, int Width, int Height);
@@ -73,6 +77,34 @@ namespace Neo.IPC
         string Message,
         string? OldValue = null,
         string? NewValue = null
+    );
+
+    /// <summary>Injects data into items controls or fills form controls.</summary>
+    public record InjectDataRequest(
+        string Target,                     // Control target: Name, Type, Type:Index, or "root"
+        string Mode,                       // "replace", "append", "fill"
+        string DataJson,                   // JSON array (replace/append) or JSON object (fill)
+        bool AutoTemplate = true,          // Auto-generate ItemTemplate if control has none
+        string? FocusFields = null         // Comma-separated field names for auto-template
+    );
+
+    public record InjectDataResult(
+        bool Success,
+        string Message,
+        int? ItemCount = null,
+        string[]? DetectedFields = null
+    );
+
+    /// <summary>Reads data back from items controls or form controls.</summary>
+    public record ReadDataRequest(
+        string Target,                     // Control target
+        string? Scope = null               // "items", "form", "value", or null (auto-detect)
+    );
+
+    public record ReadDataResult(
+        bool Success,
+        string Message,
+        string? DataJson = null
     );
 
     public enum LogLevel

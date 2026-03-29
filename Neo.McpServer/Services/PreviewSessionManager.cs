@@ -299,6 +299,92 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Injects data into controls in the running app.
+    /// </summary>
+    public async Task<InjectDataResult?> InjectDataAsync(
+        InjectDataRequest request, CancellationToken ct = default)
+    {
+        if (!IsRunning || _messenger == null)
+            return new InjectDataResult(false, "No preview is running.");
+
+        var corrId = Guid.NewGuid().ToString("N");
+        var tcs = new TaskCompletionSource<IpcEnvelope>();
+        _pendingRequests[corrId] = tcs;
+
+        try
+        {
+            await SafeSendControlAsync(new IpcEnvelope(
+                IpcTypes.InjectData, corrId, Json.ToJson(request)));
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(15)); // longer timeout for large data
+            cts.Token.Register(() => tcs.TrySetCanceled());
+
+            var response = await tcs.Task;
+
+            if (response.Type == IpcTypes.InjectDataResult)
+                return Json.FromJson<InjectDataResult>(response.PayloadJson);
+
+            return new InjectDataResult(false, "Unexpected response.");
+        }
+        catch (OperationCanceledException)
+        {
+            return new InjectDataResult(false, "InjectData timed out (15s).");
+        }
+        catch (Exception ex)
+        {
+            return new InjectDataResult(false, $"InjectData failed: {ex.Message}");
+        }
+        finally
+        {
+            _pendingRequests.TryRemove(corrId, out _);
+        }
+    }
+
+    /// <summary>
+    /// Reads data from controls in the running app.
+    /// </summary>
+    public async Task<ReadDataResult?> ReadDataAsync(
+        ReadDataRequest request, CancellationToken ct = default)
+    {
+        if (!IsRunning || _messenger == null)
+            return new ReadDataResult(false, "No preview is running.");
+
+        var corrId = Guid.NewGuid().ToString("N");
+        var tcs = new TaskCompletionSource<IpcEnvelope>();
+        _pendingRequests[corrId] = tcs;
+
+        try
+        {
+            await SafeSendControlAsync(new IpcEnvelope(
+                IpcTypes.ReadData, corrId, Json.ToJson(request)));
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(5));
+            cts.Token.Register(() => tcs.TrySetCanceled());
+
+            var response = await tcs.Task;
+
+            if (response.Type == IpcTypes.ReadDataResult)
+                return Json.FromJson<ReadDataResult>(response.PayloadJson);
+
+            return new ReadDataResult(false, "Unexpected response.");
+        }
+        catch (OperationCanceledException)
+        {
+            return new ReadDataResult(false, "ReadData timed out.");
+        }
+        catch (Exception ex)
+        {
+            return new ReadDataResult(false, $"ReadData failed: {ex.Message}");
+        }
+        finally
+        {
+            _pendingRequests.TryRemove(corrId, out _);
+        }
+    }
+
+    /// <summary>
     /// Sets a property on a control in the running app without recompilation.
     /// </summary>
     public async Task<SetPropertyResultMessage?> SetPropertyAsync(
@@ -454,6 +540,8 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                         case IpcTypes.ScreenshotResult:
                         case IpcTypes.SetPropertyResult:
                         case IpcTypes.InspectVisualTreeResult:
+                        case IpcTypes.InjectDataResult:
+                        case IpcTypes.ReadDataResult:
                             // Complete pending request
                             if (!string.IsNullOrEmpty(env.CorrelationId) &&
                                 _pendingRequests.TryRemove(env.CorrelationId, out var resultTcs))
