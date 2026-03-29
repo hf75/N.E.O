@@ -273,7 +273,8 @@ public sealed class PreviewTools
         CompilationPipeline compilation,
         [Description("Complete C# source code files (same as compile_and_preview).")] string[] sourceCode,
         [Description("Name for the exported application (used as folder name and window title).")] string appName,
-        [Description("Directory where the app should be exported to. " +
+        [Description("Absolute path to the directory where the app should be exported to, " +
+            "e.g. 'C:/Users/heiko/Desktop' or 'C:/tmp'. Must be a full absolute path. " +
             "A subfolder with the app name will be created.")] string exportPath,
         [Description("Target platform: 'windows', 'linux', or 'osx'. Defaults to 'windows'.")] string platform = "windows",
         [Description("NuGet packages as JSON object string, e.g. '{\"Humanizer\": \"default\"}'. " +
