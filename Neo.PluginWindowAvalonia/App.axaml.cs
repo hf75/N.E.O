@@ -1420,6 +1420,9 @@ namespace Neo.PluginWindowAvalonia
             if (!string.IsNullOrEmpty(ctrl.Name) && !ctrl.Name.StartsWith("PART_"))
                 sb.AppendLine($"{pad}    Name = \"{EscapeString(ctrl.Name)}\",");
 
+            // Attached properties (Grid.Row, Grid.Column, DockPanel.Dock, Canvas.Left/Top)
+            EmitAttachedProperties(ctrl, sb, pad + "    ");
+
             // Type-specific properties
             EmitTypeProperties(ctrl, sb, pad + "    ");
 
@@ -1528,7 +1531,96 @@ namespace Neo.PluginWindowAvalonia
                     if (sp.Spacing > 0)
                         sb.AppendLine($"{pad}Spacing = {sp.Spacing.ToString(System.Globalization.CultureInfo.InvariantCulture)},");
                     break;
+
+                case Avalonia.Controls.Grid grid:
+                    if (grid.RowDefinitions.Count > 0)
+                    {
+                        sb.AppendLine($"{pad}RowDefinitions =");
+                        sb.AppendLine($"{pad}{{");
+                        foreach (var rd in grid.RowDefinitions)
+                        {
+                            if (rd.Height.IsAuto) sb.AppendLine($"{pad}    new RowDefinition {{ Height = GridLength.Auto }},");
+                            else if (rd.Height.IsStar) sb.AppendLine($"{pad}    new RowDefinition {{ Height = new GridLength({rd.Height.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}, GridUnitType.Star) }},");
+                            else sb.AppendLine($"{pad}    new RowDefinition {{ Height = new GridLength({rd.Height.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}, GridUnitType.Pixel) }},");
+                        }
+                        sb.AppendLine($"{pad}}},");
+                    }
+                    if (grid.ColumnDefinitions.Count > 0)
+                    {
+                        sb.AppendLine($"{pad}ColumnDefinitions =");
+                        sb.AppendLine($"{pad}{{");
+                        foreach (var cd in grid.ColumnDefinitions)
+                        {
+                            if (cd.Width.IsAuto) sb.AppendLine($"{pad}    new ColumnDefinition {{ Width = GridLength.Auto }},");
+                            else if (cd.Width.IsStar) sb.AppendLine($"{pad}    new ColumnDefinition {{ Width = new GridLength({cd.Width.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}, GridUnitType.Star) }},");
+                            else sb.AppendLine($"{pad}    new ColumnDefinition {{ Width = new GridLength({cd.Width.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}, GridUnitType.Pixel) }},");
+                        }
+                        sb.AppendLine($"{pad}}},");
+                    }
+                    break;
+
+                case Avalonia.Controls.ComboBox combo:
+                    if (combo.SelectedIndex >= 0) sb.AppendLine($"{pad}SelectedIndex = {combo.SelectedIndex},");
+                    if (combo.PlaceholderText != null) sb.AppendLine($"{pad}PlaceholderText = \"{EscapeString(combo.PlaceholderText)}\",");
+                    break;
+
+                case Avalonia.Controls.Image img:
+                    // Source can't be reliably extracted, emit as comment
+                    if (img.Source != null) sb.AppendLine($"{pad}// Source = ... (runtime image, not extractable)");
+                    if (img.Stretch != Avalonia.Media.Stretch.Uniform) sb.AppendLine($"{pad}Stretch = Stretch.{img.Stretch},");
+                    break;
+
+                case Avalonia.Controls.ScrollViewer sv:
+                    if (sv.HorizontalScrollBarVisibility != Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled)
+                        sb.AppendLine($"{pad}HorizontalScrollBarVisibility = ScrollBarVisibility.{sv.HorizontalScrollBarVisibility},");
+                    if (sv.VerticalScrollBarVisibility != Avalonia.Controls.Primitives.ScrollBarVisibility.Auto)
+                        sb.AppendLine($"{pad}VerticalScrollBarVisibility = ScrollBarVisibility.{sv.VerticalScrollBarVisibility},");
+                    break;
+
+                case Avalonia.Controls.WrapPanel wp:
+                    if (wp.Orientation == Avalonia.Layout.Orientation.Vertical)
+                        sb.AppendLine($"{pad}Orientation = Orientation.Vertical,");
+                    if (wp.ItemWidth > 0 && !double.IsNaN(wp.ItemWidth))
+                        sb.AppendLine($"{pad}ItemWidth = {wp.ItemWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)},");
+                    if (wp.ItemHeight > 0 && !double.IsNaN(wp.ItemHeight))
+                        sb.AppendLine($"{pad}ItemHeight = {wp.ItemHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)},");
+                    break;
+
+                case Avalonia.Controls.DockPanel dp:
+                    if (dp.LastChildFill == false)
+                        sb.AppendLine($"{pad}LastChildFill = false,");
+                    break;
+
+                case Avalonia.Controls.Canvas canvas:
+                    // Canvas-specific: children use Canvas.Left/Top attached properties
+                    break;
             }
+        }
+
+        private static void EmitAttachedProperties(Avalonia.Controls.Control ctrl, StringBuilder sb, string pad)
+        {
+            // Grid attached properties
+            var row = Avalonia.Controls.Grid.GetRow(ctrl);
+            var col = Avalonia.Controls.Grid.GetColumn(ctrl);
+            var rowSpan = Avalonia.Controls.Grid.GetRowSpan(ctrl);
+            var colSpan = Avalonia.Controls.Grid.GetColumnSpan(ctrl);
+            if (row > 0) sb.AppendLine($"{pad}[Grid.RowProperty] = {row},");
+            if (col > 0) sb.AppendLine($"{pad}[Grid.ColumnProperty] = {col},");
+            if (rowSpan > 1) sb.AppendLine($"{pad}[Grid.RowSpanProperty] = {rowSpan},");
+            if (colSpan > 1) sb.AppendLine($"{pad}[Grid.ColumnSpanProperty] = {colSpan},");
+
+            // DockPanel attached property
+            var dock = Avalonia.Controls.DockPanel.GetDock(ctrl);
+            if (dock != Avalonia.Controls.Dock.Left) // Left is default
+                sb.AppendLine($"{pad}[DockPanel.DockProperty] = Dock.{dock},");
+
+            // Canvas attached properties
+            var canvasLeft = Avalonia.Controls.Canvas.GetLeft(ctrl);
+            var canvasTop = Avalonia.Controls.Canvas.GetTop(ctrl);
+            if (!double.IsNaN(canvasLeft) && canvasLeft != 0)
+                sb.AppendLine($"{pad}[Canvas.LeftProperty] = {canvasLeft.ToString(System.Globalization.CultureInfo.InvariantCulture)},");
+            if (!double.IsNaN(canvasTop) && canvasTop != 0)
+                sb.AppendLine($"{pad}[Canvas.TopProperty] = {canvasTop.ToString(System.Globalization.CultureInfo.InvariantCulture)},");
         }
 
         private void EmitLayoutProperties(Avalonia.Controls.Control ctrl, StringBuilder sb, string pad)
