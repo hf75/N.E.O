@@ -76,7 +76,10 @@ public static class AvaloniaPrompt
             "- Pass the complete C# source as `sourceCode` (array of strings, one per file)\n" +
             "- Pass required NuGet packages as `nugetPackages` (dictionary: name -> version)\n" +
             "- The preview window will open automatically on the user's desktop\n\n" +
-            "For subsequent changes, use `update_preview` to hot-reload in the same window.\n" +
+            "For subsequent changes, use `update_preview` to hot-reload in the same window.\n\n" +
+            "IMPORTANT: Before modifying existing code, ALWAYS call `extract_code` first to get the " +
+            "current state of the app. The user may have modified the app via Smart Edit (Ctrl+K) " +
+            "or other tools — your chat history may be outdated. Never assume your last code is current.\n" +
             skillsSection + "\n\n" +
             "## User Request\n\n" +
             userRequest + "\n\n" +
