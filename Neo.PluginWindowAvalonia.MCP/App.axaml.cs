@@ -88,7 +88,7 @@ namespace Neo.PluginWindowAvalonia.MCP
             if (isStandalone)
             {
                 // Standalone mode: full window with decorations
-                MainWin.Title = "N.E.O. — Live Preview";
+                MainWin.Title = "N.E.O. — Live Preview (MCP)";
                 MainWin.Width = 800;
                 MainWin.Height = 600;
                 MainWin.ShowInTaskbar = true;
