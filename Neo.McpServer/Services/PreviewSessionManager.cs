@@ -702,31 +702,39 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         var fromBase = FindInDirectory(baseDir);
         if (fromBase != null) return fromBase;
 
-        // 3. Dev-time: sibling project output
-        foreach (var config in new[] { "Debug", "Release" })
+        // 3. Dev-time: sibling project output (prefer .MCP variant, fallback to normal)
+        foreach (var projectName in new[] { "Neo.PluginWindowAvalonia.MCP", "Neo.PluginWindowAvalonia" })
         {
-            var devDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
-                "Neo.PluginWindowAvalonia", "bin", config, "net9.0"));
-            var devCandidate = FindInDirectory(devDir);
-            if (devCandidate != null) return devCandidate;
+            foreach (var config in new[] { "Debug", "Release" })
+            {
+                var devDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
+                    projectName, "bin", config, "net9.0"));
+                var devCandidate = FindInDirectory(devDir, projectName);
+                if (devCandidate != null) return devCandidate;
+            }
         }
 
         return null;
     }
 
-    private static (string exePath, bool useDotnet)? FindInDirectory(string dir)
+    private static (string exePath, bool useDotnet)? FindInDirectory(string dir, string? preferredName = null)
     {
         if (!Directory.Exists(dir)) return null;
 
-        var nativeName = OperatingSystem.IsWindows()
-            ? "Neo.PluginWindowAvalonia.exe"
-            : "Neo.PluginWindowAvalonia";
+        // Try preferred name first (e.g. Neo.PluginWindowAvalonia.MCP), then fallback
+        var names = preferredName != null
+            ? new[] { preferredName, "Neo.PluginWindowAvalonia" }
+            : new[] { "Neo.PluginWindowAvalonia.MCP", "Neo.PluginWindowAvalonia" };
 
-        var nativePath = Path.Combine(dir, nativeName);
-        if (File.Exists(nativePath)) return (nativePath, false);
+        foreach (var name in names)
+        {
+            var nativeName = OperatingSystem.IsWindows() ? $"{name}.exe" : name;
+            var nativePath = Path.Combine(dir, nativeName);
+            if (File.Exists(nativePath)) return (nativePath, false);
 
-        var dllPath = Path.Combine(dir, "Neo.PluginWindowAvalonia.dll");
-        if (File.Exists(dllPath)) return (dllPath, true);
+            var dllPath = Path.Combine(dir, $"{name}.dll");
+            if (File.Exists(dllPath)) return (dllPath, true);
+        }
 
         return null;
     }
