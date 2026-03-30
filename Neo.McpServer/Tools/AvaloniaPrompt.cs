@@ -1,13 +1,18 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
+using Neo.McpServer.Services;
 
 namespace Neo.McpServer.Tools;
 
 [McpServerPromptType]
 public static class AvaloniaPrompt
 {
+    // Static reference set during DI setup — prompts can't use constructor injection
+    internal static SkillsRegistry? Skills { get; set; }
+
     /// <summary>
     /// System prompt that teaches Claude how to write Avalonia UserControls for the N.E.O. live preview system.
+    /// Automatically includes registered skills so Claude can match user requests to existing apps.
     /// </summary>
     [McpServerPrompt(Name = "create_avalonia_app")]
     [Description("Guides you in creating an Avalonia UserControl for live preview. " +
@@ -15,6 +20,8 @@ public static class AvaloniaPrompt
     public static string CreateAvaloniaApp(
         [Description("What the user wants to build (e.g. 'a calculator with dark theme')")] string userRequest)
     {
+        var skillsSection = Skills?.GetSkillsPromptSection() ?? "";
+
         return "You are the leading world expert in C#/Avalonia cross-platform programming. You are creating\n" +
             "a UserControl that will be compiled at runtime and loaded into a live preview window via the\n" +
             "N.E.O. (Native Executable Orchestrator) system.\n\n" +
@@ -69,7 +76,8 @@ public static class AvaloniaPrompt
             "- Pass the complete C# source as `sourceCode` (array of strings, one per file)\n" +
             "- Pass required NuGet packages as `nugetPackages` (dictionary: name -> version)\n" +
             "- The preview window will open automatically on the user's desktop\n\n" +
-            "For subsequent changes, use `update_preview` to hot-reload in the same window.\n\n" +
+            "For subsequent changes, use `update_preview` to hot-reload in the same window.\n" +
+            skillsSection + "\n\n" +
             "## User Request\n\n" +
             userRequest + "\n\n" +
             "Generate the complete C# code and call `compile_and_preview` to show the live result.";

@@ -975,6 +975,41 @@ public sealed class PreviewTools
         }
     }
 
+    /// <summary>
+    /// Registers a saved session as a reusable skill that Claude can automatically
+    /// recognize and load in future conversations.
+    /// </summary>
+    [McpServerTool(Name = "register_skill")]
+    [Description("Registers a saved .neo session as a reusable 'skill'. " +
+        "Skills are remembered across conversations — when a user asks for something " +
+        "that matches a skill's keywords, Claude can load it instantly instead of " +
+        "generating new code. Use after save_session to make an app permanently available.")]
+    public static string RegisterSkill(
+        SkillsRegistry skills,
+        [Description("Display name for the skill (e.g. 'Email Reader', 'Calculator').")] string name,
+        [Description("Short description of what the app does.")] string description,
+        [Description("Comma-separated keywords for auto-matching. Claude uses these to " +
+            "recognize when the user wants this app. Example: 'email, mails, inbox, nachrichten'.")] string keywords,
+        [Description("Absolute path to the .neo session file (from save_session).")] string sessionPath)
+    {
+        var (success, message) = skills.Register(name, description, keywords, sessionPath);
+        return success ? $"SUCCESS: {message}" : $"FAILED: {message}";
+    }
+
+    /// <summary>
+    /// Removes a skill from the registry.
+    /// </summary>
+    [McpServerTool(Name = "unregister_skill")]
+    [Description("Removes a skill from the registry. The .neo session file is NOT deleted — " +
+        "only the registry entry is removed. The app can still be loaded manually with load_session.")]
+    public static string UnregisterSkill(
+        SkillsRegistry skills,
+        [Description("Name of the skill to remove.")] string name)
+    {
+        var (success, message) = skills.Unregister(name);
+        return success ? $"SUCCESS: {message}" : $"FAILED: {message}";
+    }
+
     private static Dictionary<string, string> ParseNuGetPackages(string? nugetPackagesJson)
     {
         var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

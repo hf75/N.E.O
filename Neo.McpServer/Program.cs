@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Neo.McpServer.Services;
+using Neo.McpServer.Tools;
 
 // Global unhandled exception handler — log to stderr so it appears in Cowork/Desktop logs
 AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -23,6 +24,7 @@ builder.Logging.AddConsole(opts => opts.LogToStandardErrorThreshold = LogLevel.T
 
 builder.Services.AddSingleton<PreviewSessionManager>();
 builder.Services.AddSingleton<CompilationPipeline>();
+builder.Services.AddSingleton<SkillsRegistry>();
 
 builder.Services
     .AddMcpServer()
@@ -31,5 +33,13 @@ builder.Services
     .WithPromptsFromAssembly();
 
 var app = builder.Build();
+
+// Wire up static reference for MCP Prompt (prompts can't use constructor injection)
+AvaloniaPrompt.Skills = app.Services.GetRequiredService<SkillsRegistry>();
+
+var skillsPath = Environment.GetEnvironmentVariable("NEO_SKILLS_PATH");
+if (!string.IsNullOrWhiteSpace(skillsPath))
+    Console.Error.WriteLine($"[Neo.McpServer] Skills registry: {skillsPath}");
+
 Console.Error.WriteLine("[Neo.McpServer] Ready, waiting for MCP messages...");
 await app.RunAsync();
