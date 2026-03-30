@@ -16,6 +16,12 @@ public sealed class CompilationPipeline
     private IReadOnlyList<string>? _avaloniaAdditionalDlls;
     private string? _nugetCacheDir;
 
+    /// <summary>Last successfully compiled source code files — used by patch_preview.</summary>
+    public IReadOnlyList<string>? LastSourceCode { get; private set; }
+
+    /// <summary>Last successfully used NuGet packages — used by patch_preview.</summary>
+    public IReadOnlyDictionary<string, string>? LastNuGetPackages { get; private set; }
+
     public record CompilationResult(
         bool Success,
         string? DllPath,
@@ -95,6 +101,10 @@ public sealed class CompilationPipeline
 
             System.Diagnostics.Debug.WriteLine($"[CompilationPipeline] Compiled to: {compiledPath}");
             var dllBytes = await File.ReadAllBytesAsync(compiledPath, ct);
+
+            // Remember source code for patch_preview
+            LastSourceCode = sourceCode.ToList();
+            LastNuGetPackages = nugetPackages;
 
             // Dependencies to stream to PluginWindow: only NuGet DLLs (Avalonia is already in the child)
             return new CompilationResult(

@@ -469,6 +469,79 @@ public sealed class PreviewTools
     }
 
     /// <summary>
+    /// Applies a unified diff patch to the last compiled code and hot-reloads.
+    /// </summary>
+    [McpServerTool(Name = "patch_preview")]
+    [Description("Applies a unified diff patch to the LAST compiled source code and hot-reloads. " +
+        "Much more efficient than update_preview — send only the changed lines instead of the full code. " +
+        "Uses standard unified diff format (--- a/file, +++ b/file, @@ hunks). " +
+        "Supports fuzzy matching for context lines. Requires a previous compile_and_preview call.")]
+    public static async Task<string> PatchPreview(
+        CompilationPipeline compilation,
+        PreviewSessionManager preview,
+        [Description("Unified diff patch text. Standard format with @@ hunk headers. " +
+            "Target file should be './currentcode.cs'. Example:\n" +
+            "--- a/currentcode.cs\n+++ b/currentcode.cs\n@@ -5,3 +5,3 @@\n " +
+            "old context\n-old line\n+new line\n old context")] string patch,
+        [Description("NuGet packages as JSON object string. Only needed if adding new packages. " +
+            "Omit to keep the same packages from the last compilation.")] string? nugetPackages = null)
+    {
+        if (compilation.LastSourceCode == null || compilation.LastSourceCode.Count == 0)
+            return "PATCH FAILED: No previous source code found. Call compile_and_preview first.";
+
+        try
+        {
+            // Apply patch to the last source code (typically single file)
+            var originalCode = string.Join("\n", compilation.LastSourceCode);
+            var patchResult = Neo.AssemblyForge.UnifiedDiffPatcher.TryApply(
+                originalCode, patch, "./currentcode.cs", "DynamicUserControl");
+
+            if (!patchResult.Success)
+                return $"PATCH FAILED: {patchResult.ErrorMessage}\n\n" +
+                       "Make sure the patch context lines match the current code. " +
+                       "Use extract_code to see the current state.";
+
+            var patchedCode = patchResult.PatchedText!;
+
+            // Determine NuGet packages
+            var packages = nugetPackages != null
+                ? ParseNuGetPackages(nugetPackages)
+                : compilation.LastNuGetPackages != null
+                    ? new Dictionary<string, string>(compilation.LastNuGetPackages, StringComparer.OrdinalIgnoreCase)
+                    : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            EnsureAvaloniaPackages(packages);
+
+            // Compile the patched code
+            var result = await compilation.CompileAsync(new[] { patchedCode }, packages);
+            if (!result.Success)
+                return $"PATCH applied but COMPILATION FAILED:\n{string.Join("\n", result.Errors)}";
+
+            // Hot-reload if preview is running
+            if (!preview.IsRunning)
+                return $"PATCH applied and compiled, but no preview window is running.\n" +
+                       $"DLL size: {result.DllBytes!.Length:N0} bytes";
+
+            var deps = new Dictionary<string, byte[]>();
+            foreach (var dllPath in result.DependencyDllPaths)
+                if (File.Exists(dllPath))
+                    deps[Path.GetFileName(dllPath)] = await File.ReadAllBytesAsync(dllPath);
+
+            var updated = await preview.UpdateAsync(result.DllBytes!, "DynamicUserControl.dll", deps);
+            if (!updated)
+                return $"PATCH applied and compiled, but hot-reload failed.\n" +
+                       $"Logs: {string.Join("\n", preview.ChildLogs)}";
+
+            return $"SUCCESS: Patch applied and preview updated.\n" +
+                   $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}";
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[patch_preview] EXCEPTION: {ex}");
+            return $"ERROR: {ex.GetType().Name}: {ex.Message}";
+        }
+    }
+
+    /// <summary>
     /// Starts an HTTP + WebSocket server inside the preview process.
     /// Serves an HTML page and enables bidirectional real-time communication
     /// between a web browser and the running Avalonia app.
