@@ -144,6 +144,11 @@ namespace Neo.PluginWindowAvalonia.MCP
 
                 _chatOverlay.SetStatus("Compiling...");
 
+                // Seed the SmartCompiler with current code if it has no previous code
+                // (happens when app was compiled via MCP server, not via SmartCompiler)
+                if (_smartCompiler.LastCompiledCode == null)
+                    _smartCompiler.SeedCode(currentCode);
+
                 // 3. Compile — patch or full code
                 SmartCompiler.CompileResult compileResult;
                 if (chatResult.Patch != null)

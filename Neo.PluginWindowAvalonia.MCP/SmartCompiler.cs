@@ -23,6 +23,9 @@ internal sealed class SmartCompiler
 
     public string? LastCompiledCode => _lastCompiledCode;
 
+    /// <summary>Seeds the last compiled code without compiling (for patching against MCP-compiled code).</summary>
+    public void SeedCode(string code) => _lastCompiledCode = code;
+
     public record CompileResult(bool Success, byte[]? DllBytes, string? Error);
 
     public async Task<CompileResult> CompileAsync(string sourceCode, CancellationToken ct = default)
