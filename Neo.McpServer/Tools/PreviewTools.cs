@@ -616,6 +616,219 @@ public sealed class PreviewTools
         return "Web bridge stopped.";
     }
 
+    /// <summary>
+    /// Runs UI assertions against the running app's visual tree.
+    /// </summary>
+    [McpServerTool(Name = "run_test")]
+    [Description("Runs UI test assertions against the running app. " +
+        "Checks property values on controls without modifying anything. " +
+        "Pass a JSON array of assertions, each with: target (control name/type), " +
+        "property (property name), expected (expected value), and optional operator " +
+        "(=, !=, >, <, >=, <=, contains, exists). Default operator is '='.")]
+    public static async Task<string> RunTest(
+        PreviewSessionManager preview,
+        [Description("JSON array of assertions. Example: " +
+            "'[{\"target\":\"title\",\"property\":\"Text\",\"expected\":\"Hello\"}," +
+            "{\"target\":\"slider\",\"property\":\"Value\",\"operator\":\">\",\"expected\":\"50\"}," +
+            "{\"target\":\"submitBtn\",\"property\":\"IsEnabled\",\"expected\":\"true\"}]'")] string assertions)
+    {
+        if (!preview.IsRunning)
+            return "No preview is running. Call compile_and_preview first.";
+
+        // Get the visual tree
+        var treeJson = await preview.InspectVisualTreeAsync();
+        if (treeJson == null)
+            return "Failed to inspect visual tree.";
+
+        // Parse assertions
+        List<TestAssertion> tests;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(assertions);
+            tests = new List<TestAssertion>();
+            foreach (var elem in doc.RootElement.EnumerateArray())
+            {
+                tests.Add(new TestAssertion(
+                    Target: elem.GetProperty("target").GetString()!,
+                    Property: elem.GetProperty("property").GetString()!,
+                    Expected: elem.GetProperty("expected").GetString() ?? elem.GetProperty("expected").GetRawText(),
+                    Operator: elem.TryGetProperty("operator", out var op) ? op.GetString() ?? "=" : "="
+                ));
+            }
+        }
+        catch (Exception ex)
+        {
+            return $"Invalid assertions JSON: {ex.Message}";
+        }
+
+        // Parse visual tree and build a flat lookup
+        Dictionary<string, Dictionary<string, string>> controlProps;
+        try
+        {
+            using var treeDoc = System.Text.Json.JsonDocument.Parse(treeJson);
+            controlProps = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+            FlattenTree(treeDoc.RootElement, controlProps, 0);
+        }
+        catch (Exception ex)
+        {
+            return $"Failed to parse visual tree: {ex.Message}";
+        }
+
+        // Run assertions
+        int passed = 0;
+        int failed = 0;
+        var results = new List<string>();
+
+        foreach (var test in tests)
+        {
+            // Find control
+            if (!controlProps.TryGetValue(test.Target, out var props))
+            {
+                if (test.Operator == "exists")
+                {
+                    failed++;
+                    results.Add($"  FAIL: '{test.Target}' does not exist");
+                    continue;
+                }
+                failed++;
+                results.Add($"  FAIL: Control '{test.Target}' not found");
+                continue;
+            }
+
+            if (test.Operator == "exists")
+            {
+                passed++;
+                results.Add($"  PASS: '{test.Target}' exists");
+                continue;
+            }
+
+            // Get property value
+            if (!props.TryGetValue(test.Property, out var actual))
+            {
+                // Also check type-independent "type" key
+                if (test.Property.Equals("type", StringComparison.OrdinalIgnoreCase) && props.TryGetValue("__type__", out actual))
+                { /* ok */ }
+                else
+                {
+                    failed++;
+                    results.Add($"  FAIL: {test.Target}.{test.Property} — property not found");
+                    continue;
+                }
+            }
+
+            // Compare
+            bool pass = EvaluateAssertion(actual, test.Operator, test.Expected);
+
+            if (pass)
+            {
+                passed++;
+                results.Add($"  PASS: {test.Target}.{test.Property} {test.Operator} \"{test.Expected}\" (actual: \"{actual}\")");
+            }
+            else
+            {
+                failed++;
+                results.Add($"  FAIL: {test.Target}.{test.Property} {test.Operator} \"{test.Expected}\" — actual: \"{actual}\"");
+            }
+        }
+
+        var summary = failed == 0
+            ? $"ALL {passed} PASSED"
+            : $"{passed}/{passed + failed} passed, {failed} FAILED";
+
+        return $"{summary}\n\n{string.Join("\n", results)}";
+    }
+
+    private record TestAssertion(string Target, string Property, string Expected, string Operator);
+
+    private static void FlattenTree(
+        System.Text.Json.JsonElement node,
+        Dictionary<string, Dictionary<string, string>> result,
+        int typeCounter)
+    {
+        var typeName = node.TryGetProperty("type", out var t) ? t.GetString() ?? "" : "";
+        var name = node.TryGetProperty("name", out var n) ? n.GetString() : null;
+
+        // Build property dict for this control
+        var props = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        props["__type__"] = typeName;
+
+        // Add bounds
+        if (node.TryGetProperty("bounds", out var bounds))
+        {
+            if (bounds.TryGetProperty("w", out var w)) props["Width"] = w.GetRawText();
+            if (bounds.TryGetProperty("h", out var h)) props["Height"] = h.GetRawText();
+            if (bounds.TryGetProperty("x", out var x)) props["X"] = x.GetRawText();
+            if (bounds.TryGetProperty("y", out var y)) props["Y"] = y.GetRawText();
+        }
+
+        // Add properties
+        if (node.TryGetProperty("properties", out var nodeProps))
+        {
+            foreach (var prop in nodeProps.EnumerateObject())
+                props[prop.Name] = prop.Value.GetString() ?? prop.Value.GetRawText();
+        }
+
+        // Register by name (priority) and by type:index
+        if (!string.IsNullOrEmpty(name) && !name.StartsWith("PART_"))
+            result[name] = props;
+
+        // Also register by Type:Index
+        var typeKey = $"{typeName}:{typeCounter}";
+        if (!result.ContainsKey(typeKey))
+            result[typeKey] = props;
+        if (!result.ContainsKey(typeName))
+            result[typeName] = props;
+
+        // Recurse into children
+        if (node.TryGetProperty("children", out var children))
+        {
+            var childCounters = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var child in children.EnumerateArray())
+            {
+                var childType = child.TryGetProperty("type", out var ct) ? ct.GetString() ?? "" : "";
+                if (!childCounters.TryGetValue(childType, out var idx))
+                    idx = 0;
+                FlattenTree(child, result, idx);
+                childCounters[childType] = idx + 1;
+            }
+        }
+    }
+
+    private static bool EvaluateAssertion(string actual, string op, string expected)
+    {
+        switch (op.ToLowerInvariant())
+        {
+            case "=" or "==" or "equals":
+                return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
+
+            case "!=" or "notequals":
+                return !string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
+
+            case "contains":
+                return actual.Contains(expected, StringComparison.OrdinalIgnoreCase);
+
+            case ">" or "<" or ">=" or "<=":
+                if (double.TryParse(actual, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out var actualNum) &&
+                    double.TryParse(expected, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out var expectedNum))
+                {
+                    return op switch
+                    {
+                        ">" => actualNum > expectedNum,
+                        "<" => actualNum < expectedNum,
+                        ">=" => actualNum >= expectedNum,
+                        "<=" => actualNum <= expectedNum,
+                        _ => false
+                    };
+                }
+                return false;
+
+            default:
+                return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     private static Dictionary<string, string> ParseNuGetPackages(string? nugetPackagesJson)
     {
         var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
