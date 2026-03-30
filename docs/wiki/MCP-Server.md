@@ -51,7 +51,8 @@ Add the MCP server to your Claude settings.
       "command": "dotnet",
       "args": ["/full/path/to/Neo.McpServer/bin/Release/net9.0/Neo.McpServer.dll"],
       "env": {
-        "NEO_PLUGIN_PATH": "/full/path/to/Neo.PluginWindowAvalonia/bin/Release/net9.0"
+        "NEO_PLUGIN_PATH": "/full/path/to/Neo.PluginWindowAvalonia/bin/Release/net9.0",
+        "NEO_SKILLS_PATH": "/full/path/to/your/neo-apps"
       }
     }
   }
@@ -70,9 +71,9 @@ In Claude Code, you can verify with:
 claude mcp list
 ```
 
-The `neo-preview` server should appear with 8 tools.
+The `neo-preview` server should appear with 21 tools.
 
-## Available Tools (8)
+## Available Tools (21)
 
 ### `compile_and_preview`
 
@@ -198,6 +199,30 @@ The `export_app` tool compiles the user's source code together with an Avalonia 
 
 Cross-compilation is supported: you can build a Linux or macOS app on Windows.
 
+### Patch Preview
+
+The `patch_preview` tool applies a unified diff to the last compiled source code and hot-reloads. Claude sends 5-10 lines of diff instead of 100+ lines of full code. Uses the existing `UnifiedDiffPatcher` from Neo.AssemblyForge with fuzzy context matching. NuGet packages carry over from the previous compilation automatically.
+
+### Code Extraction (Reverse-Engineering)
+
+The `extract_code` tool traverses the live Avalonia visual tree and generates clean, compilable C# source code reflecting the current state — including all changes made via `set_property` and `inject_data`. Supports Grid (RowDefinitions, ColumnDefinitions, attached properties), Border, StackPanel, WrapPanel, DockPanel, Canvas, ScrollViewer, and all common controls.
+
+### UI Testing
+
+The `run_test` tool checks assertions against the visual tree without modifying anything. Claude sends a JSON array of assertions with target, property, expected value, and optional operator (`=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `exists`). Returns pass/fail summary with details.
+
+### Web Bridge (Browser ↔ Avalonia)
+
+The `start_web_bridge` tool starts an HTTP + WebSocket server inside the PluginWindow process using pure .NET BCL (`HttpListener` + `System.Net.WebSockets`). Claude creates both a native desktop app AND a web page — they communicate bidirectionally in real-time. Use `{{WS_URL}}` in the HTML as a placeholder for the WebSocket URL. `send_to_web` pushes messages to all connected browsers.
+
+### Sessions and Skills
+
+The `save_session` tool saves the current app state (source code, NuGet packages, WebBridge HTML) to a `.neo` JSON file. `load_session` restores it — auto-compiles and displays the app instantly, including WebBridge restart.
+
+The **App Skills Registry** (`register_skill` / `unregister_skill`) enables a personal app ecosystem across conversations. Saved sessions are registered with keywords. The MCP prompt automatically includes available skills, so Claude can match user requests to existing apps and load them instantly instead of generating new code.
+
+Requires `NEO_SKILLS_PATH` environment variable. Without it, the skills feature is inactive (no error).
+
 ## Project Structure
 
 ```
@@ -206,9 +231,10 @@ Neo.McpServer/
   Services/
     CompilationPipeline.cs          — Roslyn + NuGet wrapper + export pipeline
     PreviewSessionManager.cs        — PluginWindow lifecycle + Named Pipe IPC
+    SkillsRegistry.cs               — App skills registry (skills.json read/write)
   Tools/
-    PreviewTools.cs                 — MCP tool definitions (8 tools)
-    AvaloniaPrompt.cs               — MCP prompt for Avalonia coding conventions
+    PreviewTools.cs                 — MCP tool definitions (21 tools)
+    AvaloniaPrompt.cs               — MCP prompt with auto-injected skills list
 ```
 
 ## Troubleshooting

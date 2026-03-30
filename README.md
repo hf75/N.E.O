@@ -129,7 +129,7 @@ The host application sends prompts to an AI agent, receives structured responses
 
 N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that lets **Claude Cowork** or **Claude Code** compile and display live Avalonia apps on your desktop — without running the full N.E.O. host application.
 
-**How it works:** You describe an app in Claude Cowork, Claude writes C# code, the MCP server compiles it via Roslyn in ~1 second, and a real Avalonia window appears on your desktop — streamed over Named Pipes. Claude can then see what it built, tweak the UI live, inject data, and export the result as a standalone executable.
+**How it works:** You describe an app in Claude Cowork, Claude writes C# code, the MCP server compiles it via Roslyn in ~1 second, and a real Avalonia window appears on your desktop — streamed over Named Pipes. Claude can then see what it built, tweak the UI live, inject data, run tests, export as standalone executable, and save apps as reusable "skills" that work across conversations.
 
 ### Quick Setup
 
@@ -147,7 +147,8 @@ N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.i
          "command": "dotnet",
          "args": ["/path/to/Neo.McpServer/bin/Release/net9.0/Neo.McpServer.dll"],
          "env": {
-           "NEO_PLUGIN_PATH": "/path/to/Neo.PluginWindowAvalonia/bin/Release/net9.0"
+           "NEO_PLUGIN_PATH": "/path/to/Neo.PluginWindowAvalonia/bin/Release/net9.0",
+           "NEO_SKILLS_PATH": "/path/to/your/neo-apps"
          }
        }
      }
@@ -155,22 +156,34 @@ N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.i
    ```
 
    > Both `Debug` and `Release` builds work. Use `Release` for better performance; use `Debug` if you want to attach a debugger. Just make sure both paths use the same configuration.
+   >
+   > `NEO_SKILLS_PATH` is optional — enables the App Skills Registry for saving and auto-loading apps across conversations.
 
 3. In Claude Cowork, say: *"Create a calculator app with dark theme"* — the app appears live on your desktop.
 
-### MCP Tools (11)
+### MCP Tools (21)
 
 | Tool | Description |
 |------|-------------|
 | `compile_and_preview` | Compile C# code and show it in a live preview window |
 | `update_preview` | Hot-reload modified code in the existing preview window |
-| `capture_screenshot` | Take a screenshot — Claude can **see** the running app and suggest visual improvements |
+| `patch_preview` | Apply a unified diff patch — send only changed lines instead of full code |
+| `capture_screenshot` | Take a screenshot — Claude can **see** the running app |
 | `inspect_visual_tree` | Get the full UI control hierarchy as structured JSON |
-| `set_property` | Change colors, fonts, text **live** without recompiling — app state fully preserved |
-| `inject_data` | Push JSON data into ListBox/ItemsControl/forms at runtime — auto-generates templates |
-| `read_data` | Read current data back from controls (items, form values) |
+| `set_property` | Change colors, fonts, text **live** without recompiling |
+| `inject_data` | Push JSON data into ListBox/ItemsControl/forms at runtime |
+| `read_data` | Read current data back from controls |
+| `extract_code` | Reverse-engineer the running app back to clean C# source code |
+| `run_test` | Run UI assertions against the visual tree (pass/fail) |
+| `export_app` | Export as a **standalone executable** (Windows/Linux/macOS) |
+| `save_session` | Save app session to a .neo file (code, NuGet packages, WebBridge) |
+| `load_session` | Load a .neo session — auto-compiles and shows the app instantly |
+| `register_skill` | Register a session as a reusable skill with keywords |
+| `unregister_skill` | Remove a skill from the registry |
+| `start_web_bridge` | Start an HTTP + WebSocket server — Browser ↔ Avalonia real-time communication |
+| `send_to_web` | Push messages to connected browsers via WebSocket |
+| `stop_web_bridge` | Stop the web bridge server |
 | `get_runtime_errors` | Read runtime exceptions from the running app |
-| `export_app` | Export as a **standalone executable** (Windows/Linux/macOS) that runs without N.E.O. |
 | `get_preview_status` | Check preview status, logs, and error summary |
 | `close_preview` | Close the preview window |
 
