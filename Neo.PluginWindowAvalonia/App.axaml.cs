@@ -49,6 +49,9 @@ namespace Neo.PluginWindowAvalonia
         private readonly ConcurrentDictionary<Guid, MemoryStream> _blobStreams = new();
         private readonly ConcurrentDictionary<Guid, BlobStartMeta> _blobMetas = new();
 
+        // Web Bridge
+        private WebBridgeServer? _webBridge;
+
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
@@ -585,6 +588,77 @@ namespace Neo.PluginWindowAvalonia
                             await SafeSendAsync(new IpcEnvelope(
                                 IpcTypes.Error, env.CorrelationId,
                                 Json.ToJson(new ErrorMessage($"ExtractCode failed: {ex.Message}"))));
+                        }
+                        break;
+                    }
+
+                case IpcTypes.StartWebBridge:
+                    {
+                        try
+                        {
+                            var req = Json.FromJson<StartWebBridgeRequest>(env.PayloadJson)!;
+
+                            // Stop existing bridge if running
+                            _webBridge?.Dispose();
+                            _webBridge = new WebBridgeServer();
+
+                            // Forward browser messages to MCP server via IPC log
+                            _webBridge.MessageReceived += (msg) =>
+                            {
+                                _ = SendLogAsync(LogLevel.Info, $"[WebBridge] {msg}", "WebBridge");
+                            };
+
+                            var ok = _webBridge.Start(req.HtmlContent, req.Port);
+                            var result = ok
+                                ? new StartWebBridgeResult(true, _webBridge.Url, _webBridge.WsUrl, null)
+                                : new StartWebBridgeResult(false, null, null, "Failed to start HttpListener.");
+
+                            await SafeSendAsync(new IpcEnvelope(
+                                IpcTypes.StartWebBridgeResult, env.CorrelationId,
+                                Json.ToJson(result)));
+                        }
+                        catch (Exception ex)
+                        {
+                            await SafeSendAsync(new IpcEnvelope(
+                                IpcTypes.StartWebBridgeResult, env.CorrelationId,
+                                Json.ToJson(new StartWebBridgeResult(false, null, null, ex.Message))));
+                        }
+                        break;
+                    }
+
+                case IpcTypes.StopWebBridge:
+                    {
+                        _webBridge?.Dispose();
+                        _webBridge = null;
+                        await SafeSendAsync(new IpcEnvelope(
+                            IpcTypes.Ack, env.CorrelationId,
+                            Json.ToJson(new AckMessage("WebBridge stopped."))));
+                        break;
+                    }
+
+                case IpcTypes.SendToWebBridge:
+                    {
+                        try
+                        {
+                            if (_webBridge?.IsRunning == true)
+                            {
+                                await _webBridge.SendToAllAsync(env.PayloadJson);
+                                await SafeSendAsync(new IpcEnvelope(
+                                    IpcTypes.Ack, env.CorrelationId,
+                                    Json.ToJson(new AckMessage($"Sent to {_webBridge.ClientCount} client(s)."))));
+                            }
+                            else
+                            {
+                                await SafeSendAsync(new IpcEnvelope(
+                                    IpcTypes.Ack, env.CorrelationId,
+                                    Json.ToJson(new AckMessage("WebBridge not running."))));
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            await SafeSendAsync(new IpcEnvelope(
+                                IpcTypes.Error, env.CorrelationId,
+                                Json.ToJson(new ErrorMessage($"SendToWebBridge failed: {ex.Message}"))));
                         }
                         break;
                     }

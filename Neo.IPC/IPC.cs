@@ -60,7 +60,14 @@ namespace Neo.IPC
         public const string ReadDataResult = "ReadDataResult";
         public const string ExtractCode = "ExtractCode";
         public const string ExtractCodeResult = "ExtractCodeResult";
+        public const string StartWebBridge = "StartWebBridge";
+        public const string StartWebBridgeResult = "StartWebBridgeResult";
+        public const string StopWebBridge = "StopWebBridge";
+        public const string SendToWebBridge = "SendToWebBridge";
     }
+
+    public record StartWebBridgeRequest(string HtmlContent, int Port = 0);
+    public record StartWebBridgeResult(bool Success, string? Url, string? WsUrl, string? Error);
 
     public record ScreenshotResultMessage(string Base64Png, int Width, int Height);
 

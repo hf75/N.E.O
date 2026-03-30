@@ -299,6 +299,72 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Starts an HTTP + WebSocket bridge in the PluginWindow process.
+    /// </summary>
+    public async Task<StartWebBridgeResult?> StartWebBridgeAsync(
+        StartWebBridgeRequest request, CancellationToken ct = default)
+    {
+        if (!IsRunning || _messenger == null)
+            return new StartWebBridgeResult(false, null, null, "No preview is running.");
+
+        var corrId = Guid.NewGuid().ToString("N");
+        var tcs = new TaskCompletionSource<IpcEnvelope>();
+        _pendingRequests[corrId] = tcs;
+
+        try
+        {
+            await SafeSendControlAsync(new IpcEnvelope(
+                IpcTypes.StartWebBridge, corrId, Json.ToJson(request)));
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(10));
+            cts.Token.Register(() => tcs.TrySetCanceled());
+
+            var response = await tcs.Task;
+
+            if (response.Type == IpcTypes.StartWebBridgeResult)
+                return Json.FromJson<StartWebBridgeResult>(response.PayloadJson);
+
+            return new StartWebBridgeResult(false, null, null, "Unexpected response.");
+        }
+        catch (OperationCanceledException)
+        {
+            return new StartWebBridgeResult(false, null, null, "StartWebBridge timed out.");
+        }
+        catch (Exception ex)
+        {
+            return new StartWebBridgeResult(false, null, null, $"StartWebBridge failed: {ex.Message}");
+        }
+        finally
+        {
+            _pendingRequests.TryRemove(corrId, out _);
+        }
+    }
+
+    /// <summary>
+    /// Sends a message to all connected web bridge clients.
+    /// </summary>
+    public async Task<bool> SendToWebBridgeAsync(string message, CancellationToken ct = default)
+    {
+        if (!IsRunning || _messenger == null) return false;
+
+        await SafeSendControlAsync(new IpcEnvelope(
+            IpcTypes.SendToWebBridge, Guid.NewGuid().ToString("N"), message));
+        return true;
+    }
+
+    /// <summary>
+    /// Stops the web bridge server.
+    /// </summary>
+    public async Task StopWebBridgeAsync(CancellationToken ct = default)
+    {
+        if (!IsRunning || _messenger == null) return;
+
+        await SafeSendControlAsync(new IpcEnvelope(
+            IpcTypes.StopWebBridge, Guid.NewGuid().ToString("N"), "{}"));
+    }
+
+    /// <summary>
     /// Extracts the current visual state as compilable C# source code.
     /// </summary>
     public async Task<string?> ExtractCodeAsync(CancellationToken ct = default)
@@ -581,6 +647,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                         case IpcTypes.InjectDataResult:
                         case IpcTypes.ReadDataResult:
                         case IpcTypes.ExtractCodeResult:
+                        case IpcTypes.StartWebBridgeResult:
                             // Complete pending request
                             if (!string.IsNullOrEmpty(env.CorrelationId) &&
                                 _pendingRequests.TryRemove(env.CorrelationId, out var resultTcs))
