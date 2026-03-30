@@ -298,6 +298,9 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         }
     }
 
+    /// <summary>Last WebBridge HTML content — used by save_session.</summary>
+    public string? LastWebBridgeHtml { get; private set; }
+
     /// <summary>
     /// Starts an HTTP + WebSocket bridge in the PluginWindow process.
     /// </summary>
@@ -306,6 +309,8 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     {
         if (!IsRunning || _messenger == null)
             return new StartWebBridgeResult(false, null, null, "No preview is running.");
+
+        LastWebBridgeHtml = request.HtmlContent;
 
         var corrId = Guid.NewGuid().ToString("N");
         var tcs = new TaskCompletionSource<IpcEnvelope>();

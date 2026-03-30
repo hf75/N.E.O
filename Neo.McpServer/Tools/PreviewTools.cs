@@ -617,6 +617,152 @@ public sealed class PreviewTools
     }
 
     /// <summary>
+    /// Saves the current session (source code, NuGet packages, WebBridge) to a .neo file.
+    /// </summary>
+    [McpServerTool(Name = "save_session")]
+    [Description("Saves the current app session to a .neo file. " +
+        "Includes source code, NuGet packages, and WebBridge HTML (if active). " +
+        "The session can be loaded later with load_session to restore the app exactly as it was.")]
+    public static string SaveSession(
+        CompilationPipeline compilation,
+        PreviewSessionManager preview,
+        [Description("Session name (used as filename, e.g. 'MyCalculator').")] string name,
+        [Description("Absolute path to the directory where the session file should be saved. " +
+            "Must be a folder that Claude has write access to.")] string directory)
+    {
+        if (compilation.LastSourceCode == null || compilation.LastSourceCode.Count == 0)
+            return "SAVE FAILED: No source code found. Call compile_and_preview first.";
+
+        if (string.IsNullOrWhiteSpace(name))
+            return "SAVE FAILED: name cannot be empty.";
+        if (string.IsNullOrWhiteSpace(directory) || !Path.IsPathRooted(directory))
+            return "SAVE FAILED: directory must be an absolute path.";
+
+        try
+        {
+            Directory.CreateDirectory(directory);
+
+            var session = new Dictionary<string, object?>
+            {
+                ["version"] = 1,
+                ["name"] = name,
+                ["savedAt"] = DateTime.UtcNow.ToString("o"),
+                ["sourceCode"] = compilation.LastSourceCode,
+                ["nugetPackages"] = compilation.LastNuGetPackages,
+                ["webBridgeHtml"] = preview.LastWebBridgeHtml,
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(session,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+            var filePath = Path.Combine(directory, $"{name}.neo");
+            File.WriteAllText(filePath, json);
+
+            return $"SUCCESS: Session saved.\nFile: {filePath}\nSize: {json.Length:N0} bytes";
+        }
+        catch (Exception ex)
+        {
+            return $"SAVE FAILED: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Loads a session from a .neo file and auto-compiles the app.
+    /// </summary>
+    [McpServerTool(Name = "load_session")]
+    [Description("Loads a previously saved .neo session file and automatically compiles and " +
+        "displays the app. If the session included a WebBridge, it is also restarted. " +
+        "The app appears exactly as it was when saved.")]
+    public static async Task<string> LoadSession(
+        CompilationPipeline compilation,
+        PreviewSessionManager preview,
+        [Description("Absolute path to the .neo session file.")] string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return "LOAD FAILED: path cannot be empty.";
+        if (!File.Exists(path))
+            return $"LOAD FAILED: File not found: {path}";
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(path);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Read source code
+            var sourceCode = new List<string>();
+            if (root.TryGetProperty("sourceCode", out var srcArray))
+            {
+                foreach (var item in srcArray.EnumerateArray())
+                    sourceCode.Add(item.GetString() ?? "");
+            }
+
+            if (sourceCode.Count == 0)
+                return "LOAD FAILED: Session file contains no source code.";
+
+            // Read NuGet packages
+            var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (root.TryGetProperty("nugetPackages", out var pkgs) &&
+                pkgs.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var prop in pkgs.EnumerateObject())
+                    packages[prop.Name] = prop.Value.GetString() ?? "default";
+            }
+            EnsureAvaloniaPackages(packages);
+
+            // Compile
+            var result = await compilation.CompileAsync(sourceCode, packages);
+            if (!result.Success)
+                return $"LOAD FAILED: Compilation error:\n{string.Join("\n", result.Errors)}";
+
+            // Start preview
+            if (!preview.IsRunning)
+            {
+                var started = await preview.StartAsync();
+                if (!started)
+                    return $"Compiled but preview window failed to start.\n" +
+                           $"Logs: {string.Join("\n", preview.ChildLogs)}";
+            }
+
+            // Send DLL
+            var deps = new Dictionary<string, byte[]>();
+            foreach (var dllPath in result.DependencyDllPaths)
+                if (File.Exists(dllPath))
+                    deps[Path.GetFileName(dllPath)] = await File.ReadAllBytesAsync(dllPath);
+
+            var sent = await preview.SendDllAsync(result.DllBytes!, "DynamicUserControl.dll", deps);
+            if (!sent)
+                return $"Compiled but failed to send DLL to preview.\n" +
+                       $"Logs: {string.Join("\n", preview.ChildLogs)}";
+
+            // Restore WebBridge if saved
+            string webBridgeInfo = "";
+            if (root.TryGetProperty("webBridgeHtml", out var htmlProp) &&
+                htmlProp.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var html = htmlProp.GetString();
+                if (!string.IsNullOrWhiteSpace(html))
+                {
+                    var bridgeResult = await preview.StartWebBridgeAsync(
+                        new Neo.IPC.StartWebBridgeRequest(html));
+                    if (bridgeResult?.Success == true)
+                        webBridgeInfo = $"\nWebBridge: {bridgeResult.Url}";
+                }
+            }
+
+            var sessionName = root.TryGetProperty("name", out var nm) ? nm.GetString() : Path.GetFileNameWithoutExtension(path);
+
+            return $"SUCCESS: Session '{sessionName}' loaded and running.\n" +
+                   $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}" +
+                   webBridgeInfo;
+        }
+        catch (Exception ex)
+        {
+            return $"LOAD FAILED: {ex.Message}";
+        }
+    }
+
+    /// <summary>
     /// Runs UI assertions against the running app's visual tree.
     /// </summary>
     [McpServerTool(Name = "run_test")]
