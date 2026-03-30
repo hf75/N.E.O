@@ -510,7 +510,7 @@ namespace Neo.PluginWindowAvalonia.MCP
                         {
                             var json = await Dispatcher.UIThread.InvokeAsync(() =>
                             {
-                                var root = MainWin.dynamicContent.Content as Avalonia.Controls.Control;
+                                var root = MainWin.GetLoadedUserControl();
                                 if (root == null) return "{\"error\": \"No control loaded.\"}";
                                 _serializedNodeCount = 0;
                                 return SerializeVisualTree(root, 0);
@@ -576,7 +576,7 @@ namespace Neo.PluginWindowAvalonia.MCP
                         {
                             var code = await Dispatcher.UIThread.InvokeAsync(() =>
                             {
-                                var root = MainWin.dynamicContent.Content as Avalonia.Controls.Control;
+                                var root = MainWin.GetLoadedUserControl();
                                 if (root == null) return "// No control loaded.";
                                 return ExtractCodeFromVisualTree(root);
                             });
@@ -971,7 +971,7 @@ namespace Neo.PluginWindowAvalonia.MCP
         private SetPropertyResultMessage SetPropertyOnControl(SetPropertyRequest req)
         {
             // Find the loaded UserControl content
-            var root = MainWin.dynamicContent.Content as Avalonia.Controls.Control;
+            var root = MainWin.GetLoadedUserControl();
             if (root == null)
                 return new SetPropertyResultMessage(false, "No control loaded.");
 
@@ -1136,7 +1136,7 @@ namespace Neo.PluginWindowAvalonia.MCP
         // =======================================================
         private InjectDataResult InjectDataOnControl(InjectDataRequest req)
         {
-            var root = MainWin.dynamicContent.Content as Avalonia.Controls.Control;
+            var root = MainWin.GetLoadedUserControl();
             if (root == null)
                 return new InjectDataResult(false, "No control loaded.");
 
@@ -1319,7 +1319,7 @@ namespace Neo.PluginWindowAvalonia.MCP
 
         private ReadDataResult ReadDataFromControl(ReadDataRequest req)
         {
-            var root = MainWin.dynamicContent.Content as Avalonia.Controls.Control;
+            var root = MainWin.GetLoadedUserControl();
             if (root == null)
                 return new ReadDataResult(false, "No control loaded.");
 

@@ -88,6 +88,22 @@ namespace Neo.PluginWindowAvalonia.MCP
             dynamicContent.Content = grid;
         }
 
+        /// <summary>
+        /// Returns the actual user control, skipping the ChatOverlay wrapper Grid.
+        /// Used by IPC handlers (extract_code, inspect_visual_tree, etc.) to get the real content.
+        /// </summary>
+        internal Avalonia.Controls.Control? GetLoadedUserControl()
+        {
+            var content = dynamicContent.Content as Avalonia.Controls.Control;
+            if (content is Grid overlayGrid)
+            {
+                return overlayGrid.Children
+                    .OfType<Avalonia.Controls.Control>()
+                    .FirstOrDefault(c => c is not ChatOverlay);
+            }
+            return content;
+        }
+
         private async Task OnChatPromptSubmitted(string prompt)
         {
             if (_claudeChat == null || _smartCompiler == null || _chatOverlay == null)
