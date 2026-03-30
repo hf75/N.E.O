@@ -120,10 +120,15 @@ Neo.App.Avalonia (Cross-plat) ─┘       |
   |-- Neo.IPC (Named Pipes with framed protocol)
   |-- Neo.PluginWindowWPF (WPF child process)
   |-- Neo.PluginWindowAvalonia (Avalonia child process)
+  |-- Neo.PluginWindowAvalonia.MCP (Avalonia child + Smart Edit + embedded Claude + Roslyn)
   |-- Neo.McpServer (MCP Server for Claude Cowork / Claude Code)
 ```
 
 The host application sends prompts to an AI agent, receives structured responses (code or patches), compiles them into DLLs via Roslyn, and streams the binaries over named pipes to a child process for display.
+
+### Smart Edit (Ctrl+K)
+
+The MCP variant of the preview window (`Neo.PluginWindowAvalonia.MCP`) includes an embedded Claude chat overlay. Press **Ctrl+K** while viewing any generated app — a chat panel appears where you can type modification requests directly. The app modifies itself in real-time: Claude generates code, embedded Roslyn compiles it, and the control hot-reloads — all without leaving the app. No MCP server or Cowork needed for this workflow.
 
 ## MCP Server (Claude Cowork / Claude Code)
 
@@ -133,10 +138,10 @@ N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.i
 
 ### Quick Setup
 
-1. Build the MCP server and the Avalonia preview window:
+1. Build the MCP server and the MCP preview window:
    ```bash
    dotnet build Neo.McpServer -c Release
-   dotnet build Neo.PluginWindowAvalonia -c Release
+   dotnet build Neo.PluginWindowAvalonia.MCP -c Release
    ```
 
 2. Add to your Claude settings (Claude Code: `.claude/settings.json`, Claude Desktop: MCP config):
@@ -147,8 +152,9 @@ N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.i
          "command": "dotnet",
          "args": ["/path/to/Neo.McpServer/bin/Release/net9.0/Neo.McpServer.dll"],
          "env": {
-           "NEO_PLUGIN_PATH": "/path/to/Neo.PluginWindowAvalonia/bin/Release/net9.0",
-           "NEO_SKILLS_PATH": "/path/to/your/neo-apps"
+           "NEO_PLUGIN_PATH": "/path/to/Neo.PluginWindowAvalonia.MCP/bin/Release/net9.0",
+           "NEO_SKILLS_PATH": "/path/to/your/neo-apps",
+           "ANTHROPIC_API_KEY": "sk-ant-your-key-here"
          }
        }
      }
@@ -158,6 +164,8 @@ N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.i
    > Both `Debug` and `Release` builds work. Use `Release` for better performance; use `Debug` if you want to attach a debugger. Just make sure both paths use the same configuration.
    >
    > `NEO_SKILLS_PATH` is optional — enables the App Skills Registry for saving and auto-loading apps across conversations.
+   >
+   > `ANTHROPIC_API_KEY` is needed for the Smart Edit feature (Ctrl+K in the preview window). Also add `OPENAI_API_KEY`, `GEMINI_API_KEY` etc. if you want those providers available.
 
 3. In Claude Cowork, say: *"Create a calculator app with dark theme"* — the app appears live on your desktop.
 

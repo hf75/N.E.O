@@ -34,10 +34,12 @@ Claude Cowork/Code                  Neo.McpServer
 ```bash
 cd N.E.O
 dotnet build Neo.McpServer -c Release
-dotnet build Neo.PluginWindowAvalonia -c Release
+dotnet build Neo.PluginWindowAvalonia.MCP -c Release
 ```
 
 Both `Debug` and `Release` builds work. Use `Release` for better performance. Just make sure both paths below use the same configuration you built with.
+
+> **Note:** `Neo.PluginWindowAvalonia.MCP` is the MCP variant with all MCP-specific IPC handlers plus the Smart Edit feature (Ctrl+K). The normal `Neo.PluginWindowAvalonia` is the slim variant for the standalone host app (Neo.App / Neo.App.Avalonia) without MCP features.
 
 ### 2. Configure Claude
 
@@ -51,13 +53,17 @@ Add the MCP server to your Claude settings.
       "command": "dotnet",
       "args": ["/full/path/to/Neo.McpServer/bin/Release/net9.0/Neo.McpServer.dll"],
       "env": {
-        "NEO_PLUGIN_PATH": "/full/path/to/Neo.PluginWindowAvalonia/bin/Release/net9.0",
-        "NEO_SKILLS_PATH": "/full/path/to/your/neo-apps"
+        "NEO_PLUGIN_PATH": "/full/path/to/Neo.PluginWindowAvalonia.MCP/bin/Release/net9.0",
+        "NEO_SKILLS_PATH": "/full/path/to/your/neo-apps",
+        "ANTHROPIC_API_KEY": "sk-ant-your-key-here"
       }
     }
   }
 }
 ```
+
+> `NEO_SKILLS_PATH` is optional — enables the App Skills Registry.
+> `ANTHROPIC_API_KEY` is needed for the Smart Edit feature (Ctrl+K). API keys are inherited by child processes — add any keys you need here.
 
 **Claude Desktop / Cowork** (MCP settings):
 Same JSON structure — add via Settings > Extensions > Advanced, or edit the MCP config file directly.
@@ -254,3 +260,47 @@ Neo.McpServer/
 **NuGet resolution hangs:**
 - Only non-Avalonia NuGet packages are downloaded. If it hangs, check your network connection.
 - The first NuGet resolution may take longer as packages are cached locally.
+
+**Smart Edit (Ctrl+K) shows "ANTHROPIC_API_KEY not set":**
+- Add `ANTHROPIC_API_KEY` to the `env` section of your MCP server config. Cowork may not inherit User environment variables due to sandboxing.
+
+**Build fails with locked DLL:**
+- Close the preview window (or stop the MCP server in Cowork) before rebuilding. The running PluginWindow process locks its DLL.
+
+## Smart Edit (Ctrl+K)
+
+The MCP variant of the preview window (`Neo.PluginWindowAvalonia.MCP`) includes an embedded Claude chat overlay for modifying apps directly — without going through the MCP server or Cowork.
+
+### How to Use
+
+1. An app must be running in the preview window (via `compile_and_preview` or `load_session`)
+2. Press **Ctrl+K** — the Smart Edit panel appears on the right side
+3. Type a modification request: *"Make the header red and add a search bar"*
+4. Press **Enter** — the app modifies itself:
+   - Current code is extracted from the visual tree
+   - Claude generates a patch or new code
+   - Embedded Roslyn compiles it in ~1 second
+   - The control hot-reloads — the change appears instantly
+5. Press **Escape** to close the panel
+
+### How It Works Internally
+
+```
+User types in ChatOverlay
+  → ExtractCodeFromVisualTree (current app state)
+  → ClaudeChat.SendAsync (Anthropic API with Avalonia system prompt)
+  → Claude responds with patch or full code
+  → UnifiedDiffPatcher.TryApply (or full replacement)
+  → SmartCompiler.CompileAsync (embedded CSharpDllCompileAgent + Roslyn)
+  → HandleLoadUserControlFromBytes (hot-reload)
+  → App updates in real-time
+```
+
+### Requirements
+
+- `ANTHROPIC_API_KEY` environment variable (set in MCP server config `env` section)
+- .NET 9 runtime (for Roslyn compilation)
+
+### Interaction with MCP Server
+
+Smart Edit and the MCP server can both modify the same app. Changes made via Ctrl+K are visible to the MCP server — `extract_code` and `inspect_visual_tree` always read the current live state. The MCP prompt instructs Claude to call `extract_code` before modifying existing code, so it picks up Smart Edit changes automatically.
