@@ -44,13 +44,13 @@ public sealed class PreviewTools
             }
 
             // Start preview if not running
-            if (!preview.IsRunning)
+            if (!preview.IsRunning())
             {
                 var started = await preview.StartAsync();
                 if (!started)
                 {
                     return $"Compilation succeeded but preview window failed to start.\n" +
-                           $"Logs: {string.Join("\n", preview.ChildLogs)}";
+                           $"Logs: {string.Join("\n", preview.GetChildLogs())}";
                 }
             }
 
@@ -71,7 +71,7 @@ public sealed class PreviewTools
             if (!sent)
             {
                 return $"Compilation succeeded but failed to send DLL to preview window.\n" +
-                       $"Logs: {string.Join("\n", preview.ChildLogs)}";
+                       $"Logs: {string.Join("\n", preview.GetChildLogs())}";
             }
 
             return $"SUCCESS: App compiled and displayed in live preview window.\n" +
@@ -100,7 +100,7 @@ public sealed class PreviewTools
     {
         try
         {
-            if (!preview.IsRunning)
+            if (!preview.IsRunning())
                 return await CompileAndPreview(compilation, preview, sourceCode, nugetPackages);
 
             var packages = ParseNuGetPackages(nugetPackages);
@@ -128,7 +128,7 @@ public sealed class PreviewTools
             if (!updated)
             {
                 return $"Compilation succeeded but hot-reload failed.\n" +
-                       $"Logs: {string.Join("\n", preview.ChildLogs)}";
+                       $"Logs: {string.Join("\n", preview.GetChildLogs())}";
             }
 
             return $"SUCCESS: Preview updated live.\n" +
@@ -149,7 +149,7 @@ public sealed class PreviewTools
     [Description("Closes the live preview window.")]
     public static async Task<string> ClosePreview(PreviewSessionManager preview)
     {
-        if (!preview.IsRunning)
+        if (!preview.IsRunning())
             return "No preview window is currently running.";
 
         try
@@ -171,13 +171,13 @@ public sealed class PreviewTools
         "child process logs, and available Avalonia version.")]
     public static string GetPreviewStatus(PreviewSessionManager preview)
     {
-        var status = preview.IsRunning ? "RUNNING" : "STOPPED";
-        var logs = preview.ChildLogs.Count > 0
-            ? string.Join("\n", preview.ChildLogs.TakeLast(20))
+        var status = preview.IsRunning() ? "RUNNING" : "STOPPED";
+        var logs = preview.GetChildLogs().Count > 0
+            ? string.Join("\n", preview.GetChildLogs().TakeLast(20))
             : "(no logs)";
 
-        var errorsSection = preview.RuntimeErrors.Count > 0
-            ? $"\nRuntime Errors ({preview.RuntimeErrors.Count}):\n{string.Join("\n", preview.RuntimeErrors.TakeLast(10))}"
+        var errorsSection = preview.GetRuntimeErrors().Count > 0
+            ? $"\nRuntime Errors ({preview.GetRuntimeErrors().Count}):\n{string.Join("\n", preview.GetRuntimeErrors().TakeLast(10))}"
             : "\nRuntime Errors: none";
 
         return $"Preview Status: {status}\n" +
@@ -196,7 +196,7 @@ public sealed class PreviewTools
         "The preview must be running (call compile_and_preview first).")]
     public static async Task<IEnumerable<ContentBlock>> CaptureScreenshot(PreviewSessionManager preview)
     {
-        if (!preview.IsRunning)
+        if (!preview.IsRunning())
             return [new TextContentBlock { Text = "No preview window is running. Call compile_and_preview first." }];
 
         var result = await preview.CaptureScreenshotAsync();
@@ -222,14 +222,14 @@ public sealed class PreviewTools
         "Use this to detect crashes and auto-fix the code. Returns empty if no errors occurred.")]
     public static string GetRuntimeErrors(PreviewSessionManager preview)
     {
-        if (!preview.IsRunning)
+        if (!preview.IsRunning())
             return "No preview is running.";
 
-        if (preview.RuntimeErrors.Count == 0)
+        if (preview.GetRuntimeErrors().Count == 0)
             return "No runtime errors. The app is running cleanly.";
 
-        return $"RUNTIME ERRORS ({preview.RuntimeErrors.Count}):\n\n" +
-               string.Join("\n---\n", preview.RuntimeErrors) +
+        return $"RUNTIME ERRORS ({preview.GetRuntimeErrors().Count}):\n\n" +
+               string.Join("\n---\n", preview.GetRuntimeErrors()) +
                "\n\nFix the code and call update_preview to hot-reload.";
     }
 
@@ -244,7 +244,7 @@ public sealed class PreviewTools
         "set_property, or verify changes. Much more precise than a screenshot.")]
     public static async Task<string> InspectVisualTree(PreviewSessionManager preview)
     {
-        if (!preview.IsRunning)
+        if (!preview.IsRunning())
             return "No preview is running. Call compile_and_preview first.";
 
         var json = await preview.InspectVisualTreeAsync();
@@ -273,7 +273,7 @@ public sealed class PreviewTools
         [Description("New value as string. Examples: 'Red', '#FF5500', '24', 'Hello World', 'true', " +
             "'10,5,10,5' (for Thickness/Margin), 'Bold' (for FontWeight).")] string value)
     {
-        if (!preview.IsRunning)
+        if (!preview.IsRunning())
             return "No preview is running. Call compile_and_preview first.";
 
         var request = new SetPropertyRequest(target, propertyName, value);
@@ -378,7 +378,7 @@ public sealed class PreviewTools
         [Description("Comma-separated field names for auto-template (shows only these fields). " +
             "If omitted, all fields are shown. Example: 'name,email,role'.")] string? focusFields = null)
     {
-        if (!preview.IsRunning)
+        if (!preview.IsRunning())
             return "No preview is running. Call compile_and_preview first.";
 
         try
@@ -423,7 +423,7 @@ public sealed class PreviewTools
         [Description("What to read: 'items' (ItemsSource data), 'form' (all named children values), " +
             "'value' (single control's value). If omitted, auto-detects based on control type.")] string? scope = null)
     {
-        if (!preview.IsRunning)
+        if (!preview.IsRunning())
             return "No preview is running. Call compile_and_preview first.";
 
         try
@@ -458,7 +458,7 @@ public sealed class PreviewTools
         "Use this after live-designing an app to get production-ready code.")]
     public static async Task<string> ExtractCode(PreviewSessionManager preview)
     {
-        if (!preview.IsRunning)
+        if (!preview.IsRunning())
             return "No preview is running. Call compile_and_preview first.";
 
         var code = await preview.ExtractCodeAsync();
@@ -517,7 +517,7 @@ public sealed class PreviewTools
                 return $"PATCH applied but COMPILATION FAILED:\n{string.Join("\n", result.Errors)}";
 
             // Hot-reload if preview is running
-            if (!preview.IsRunning)
+            if (!preview.IsRunning())
                 return $"PATCH applied and compiled, but no preview window is running.\n" +
                        $"DLL size: {result.DllBytes!.Length:N0} bytes";
 
@@ -529,7 +529,7 @@ public sealed class PreviewTools
             var updated = await preview.UpdateAsync(result.DllBytes!, "DynamicUserControl.dll", deps);
             if (!updated)
                 return $"PATCH applied and compiled, but hot-reload failed.\n" +
-                       $"Logs: {string.Join("\n", preview.ChildLogs)}";
+                       $"Logs: {string.Join("\n", preview.GetChildLogs())}";
 
             return $"SUCCESS: Patch applied and preview updated.\n" +
                    $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}";
@@ -558,7 +558,7 @@ public sealed class PreviewTools
             "Example: new WebSocket('{{WS_URL}}') in JS.")] string htmlContent,
         [Description("Port number for the HTTP server. Default: auto-detect a free port.")] int port = 0)
     {
-        if (!preview.IsRunning)
+        if (!preview.IsRunning())
             return "No preview is running. Call compile_and_preview first.";
 
         try
@@ -595,7 +595,7 @@ public sealed class PreviewTools
         PreviewSessionManager preview,
         [Description("JSON message to send to all connected browsers.")] string message)
     {
-        if (!preview.IsRunning)
+        if (!preview.IsRunning())
             return "No preview is running.";
 
         var ok = await preview.SendToWebBridgeAsync(message);
@@ -609,7 +609,7 @@ public sealed class PreviewTools
     [Description("Stops the HTTP + WebSocket server started by start_web_bridge.")]
     public static async Task<string> StopWebBridge(PreviewSessionManager preview)
     {
-        if (!preview.IsRunning)
+        if (!preview.IsRunning())
             return "No preview is running.";
 
         await preview.StopWebBridgeAsync();
@@ -649,7 +649,7 @@ public sealed class PreviewTools
                 ["savedAt"] = DateTime.UtcNow.ToString("o"),
                 ["sourceCode"] = compilation.LastSourceCode,
                 ["nugetPackages"] = compilation.LastNuGetPackages,
-                ["webBridgeHtml"] = preview.LastWebBridgeHtml,
+                ["webBridgeHtml"] = preview.GetLastWebBridgeHtml(),
             };
 
             var json = System.Text.Json.JsonSerializer.Serialize(session,
@@ -716,12 +716,12 @@ public sealed class PreviewTools
                 return $"LOAD FAILED: Compilation error:\n{string.Join("\n", result.Errors)}";
 
             // Start preview
-            if (!preview.IsRunning)
+            if (!preview.IsRunning())
             {
                 var started = await preview.StartAsync();
                 if (!started)
                     return $"Compiled but preview window failed to start.\n" +
-                           $"Logs: {string.Join("\n", preview.ChildLogs)}";
+                           $"Logs: {string.Join("\n", preview.GetChildLogs())}";
             }
 
             // Send DLL
@@ -733,7 +733,7 @@ public sealed class PreviewTools
             var sent = await preview.SendDllAsync(result.DllBytes!, "DynamicUserControl.dll", deps);
             if (!sent)
                 return $"Compiled but failed to send DLL to preview.\n" +
-                       $"Logs: {string.Join("\n", preview.ChildLogs)}";
+                       $"Logs: {string.Join("\n", preview.GetChildLogs())}";
 
             // Restore WebBridge if saved
             string webBridgeInfo = "";
@@ -778,7 +778,7 @@ public sealed class PreviewTools
             "{\"target\":\"slider\",\"property\":\"Value\",\"operator\":\">\",\"expected\":\"50\"}," +
             "{\"target\":\"submitBtn\",\"property\":\"IsEnabled\",\"expected\":\"true\"}]'")] string assertions)
     {
-        if (!preview.IsRunning)
+        if (!preview.IsRunning())
             return "No preview is running. Call compile_and_preview first.";
 
         // Get the visual tree
