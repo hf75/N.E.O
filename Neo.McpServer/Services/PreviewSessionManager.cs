@@ -366,7 +366,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
         var bounds = new ParentWindowBoundsMessage(x, y, width, height, true);
         await SafeSendControlAsync(s, new IpcEnvelope(
-            IpcTypes.ParentWindowBounds, "", Json.ToJson(bounds)));
+            IpcTypes.PositionWindow, "", Json.ToJson(bounds)));
     }
 
     // ========================================
