@@ -23,13 +23,19 @@ N.E.O. is a .NET desktop application that lets you create desktop apps through n
 
 ```
 You type a prompt
-    -> AI generates C# code
-        -> Roslyn compiles it to a DLL
-            -> DLL is streamed to a child process via named pipes
-                -> Your app appears in real time
+    → AI generates C# code
+        → Roslyn compiles it to a DLL
+            → DLL is streamed to a child process via named pipes
+                → Your app appears in real time
 ```
 
 Each iteration builds on the previous one. Ask for changes, and the AI sends a patch — no full rewrite needed.
+
+### Three Ways to Use N.E.O.
+
+1. **Standalone host app** — Type prompts directly in the N.E.O. desktop application (WPF or Avalonia host)
+2. **MCP Server** — Claude Cowork / Claude Code controls the entire pipeline via 21 MCP tools
+3. **Smart Edit (Ctrl+K)** — Press Ctrl+K in the preview window to modify the running app directly via an embedded Claude chat — no MCP server or Cowork needed
 
 ## Two Host Applications
 

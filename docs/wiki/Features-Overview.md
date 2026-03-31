@@ -175,11 +175,31 @@ Switch between frameworks in **Settings**:
 
 ## MCP Server (Claude Cowork / Claude Code)
 
-N.E.O. includes an MCP server (`Neo.McpServer`) that lets Claude Cowork or Claude Code compile and display live Avalonia apps directly on your desktop — without running the full N.E.O. host application.
+N.E.O. includes an MCP server (`Neo.McpServer`) with 21 tools that lets Claude Cowork or Claude Code compile and display live Avalonia apps directly on your desktop — without running the full N.E.O. host application.
 
-- Claude generates C# code and calls `compile_and_preview`
-- The MCP server compiles via Roslyn in under 2 seconds
-- A real Avalonia preview window appears on your desktop
-- Subsequent changes are hot-reloaded with `update_preview`
+**Core workflow:**
+- Claude generates C# code and calls `compile_and_preview` — app appears in ~1 second
+- `update_preview` hot-reloads, `patch_preview` applies minimal diffs
+- `capture_screenshot` lets Claude see the app, `inspect_visual_tree` gives structural JSON
+- `set_property` changes colors/fonts/text live without recompile
+- `inject_data` / `read_data` push and pull data at runtime
+- `extract_code` reverse-engineers the current visual state back to clean C#
+- `run_test` checks UI assertions (pass/fail)
+- `export_app` exports as standalone executable (Windows/Linux/macOS)
 
-No SDK required — only the .NET 9 runtime. See [[MCP Server]] for setup instructions.
+**Sessions and Skills:**
+- `save_session` / `load_session` persist apps as `.neo` files
+- `register_skill` / `unregister_skill` create a personal app ecosystem — Claude recognizes saved apps by keywords and loads them automatically in future conversations
+
+**Web Bridge:**
+- `start_web_bridge` serves an HTML page + WebSocket from the Avalonia process
+- Browser and desktop app communicate bidirectionally in real-time
+- No Node.js — pure .NET BCL
+
+**Smart Edit (Ctrl+K):**
+- The MCP preview window (`Neo.PluginWindowAvalonia.MCP`) includes an embedded Claude chat overlay
+- Press **Ctrl+K** → type a change → the app modifies itself in real-time
+- Uses embedded Roslyn for compilation and Claude API for code generation
+- No MCP server or Cowork needed — the app is its own AI client
+
+No SDK required — only the .NET 9 runtime. See [[MCP Server]] for full setup and documentation.

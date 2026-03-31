@@ -140,6 +140,113 @@ Exports the generated app as a **standalone executable** that runs without N.E.O
 
 The exported directory (~27 MB) contains the executable, all Avalonia DLLs, NuGet dependencies, and native libraries (SkiaSharp, HarfBuzz). Copy the folder to any machine with the .NET 9 runtime and it runs.
 
+### `patch_preview`
+
+Applies a unified diff patch to the last compiled source code and hot-reloads. Much more efficient than `update_preview` — Claude sends only the changed lines instead of the full code. Uses fuzzy context matching. NuGet packages carry over automatically from the previous compilation.
+
+**Parameters:**
+- `patch` (string, required) — Unified diff text with `@@ hunk` headers targeting `./currentcode.cs`.
+- `nugetPackages` (string, optional) — Only needed if adding new packages.
+
+### `inspect_visual_tree`
+
+Returns the complete Avalonia visual tree as structured JSON — all controls, types, names, key properties (text, colors, fonts, enabled state, item counts), pixel bounds, and nested hierarchy. Much more precise than a screenshot.
+
+No parameters.
+
+### `inject_data`
+
+Pushes live data into controls without recompilation. Three modes:
+
+**Parameters:**
+- `target` (string, required) — For replace/append: the items control (`"myListBox"`, `"ListBox:0"`). For fill: `"root"` or a container name.
+- `mode` (string, required) — `"replace"` (set new items), `"append"` (add to existing), or `"fill"` (set form control values).
+- `dataJson` (string, required) — For replace/append: JSON array of objects. For fill: JSON object mapping control names to values.
+- `autoTemplate` (bool, optional) — Auto-generate ItemTemplate if the control has none. Default: true.
+- `focusFields` (string, optional) — Comma-separated field names to show in auto-template.
+
+### `read_data`
+
+Reads current data from controls. Auto-detects scope based on control type.
+
+**Parameters:**
+- `target` (string, required) — Control name, type, or `"root"`.
+- `scope` (string, optional) — `"items"` (ItemsSource data), `"form"` (all named children values), or `"value"` (single control). Auto-detected if omitted.
+
+### `extract_code`
+
+Reverse-engineers the running app back to clean, compilable C# source code. Captures the current state — including all changes made via `set_property`, `inject_data`, and Smart Edit (Ctrl+K). Supports Grid, Border, StackPanel, WrapPanel, DockPanel, Canvas, ScrollViewer, and all common controls with their properties and attached properties.
+
+No parameters.
+
+### `run_test`
+
+Runs UI test assertions against the visual tree without modifying anything. Returns pass/fail summary.
+
+**Parameters:**
+- `assertions` (string, required) — JSON array of assertions:
+  ```json
+  [
+    {"target": "title", "property": "Text", "expected": "Hello"},
+    {"target": "slider", "property": "Value", "operator": ">", "expected": "50"},
+    {"target": "submitBtn", "operator": "exists", "property": "", "expected": ""}
+  ]
+  ```
+  Operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `exists`.
+
+### `save_session`
+
+Saves the current app session to a `.neo` JSON file. Includes source code, NuGet packages, and WebBridge HTML (if active).
+
+**Parameters:**
+- `name` (string, required) — Session name (used as filename).
+- `directory` (string, required) — Absolute path to the save directory.
+
+### `load_session`
+
+Loads a `.neo` session file and auto-compiles the app. The preview window appears instantly. If the session included a WebBridge, it is restarted automatically.
+
+**Parameters:**
+- `path` (string, required) — Absolute path to the `.neo` file.
+
+### `register_skill`
+
+Registers a saved session as a reusable "skill" with keywords. Skills are remembered across conversations — Claude sees them in the system prompt and can load matching apps automatically.
+
+**Parameters:**
+- `name` (string, required) — Display name (e.g. "Email Reader").
+- `description` (string, required) — Short description of what the app does.
+- `keywords` (string, required) — Comma-separated keywords for auto-matching.
+- `sessionPath` (string, required) — Absolute path to the `.neo` file.
+
+Requires `NEO_SKILLS_PATH` environment variable.
+
+### `unregister_skill`
+
+Removes a skill from the registry. The `.neo` file is not deleted.
+
+**Parameters:**
+- `name` (string, required) — Name of the skill to remove.
+
+### `start_web_bridge`
+
+Starts an HTTP + WebSocket server inside the preview process. Claude creates both a native desktop app AND a web page — they communicate bidirectionally in real-time. Uses `{{WS_URL}}` placeholder in HTML for automatic WebSocket URL injection.
+
+**Parameters:**
+- `htmlContent` (string, required) — Complete HTML page with JavaScript WebSocket client code.
+- `port` (int, optional) — Port number. Default: auto-detect.
+
+### `send_to_web`
+
+Sends a JSON message to all browsers connected to the web bridge via WebSocket.
+
+**Parameters:**
+- `message` (string, required) — JSON message to broadcast.
+
+### `stop_web_bridge`
+
+Stops the HTTP + WebSocket server. No parameters.
+
 ### `get_preview_status`
 
 Returns the current state of the preview system: whether a window is running, recent IPC logs, runtime error summary, and the Avalonia version.
