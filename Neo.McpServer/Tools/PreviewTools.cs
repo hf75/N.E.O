@@ -25,7 +25,9 @@ public sealed class PreviewTools
             "The main file must contain a class 'DynamicUserControl : UserControl'.")] string[] sourceCode,
         [Description("NuGet packages as JSON object string, e.g. '{\"Humanizer\": \"default\", \"Bogus\": \"35.6.1\"}'. " +
             "Use 'default' for latest stable version. Avalonia packages are added automatically. " +
-            "Omit or pass empty string if no extra packages needed.")] string? nugetPackages = null)
+            "Omit or pass empty string if no extra packages needed.")] string? nugetPackages = null,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
         try
         {
@@ -44,13 +46,13 @@ public sealed class PreviewTools
             }
 
             // Start preview if not running
-            if (!preview.IsRunning())
+            if (!preview.IsRunning(windowId))
             {
-                var started = await preview.StartAsync();
+                var started = await preview.StartAsync(windowId);
                 if (!started)
                 {
                     return $"Compilation succeeded but preview window failed to start.\n" +
-                           $"Logs: {string.Join("\n", preview.GetChildLogs())}";
+                           $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
                 }
             }
 
@@ -66,12 +68,13 @@ public sealed class PreviewTools
             var sent = await preview.SendDllAsync(
                 result.DllBytes!,
                 "DynamicUserControl.dll",
-                deps);
+                deps,
+                windowId: windowId);
 
             if (!sent)
             {
                 return $"Compilation succeeded but failed to send DLL to preview window.\n" +
-                       $"Logs: {string.Join("\n", preview.GetChildLogs())}";
+                       $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
             }
 
             return $"SUCCESS: App compiled and displayed in live preview window.\n" +
@@ -96,12 +99,13 @@ public sealed class PreviewTools
         PreviewSessionManager preview,
         [Description("Updated C# source code files.")] string[] sourceCode,
         [Description("NuGet packages as JSON object string, e.g. '{\"Humanizer\": \"default\"}'. " +
-            "Omit or pass empty string if no extra packages needed.")] string? nugetPackages = null)
+            "Omit or pass empty string if no extra packages needed.")] string? nugetPackages = null,
+        [Description("Window ID for multi-window mode.")] string? windowId = null)
     {
         try
         {
-            if (!preview.IsRunning())
-                return await CompileAndPreview(compilation, preview, sourceCode, nugetPackages);
+            if (!preview.IsRunning(windowId))
+                return await CompileAndPreview(compilation, preview, sourceCode, nugetPackages, windowId);
 
             var packages = ParseNuGetPackages(nugetPackages);
             EnsureAvaloniaPackages(packages);
@@ -123,12 +127,13 @@ public sealed class PreviewTools
             var updated = await preview.UpdateAsync(
                 result.DllBytes!,
                 "DynamicUserControl.dll",
-                deps);
+                deps,
+                windowId: windowId);
 
             if (!updated)
             {
                 return $"Compilation succeeded but hot-reload failed.\n" +
-                       $"Logs: {string.Join("\n", preview.GetChildLogs())}";
+                       $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
             }
 
             return $"SUCCESS: Preview updated live.\n" +
@@ -147,14 +152,17 @@ public sealed class PreviewTools
     /// </summary>
     [McpServerTool(Name = "close_preview")]
     [Description("Closes the live preview window.")]
-    public static async Task<string> ClosePreview(PreviewSessionManager preview)
+    public static async Task<string> ClosePreview(
+        PreviewSessionManager preview,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        if (!preview.IsRunning())
+        if (!preview.IsRunning(windowId))
             return "No preview window is currently running.";
 
         try
         {
-            await preview.StopAsync();
+            await preview.StopAsync(windowId);
             return "Preview window closed.";
         }
         catch (Exception ex)
@@ -169,15 +177,18 @@ public sealed class PreviewTools
     [McpServerTool(Name = "get_preview_status")]
     [Description("Returns the current status of the preview system: whether a window is running, " +
         "child process logs, and available Avalonia version.")]
-    public static string GetPreviewStatus(PreviewSessionManager preview)
+    public static string GetPreviewStatus(
+        PreviewSessionManager preview,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        var status = preview.IsRunning() ? "RUNNING" : "STOPPED";
-        var logs = preview.GetChildLogs().Count > 0
-            ? string.Join("\n", preview.GetChildLogs().TakeLast(20))
+        var status = preview.IsRunning(windowId) ? "RUNNING" : "STOPPED";
+        var logs = preview.GetChildLogs(windowId).Count > 0
+            ? string.Join("\n", preview.GetChildLogs(windowId).TakeLast(20))
             : "(no logs)";
 
-        var errorsSection = preview.GetRuntimeErrors().Count > 0
-            ? $"\nRuntime Errors ({preview.GetRuntimeErrors().Count}):\n{string.Join("\n", preview.GetRuntimeErrors().TakeLast(10))}"
+        var errorsSection = preview.GetRuntimeErrors(windowId).Count > 0
+            ? $"\nRuntime Errors ({preview.GetRuntimeErrors(windowId).Count}):\n{string.Join("\n", preview.GetRuntimeErrors(windowId).TakeLast(10))}"
             : "\nRuntime Errors: none";
 
         return $"Preview Status: {status}\n" +
@@ -194,12 +205,15 @@ public sealed class PreviewTools
     [Description("Captures a screenshot of the running preview window and returns it as a PNG image. " +
         "Use this to SEE what the generated app looks like and suggest visual improvements. " +
         "The preview must be running (call compile_and_preview first).")]
-    public static async Task<IEnumerable<ContentBlock>> CaptureScreenshot(PreviewSessionManager preview)
+    public static async Task<IEnumerable<ContentBlock>> CaptureScreenshot(
+        PreviewSessionManager preview,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        if (!preview.IsRunning())
+        if (!preview.IsRunning(windowId))
             return [new TextContentBlock { Text = "No preview window is running. Call compile_and_preview first." }];
 
-        var result = await preview.CaptureScreenshotAsync();
+        var result = await preview.CaptureScreenshotAsync(windowId: windowId);
         if (result == null)
             return [new TextContentBlock { Text = "Screenshot capture failed. The preview window may not be visible." }];
 
@@ -220,16 +234,19 @@ public sealed class PreviewTools
     [McpServerTool(Name = "get_runtime_errors")]
     [Description("Returns runtime errors thrown by the generated app since the last compile_and_preview. " +
         "Use this to detect crashes and auto-fix the code. Returns empty if no errors occurred.")]
-    public static string GetRuntimeErrors(PreviewSessionManager preview)
+    public static string GetRuntimeErrors(
+        PreviewSessionManager preview,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        if (!preview.IsRunning())
+        if (!preview.IsRunning(windowId))
             return "No preview is running.";
 
-        if (preview.GetRuntimeErrors().Count == 0)
+        if (preview.GetRuntimeErrors(windowId).Count == 0)
             return "No runtime errors. The app is running cleanly.";
 
-        return $"RUNTIME ERRORS ({preview.GetRuntimeErrors().Count}):\n\n" +
-               string.Join("\n---\n", preview.GetRuntimeErrors()) +
+        return $"RUNTIME ERRORS ({preview.GetRuntimeErrors(windowId).Count}):\n\n" +
+               string.Join("\n---\n", preview.GetRuntimeErrors(windowId)) +
                "\n\nFix the code and call update_preview to hot-reload.";
     }
 
@@ -242,12 +259,15 @@ public sealed class PreviewTools
         "enabled state, item counts), bounds, and child hierarchy. " +
         "Use this to understand the UI structure, diagnose layout issues, find controls for " +
         "set_property, or verify changes. Much more precise than a screenshot.")]
-    public static async Task<string> InspectVisualTree(PreviewSessionManager preview)
+    public static async Task<string> InspectVisualTree(
+        PreviewSessionManager preview,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        if (!preview.IsRunning())
+        if (!preview.IsRunning(windowId))
             return "No preview is running. Call compile_and_preview first.";
 
-        var json = await preview.InspectVisualTreeAsync();
+        var json = await preview.InspectVisualTreeAsync(windowId: windowId);
         if (json == null)
             return "Failed to inspect visual tree. The preview window may not be visible.";
 
@@ -271,13 +291,15 @@ public sealed class PreviewTools
         [Description("Property name, e.g. 'Foreground', 'FontSize', 'Text', 'IsVisible', 'Opacity', " +
             "'Background', 'Margin', 'FontWeight', 'Width', 'Height'.")] string propertyName,
         [Description("New value as string. Examples: 'Red', '#FF5500', '24', 'Hello World', 'true', " +
-            "'10,5,10,5' (for Thickness/Margin), 'Bold' (for FontWeight).")] string value)
+            "'10,5,10,5' (for Thickness/Margin), 'Bold' (for FontWeight).")] string value,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        if (!preview.IsRunning())
+        if (!preview.IsRunning(windowId))
             return "No preview is running. Call compile_and_preview first.";
 
         var request = new SetPropertyRequest(target, propertyName, value);
-        var result = await preview.SetPropertyAsync(request);
+        var result = await preview.SetPropertyAsync(request, windowId: windowId);
 
         if (result == null)
             return "SetProperty failed: no response from preview window.";
@@ -376,15 +398,17 @@ public sealed class PreviewTools
             "'{\"nameBox\":\"Alice\",\"ageSlider\":30,\"activeCheck\":true}'.")] string dataJson,
         [Description("Auto-generate ItemTemplate if the control has none. Default true.")] bool autoTemplate = true,
         [Description("Comma-separated field names for auto-template (shows only these fields). " +
-            "If omitted, all fields are shown. Example: 'name,email,role'.")] string? focusFields = null)
+            "If omitted, all fields are shown. Example: 'name,email,role'.")] string? focusFields = null,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        if (!preview.IsRunning())
+        if (!preview.IsRunning(windowId))
             return "No preview is running. Call compile_and_preview first.";
 
         try
         {
             var request = new InjectDataRequest(target, mode, dataJson, autoTemplate, focusFields);
-            var result = await preview.InjectDataAsync(request);
+            var result = await preview.InjectDataAsync(request, windowId: windowId);
 
             if (result == null)
                 return "InjectData failed: no response from preview window.";
@@ -421,15 +445,17 @@ public sealed class PreviewTools
         [Description("Target control. A Name (e.g. 'myListBox'), type (e.g. 'ListBox'), " +
             "type:index (e.g. 'TextBox:2'), or 'root' for the entire UserControl.")] string target,
         [Description("What to read: 'items' (ItemsSource data), 'form' (all named children values), " +
-            "'value' (single control's value). If omitted, auto-detects based on control type.")] string? scope = null)
+            "'value' (single control's value). If omitted, auto-detects based on control type.")] string? scope = null,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        if (!preview.IsRunning())
+        if (!preview.IsRunning(windowId))
             return "No preview is running. Call compile_and_preview first.";
 
         try
         {
             var request = new ReadDataRequest(target, scope);
-            var result = await preview.ReadDataAsync(request);
+            var result = await preview.ReadDataAsync(request, windowId: windowId);
 
             if (result == null)
                 return "ReadData failed: no response from preview window.";
@@ -456,12 +482,15 @@ public sealed class PreviewTools
         "and other live modifications. The generated code is a complete DynamicUserControl " +
         "that can be compiled with compile_and_preview or exported with export_app. " +
         "Use this after live-designing an app to get production-ready code.")]
-    public static async Task<string> ExtractCode(PreviewSessionManager preview)
+    public static async Task<string> ExtractCode(
+        PreviewSessionManager preview,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        if (!preview.IsRunning())
+        if (!preview.IsRunning(windowId))
             return "No preview is running. Call compile_and_preview first.";
 
-        var code = await preview.ExtractCodeAsync();
+        var code = await preview.ExtractCodeAsync(windowId: windowId);
         if (code == null)
             return "Failed to extract code. The preview window may not be visible.";
 
@@ -484,7 +513,9 @@ public sealed class PreviewTools
             "--- a/currentcode.cs\n+++ b/currentcode.cs\n@@ -5,3 +5,3 @@\n " +
             "old context\n-old line\n+new line\n old context")] string patch,
         [Description("NuGet packages as JSON object string. Only needed if adding new packages. " +
-            "Omit to keep the same packages from the last compilation.")] string? nugetPackages = null)
+            "Omit to keep the same packages from the last compilation.")] string? nugetPackages = null,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
         if (compilation.LastSourceCode == null || compilation.LastSourceCode.Count == 0)
             return "PATCH FAILED: No previous source code found. Call compile_and_preview first.";
@@ -517,7 +548,7 @@ public sealed class PreviewTools
                 return $"PATCH applied but COMPILATION FAILED:\n{string.Join("\n", result.Errors)}";
 
             // Hot-reload if preview is running
-            if (!preview.IsRunning())
+            if (!preview.IsRunning(windowId))
                 return $"PATCH applied and compiled, but no preview window is running.\n" +
                        $"DLL size: {result.DllBytes!.Length:N0} bytes";
 
@@ -529,7 +560,7 @@ public sealed class PreviewTools
             var updated = await preview.UpdateAsync(result.DllBytes!, "DynamicUserControl.dll", deps);
             if (!updated)
                 return $"PATCH applied and compiled, but hot-reload failed.\n" +
-                       $"Logs: {string.Join("\n", preview.GetChildLogs())}";
+                       $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
 
             return $"SUCCESS: Patch applied and preview updated.\n" +
                    $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}";
@@ -556,15 +587,17 @@ public sealed class PreviewTools
         [Description("Complete HTML page content including JavaScript with WebSocket client code. " +
             "Use {{WS_URL}} as placeholder for the WebSocket URL — it will be replaced automatically. " +
             "Example: new WebSocket('{{WS_URL}}') in JS.")] string htmlContent,
-        [Description("Port number for the HTTP server. Default: auto-detect a free port.")] int port = 0)
+        [Description("Port number for the HTTP server. Default: auto-detect a free port.")] int port = 0,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        if (!preview.IsRunning())
+        if (!preview.IsRunning(windowId))
             return "No preview is running. Call compile_and_preview first.";
 
         try
         {
             var request = new StartWebBridgeRequest(htmlContent, port);
-            var result = await preview.StartWebBridgeAsync(request);
+            var result = await preview.StartWebBridgeAsync(request, windowId: windowId);
 
             if (result == null)
                 return "Failed to start web bridge: no response.";
@@ -593,12 +626,14 @@ public sealed class PreviewTools
         "Use this to push data or commands from Claude to the web app.")]
     public static async Task<string> SendToWeb(
         PreviewSessionManager preview,
-        [Description("JSON message to send to all connected browsers.")] string message)
+        [Description("JSON message to send to all connected browsers.")] string message,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        if (!preview.IsRunning())
+        if (!preview.IsRunning(windowId))
             return "No preview is running.";
 
-        var ok = await preview.SendToWebBridgeAsync(message);
+        var ok = await preview.SendToWebBridgeAsync(message, windowId: windowId);
         return ok ? "Message sent to web bridge clients." : "Failed to send — web bridge may not be running.";
     }
 
@@ -607,12 +642,15 @@ public sealed class PreviewTools
     /// </summary>
     [McpServerTool(Name = "stop_web_bridge")]
     [Description("Stops the HTTP + WebSocket server started by start_web_bridge.")]
-    public static async Task<string> StopWebBridge(PreviewSessionManager preview)
+    public static async Task<string> StopWebBridge(
+        PreviewSessionManager preview,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        if (!preview.IsRunning())
+        if (!preview.IsRunning(windowId))
             return "No preview is running.";
 
-        await preview.StopWebBridgeAsync();
+        await preview.StopWebBridgeAsync(windowId: windowId);
         return "Web bridge stopped.";
     }
 
@@ -676,7 +714,9 @@ public sealed class PreviewTools
     public static async Task<string> LoadSession(
         CompilationPipeline compilation,
         PreviewSessionManager preview,
-        [Description("Absolute path to the .neo session file.")] string path)
+        [Description("Absolute path to the .neo session file.")] string path,
+        [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
+            "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
         if (string.IsNullOrWhiteSpace(path))
             return "LOAD FAILED: path cannot be empty.";
@@ -716,12 +756,12 @@ public sealed class PreviewTools
                 return $"LOAD FAILED: Compilation error:\n{string.Join("\n", result.Errors)}";
 
             // Start preview
-            if (!preview.IsRunning())
+            if (!preview.IsRunning(windowId))
             {
-                var started = await preview.StartAsync();
+                var started = await preview.StartAsync(windowId);
                 if (!started)
                     return $"Compiled but preview window failed to start.\n" +
-                           $"Logs: {string.Join("\n", preview.GetChildLogs())}";
+                           $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
             }
 
             // Send DLL
@@ -733,7 +773,7 @@ public sealed class PreviewTools
             var sent = await preview.SendDllAsync(result.DllBytes!, "DynamicUserControl.dll", deps);
             if (!sent)
                 return $"Compiled but failed to send DLL to preview.\n" +
-                       $"Logs: {string.Join("\n", preview.GetChildLogs())}";
+                       $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
 
             // Restore WebBridge if saved
             string webBridgeInfo = "";
@@ -744,7 +784,7 @@ public sealed class PreviewTools
                 if (!string.IsNullOrWhiteSpace(html))
                 {
                     var bridgeResult = await preview.StartWebBridgeAsync(
-                        new Neo.IPC.StartWebBridgeRequest(html));
+                        new Neo.IPC.StartWebBridgeRequest(html), windowId: windowId);
                     if (bridgeResult?.Success == true)
                         webBridgeInfo = $"\nWebBridge: {bridgeResult.Url}";
                 }
@@ -776,13 +816,14 @@ public sealed class PreviewTools
         [Description("JSON array of assertions. Example: " +
             "'[{\"target\":\"title\",\"property\":\"Text\",\"expected\":\"Hello\"}," +
             "{\"target\":\"slider\",\"property\":\"Value\",\"operator\":\">\",\"expected\":\"50\"}," +
-            "{\"target\":\"submitBtn\",\"property\":\"IsEnabled\",\"expected\":\"true\"}]'")] string assertions)
+            "{\"target\":\"submitBtn\",\"property\":\"IsEnabled\",\"expected\":\"true\"}]'")] string assertions,
+        [Description("Window ID for multi-window mode.")] string? windowId = null)
     {
-        if (!preview.IsRunning())
+        if (!preview.IsRunning(windowId))
             return "No preview is running. Call compile_and_preview first.";
 
         // Get the visual tree
-        var treeJson = await preview.InspectVisualTreeAsync();
+        var treeJson = await preview.InspectVisualTreeAsync(windowId: windowId);
         if (treeJson == null)
             return "Failed to inspect visual tree.";
 
@@ -1008,6 +1049,140 @@ public sealed class PreviewTools
     {
         var (success, message) = skills.Unregister(name);
         return success ? $"SUCCESS: {message}" : $"FAILED: {message}";
+    }
+
+    // ========================================
+    // Multi-Window Tools
+    // ========================================
+
+    /// <summary>Lists all running preview windows.</summary>
+    [McpServerTool(Name = "list_windows")]
+    [Description("Lists all running preview windows with their IDs and status. " +
+        "Use this to see which windows are currently open in multi-window mode.")]
+    public static string ListWindows(PreviewSessionManager preview)
+    {
+        var running = preview.GetRunningWindowIds();
+        var all = preview.GetAllWindowIds();
+
+        if (all.Count == 0)
+            return "No windows. Use compile_and_preview to create one.";
+
+        var lines = all.Select(id =>
+            $"  {id}: {(preview.IsRunning(id) ? "RUNNING" : "STOPPED")}");
+
+        return $"{running.Count} running, {all.Count} total:\n{string.Join("\n", lines)}";
+    }
+
+    /// <summary>Closes all preview windows.</summary>
+    [McpServerTool(Name = "close_all_windows")]
+    [Description("Closes all running preview windows at once.")]
+    public static async Task<string> CloseAllWindows(PreviewSessionManager preview)
+    {
+        var running = preview.GetRunningWindowIds();
+        if (running.Count == 0)
+            return "No windows are running.";
+
+        await preview.StopAllAsync();
+        return $"Closed {running.Count} window(s): {string.Join(", ", running)}";
+    }
+
+    /// <summary>Positions a window at specific screen coordinates.</summary>
+    [McpServerTool(Name = "position_window")]
+    [Description("Positions a preview window at specific screen coordinates. " +
+        "Use this to arrange multiple windows on screen.")]
+    public static async Task<string> PositionWindow(
+        PreviewSessionManager preview,
+        [Description("Window ID to position.")] string windowId,
+        [Description("X coordinate (pixels from left).")] double x,
+        [Description("Y coordinate (pixels from top).")] double y,
+        [Description("Window width in pixels.")] double width,
+        [Description("Window height in pixels.")] double height)
+    {
+        if (!preview.IsRunning(windowId))
+            return $"Window '{windowId}' is not running.";
+
+        await preview.PositionWindowAsync(windowId, x, y, width, height);
+        return $"Window '{windowId}' positioned at ({x}, {y}) size {width}x{height}.";
+    }
+
+    /// <summary>Arranges all running windows in a predefined layout.</summary>
+    [McpServerTool(Name = "layout_windows")]
+    [Description("Arranges all running windows in a predefined layout. " +
+        "Layouts: 'side_by_side' (2 windows, 50/50 horizontal), " +
+        "'top_bottom' (2 windows, 50/50 vertical), " +
+        "'left_half_right_stack' (1 large left, rest stacked right), " +
+        "'grid' (equal grid arrangement).")]
+    public static async Task<string> LayoutWindows(
+        PreviewSessionManager preview,
+        [Description("Layout preset: 'side_by_side', 'top_bottom', 'left_half_right_stack', or 'grid'.")] string layout)
+    {
+        var windowIds = preview.GetRunningWindowIds();
+        if (windowIds.Count < 2)
+            return $"Need at least 2 running windows for layout. Currently: {windowIds.Count}";
+
+        // Use reasonable defaults for screen size
+        // The windows will be positioned within these bounds
+        double screenW = 1920, screenH = 1040; // leave space for taskbar
+        double gap = 8;
+
+        switch (layout.ToLowerInvariant().Replace(" ", "_").Replace("-", "_"))
+        {
+            case "side_by_side":
+            {
+                double w = (screenW - gap * (windowIds.Count + 1)) / windowIds.Count;
+                for (int i = 0; i < windowIds.Count; i++)
+                    await preview.PositionWindowAsync(windowIds[i],
+                        gap + i * (w + gap), gap, w, screenH - gap * 2);
+                break;
+            }
+
+            case "top_bottom":
+            {
+                double h = (screenH - gap * (windowIds.Count + 1)) / windowIds.Count;
+                for (int i = 0; i < windowIds.Count; i++)
+                    await preview.PositionWindowAsync(windowIds[i],
+                        gap, gap + i * (h + gap), screenW - gap * 2, h);
+                break;
+            }
+
+            case "left_half_right_stack":
+            {
+                // First window takes left half, rest stack on the right
+                double leftW = (screenW - gap * 3) / 2;
+                double rightW = leftW;
+                double rightH = (screenH - gap * (windowIds.Count)) / (windowIds.Count - 1);
+
+                await preview.PositionWindowAsync(windowIds[0],
+                    gap, gap, leftW, screenH - gap * 2);
+
+                for (int i = 1; i < windowIds.Count; i++)
+                    await preview.PositionWindowAsync(windowIds[i],
+                        leftW + gap * 2, gap + (i - 1) * (rightH + gap), rightW, rightH);
+                break;
+            }
+
+            case "grid":
+            {
+                int cols = (int)Math.Ceiling(Math.Sqrt(windowIds.Count));
+                int rows = (int)Math.Ceiling((double)windowIds.Count / cols);
+                double cellW = (screenW - gap * (cols + 1)) / cols;
+                double cellH = (screenH - gap * (rows + 1)) / rows;
+
+                for (int i = 0; i < windowIds.Count; i++)
+                {
+                    int col = i % cols;
+                    int row = i / cols;
+                    await preview.PositionWindowAsync(windowIds[i],
+                        gap + col * (cellW + gap), gap + row * (cellH + gap), cellW, cellH);
+                }
+                break;
+            }
+
+            default:
+                return $"Unknown layout '{layout}'. Use: side_by_side, top_bottom, left_half_right_stack, grid.";
+        }
+
+        return $"Applied '{layout}' layout to {windowIds.Count} windows: {string.Join(", ", windowIds)}";
     }
 
     private static Dictionary<string, string> ParseNuGetPackages(string? nugetPackagesJson)
