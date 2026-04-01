@@ -58,6 +58,7 @@ namespace Neo.IPC
         public const string InjectDataResult = "InjectDataResult";
         public const string ReadData = "ReadData";
         public const string ReadDataResult = "ReadDataResult";
+        public const string PositionWindow = "PositionWindow";
         public const string ExtractCode = "ExtractCode";
         public const string ExtractCodeResult = "ExtractCodeResult";
         public const string StartWebBridge = "StartWebBridge";

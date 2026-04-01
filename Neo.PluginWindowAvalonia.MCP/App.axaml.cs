@@ -405,6 +405,31 @@ namespace Neo.PluginWindowAvalonia.MCP
                         break;
                     }
 
+                case IpcTypes.PositionWindow:
+                    {
+                        var bounds = Json.FromJson<ParentWindowBoundsMessage>(env.PayloadJson);
+                        if (bounds != null)
+                        {
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                MainWin.Position = new PixelPoint((int)bounds.X, (int)bounds.Y);
+                                MainWin.Width = bounds.Width;
+                                MainWin.Height = bounds.Height;
+
+                                if (!MainWin.IsVisible)
+                                    MainWin.Show();
+
+                                if (MainWin.HasEverLoadedControl)
+                                    MainWin.WaitOverlay.IsVisible = false;
+                            });
+                        }
+
+                        await SafeSendAsync(new IpcEnvelope(
+                            IpcTypes.Ack, env.CorrelationId,
+                            Json.ToJson(new AckMessage("Window positioned."))));
+                        break;
+                    }
+
                 case IpcTypes.ToggleChildFullScreen:
                     {
                         Dispatcher.UIThread.Post(() =>

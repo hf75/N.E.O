@@ -6,629 +6,476 @@ using Neo.IPC;
 namespace Neo.McpServer.Services;
 
 /// <summary>
-/// Manages a single Neo.PluginWindowAvalonia child process and its Named Pipe connection.
-/// This is the headless equivalent of AvaloniaChildProcessService — no UI host needed.
+/// Manages one or more Neo.PluginWindowAvalonia child processes via Named Pipes.
+/// Each window has a unique windowId. Default windowId is "default" for backward compatibility.
 /// </summary>
 public sealed class PreviewSessionManager : IAsyncDisposable
 {
-    private NamedPipeServerStream? _pipeStream;
-    private FramedPipeMessenger? _messenger;
-    private readonly SemaphoreSlim _sendLock = new(1, 1);
-    private Process? _childProcess;
-    private Task? _listenLoopTask;
-    private CancellationTokenSource _pipeCts = new();
+    private const string DefaultWindowId = "default";
+    private readonly ConcurrentDictionary<string, WindowSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
     private int _sessionCounter;
-    private bool _isShuttingDown;
-    private volatile bool _helloReceived;
-    private readonly object _logLock = new();
-    private readonly List<string> _childLogs = new();
-    private readonly List<string> _runtimeErrors = new();
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<IpcEnvelope>> _pendingRequests = new();
 
-    public bool IsRunning => _childProcess is { HasExited: false } && _pipeStream is { IsConnected: true };
-    public IReadOnlyList<string> ChildLogs { get { lock (_logLock) return _childLogs.ToList(); } }
-
-    /// <summary>
-    /// Runtime errors received from the child process since the last DLL load.
-    /// These are exceptions thrown by the user's generated code.
-    /// </summary>
-    public IReadOnlyList<string> RuntimeErrors { get { lock (_logLock) return _runtimeErrors.ToList(); } }
-
-    private void AddLog(string message) { lock (_logLock) _childLogs.Add(message); }
-    private void AddRuntimeError(string error) { lock (_logLock) _runtimeErrors.Add(error); }
-
-    /// <summary>
-    /// Starts Neo.PluginWindowAvalonia in standalone mode and connects via Named Pipe.
-    /// </summary>
-    public async Task<bool> StartAsync(CancellationToken ct = default)
+    // ========================================
+    // WindowSession — per-window state
+    // ========================================
+    private sealed class WindowSession : IAsyncDisposable
     {
-        if (IsRunning) return true;
+        public string WindowId { get; }
+        public NamedPipeServerStream? PipeStream { get; set; }
+        public FramedPipeMessenger? Messenger { get; set; }
+        public SemaphoreSlim SendLock { get; } = new(1, 1);
+        public Process? ChildProcess { get; set; }
+        public Task? ListenLoopTask { get; set; }
+        public CancellationTokenSource PipeCts { get; set; } = new();
+        public bool IsShuttingDown { get; set; }
+        public volatile bool HelloReceived;
+        public readonly object LogLock = new();
+        public readonly List<string> ChildLogs = new();
+        public readonly List<string> RuntimeErrors = new();
+        public readonly ConcurrentDictionary<string, TaskCompletionSource<IpcEnvelope>> PendingRequests = new();
+        public string? LastWebBridgeHtml { get; set; }
 
-        await DisposeChildAsync();
+        public bool IsRunning => ChildProcess is { HasExited: false } && PipeStream is { IsConnected: true };
 
-        _pipeCts = new CancellationTokenSource();
-        _sessionCounter++;
-        _isShuttingDown = false;
-        _helloReceived = false;
-        lock (_logLock) { _childLogs.Clear(); _runtimeErrors.Clear(); }
+        public WindowSession(string windowId) => WindowId = windowId;
 
-        var pipeName = $"neo_mcp_{Environment.ProcessId}_{_sessionCounter}";
+        public void AddLog(string message) { lock (LogLock) ChildLogs.Add(message); }
+        public void AddRuntimeError(string error) { lock (LogLock) RuntimeErrors.Add(error); }
 
-        _pipeStream = new NamedPipeServerStream(
-            pipeName,
-            PipeDirection.InOut,
-            1,
-            PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous);
+        public async ValueTask DisposeAsync()
+        {
+            IsShuttingDown = true;
+            try { PipeCts.Cancel(); } catch { }
 
-        _messenger = new FramedPipeMessenger(_pipeStream);
+            if (ListenLoopTask != null)
+            {
+                try { await ListenLoopTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { }
+                ListenLoopTask = null;
+            }
+
+            if (PipeStream != null)
+            {
+                try { if (PipeStream.IsConnected) PipeStream.Disconnect(); } catch { }
+                try { PipeStream.Dispose(); } catch { }
+                PipeStream = null;
+                Messenger = null;
+            }
+
+            if (ChildProcess != null && !ChildProcess.HasExited)
+            {
+                try
+                {
+                    try { ChildProcess.CloseMainWindow(); } catch { }
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    try { await ChildProcess.WaitForExitAsync(cts.Token); }
+                    catch (OperationCanceledException) { }
+                    if (!ChildProcess.HasExited)
+                        ChildProcess.Kill(entireProcessTree: true);
+                }
+                catch { }
+                ChildProcess.Dispose();
+                ChildProcess = null;
+            }
+        }
+    }
+
+    // ========================================
+    // Public API — all methods accept optional windowId
+    // ========================================
+
+    public bool IsRunning(string? windowId = null) => GetSession(windowId)?.IsRunning ?? false;
+
+    public IReadOnlyList<string> GetChildLogs(string? windowId = null)
+    {
+        var s = GetSession(windowId);
+        if (s == null) return Array.Empty<string>();
+        lock (s.LogLock) return s.ChildLogs.ToList();
+    }
+
+    public IReadOnlyList<string> GetRuntimeErrors(string? windowId = null)
+    {
+        var s = GetSession(windowId);
+        if (s == null) return Array.Empty<string>();
+        lock (s.LogLock) return s.RuntimeErrors.ToList();
+    }
+
+    public string? GetLastWebBridgeHtml(string? windowId = null) => GetSession(windowId)?.LastWebBridgeHtml;
+
+    /// <summary>Returns all active window IDs.</summary>
+    public IReadOnlyList<string> GetRunningWindowIds() =>
+        _sessions.Where(kv => kv.Value.IsRunning).Select(kv => kv.Key).ToList();
+
+    /// <summary>Returns all window IDs (including stopped).</summary>
+    public IReadOnlyList<string> GetAllWindowIds() => _sessions.Keys.ToList();
+
+    // ========================================
+    // Backward-compatible properties (delegate to default session)
+    // ========================================
+    [Obsolete("Use IsRunning(windowId) instead")]
+    public bool IsRunningDefault => IsRunning();
+    public IReadOnlyList<string> ChildLogs => GetChildLogs();
+    public IReadOnlyList<string> RuntimeErrors => GetRuntimeErrors();
+    public string? LastWebBridgeHtml => GetLastWebBridgeHtml();
+
+    // ========================================
+    // Start / Stop
+    // ========================================
+
+    public async Task<bool> StartAsync(string? windowId = null, CancellationToken ct = default)
+    {
+        windowId ??= DefaultWindowId;
+
+        // If already running, return true
+        if (GetSession(windowId)?.IsRunning == true) return true;
+
+        // Dispose old session if exists
+        if (_sessions.TryRemove(windowId, out var oldSession))
+            await oldSession.DisposeAsync();
+
+        var session = new WindowSession(windowId);
+        _sessions[windowId] = session;
+
+        session.PipeCts = new CancellationTokenSource();
+        var counter = Interlocked.Increment(ref _sessionCounter);
+
+        var pipeName = $"neo_mcp_{Environment.ProcessId}_{counter}";
+
+        session.PipeStream = new NamedPipeServerStream(
+            pipeName, PipeDirection.InOut, 1,
+            PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        session.Messenger = new FramedPipeMessenger(session.PipeStream);
 
         var childPath = FindChildExecutable();
         if (childPath == null)
         {
-            AddLog("ERROR: Neo.PluginWindowAvalonia executable not found.");
+            session.AddLog("ERROR: Neo.PluginWindowAvalonia executable not found.");
             return false;
         }
 
         var childArgs = $"--pipe {pipeName} --standalone";
-
         var psi = new ProcessStartInfo
         {
             FileName = childPath.Value.useDotnet ? "dotnet" : childPath.Value.exePath,
             Arguments = childPath.Value.useDotnet
-                ? $"\"{childPath.Value.exePath}\" {childArgs}"
-                : childArgs,
+                ? $"\"{childPath.Value.exePath}\" {childArgs}" : childArgs,
             UseShellExecute = false,
             CreateNoWindow = false,
         };
 
         try
         {
-            System.Diagnostics.Debug.WriteLine($"[PreviewSession] Starting: {psi.FileName} {psi.Arguments}");
-            _childProcess = Process.Start(psi);
-            if (_childProcess == null)
+            session.ChildProcess = Process.Start(psi);
+            if (session.ChildProcess == null)
             {
-                AddLog("ERROR: Failed to start child process.");
+                session.AddLog("ERROR: Failed to start child process.");
                 return false;
             }
-            System.Diagnostics.Debug.WriteLine($"[PreviewSession] Child started PID={_childProcess.Id}, waiting for pipe...");
 
-            // Wait for pipe connection with timeout
-            var connectTask = _pipeStream.WaitForConnectionAsync(_pipeCts.Token);
-            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10), _pipeCts.Token);
+            var connectTask = session.PipeStream.WaitForConnectionAsync(session.PipeCts.Token);
+            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10), session.PipeCts.Token);
             if (await Task.WhenAny(connectTask, timeoutTask) != connectTask)
             {
-                AddLog("ERROR: Child process connection timed out (10s).");
-                System.Diagnostics.Debug.WriteLine("[PreviewSession] TIMEOUT waiting for pipe connection!");
-                try { _pipeStream.Dispose(); } catch { }
-                _pipeStream = null;
-                _messenger = null;
+                session.AddLog("ERROR: Child process connection timed out (10s).");
+                try { session.PipeStream.Dispose(); } catch { }
+                session.PipeStream = null;
+                session.Messenger = null;
                 return false;
             }
-            await connectTask; // propagate any exception
-            System.Diagnostics.Debug.WriteLine("[PreviewSession] Pipe connected!");
+            await connectTask;
 
-            // Start listen loop
-            _listenLoopTask = Task.Run(() => ListenLoopAsync(_pipeCts.Token));
+            session.ListenLoopTask = Task.Run(() => ListenLoopAsync(session, session.PipeCts.Token));
 
-            // Wait for child to send Hello (it starts the listen loop after Opened event)
-            // Without this, we'd send blobs before the child is reading, causing pipe buffer to fill and block.
-            System.Diagnostics.Debug.WriteLine("[PreviewSession] Waiting for child Hello...");
             var helloDeadline = DateTime.UtcNow.AddSeconds(10);
-            while (!_helloReceived && DateTime.UtcNow < helloDeadline)
-                await Task.Delay(100, _pipeCts.Token);
+            while (!session.HelloReceived && DateTime.UtcNow < helloDeadline)
+                await Task.Delay(100, session.PipeCts.Token);
 
-            if (!_helloReceived)
-            {
-                System.Diagnostics.Debug.WriteLine("[PreviewSession] WARNING: No Hello received, proceeding anyway...");
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine("[PreviewSession] Hello received from child!");
-            }
-
-            AddLog($"Preview window started (PID: {_childProcess.Id}).");
-            System.Diagnostics.Debug.WriteLine($"[PreviewSession] Ready. Sending DLL next...");
+            session.AddLog($"Preview window '{windowId}' started (PID: {session.ChildProcess.Id}).");
             return true;
         }
         catch (Exception ex)
         {
-            AddLog($"ERROR: {ex.Message}");
+            session.AddLog($"ERROR: {ex.Message}");
             return false;
         }
     }
 
-    /// <summary>
-    /// Sends DLL bytes + dependencies to the running PluginWindow and triggers LoadControl.
-    /// </summary>
-    public async Task<bool> SendDllAsync(
-        byte[] mainDllBytes,
-        string mainDllName,
-        Dictionary<string, byte[]>? dependencyDlls = null,
-        CancellationToken ct = default)
+    public async Task StopAsync(string? windowId = null)
     {
-        if (!IsRunning || _messenger == null)
-            return false;
+        windowId ??= DefaultWindowId;
+        if (_sessions.TryRemove(windowId, out var session))
+        {
+            await session.DisposeAsync();
+            session.AddLog($"Preview window '{windowId}' closed.");
+        }
+    }
+
+    public async Task StopAllAsync()
+    {
+        var ids = _sessions.Keys.ToList();
+        foreach (var id in ids)
+            await StopAsync(id);
+    }
+
+    // ========================================
+    // DLL Send / Update
+    // ========================================
+
+    public async Task<bool> SendDllAsync(
+        byte[] mainDllBytes, string mainDllName,
+        Dictionary<string, byte[]>? dependencyDlls = null,
+        CancellationToken ct = default, string? windowId = null)
+    {
+        var s = GetRunningSession(windowId);
+        if (s == null) return false;
 
         try
         {
-            // Clear runtime errors from previous load
-            lock (_logLock) _runtimeErrors.Clear();
+            lock (s.LogLock) s.RuntimeErrors.Clear();
 
-            // Send all dependency DLLs first
             if (dependencyDlls != null)
-            {
                 foreach (var (name, bytes) in dependencyDlls)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[PreviewSession] Sending dep: {name} ({bytes.Length} bytes)");
-                    await SendBlobAsync(name, bytes, ct);
-                }
-            }
+                    await SendBlobAsync(s, name, bytes, ct);
 
-            // Send main DLL
-            System.Diagnostics.Debug.WriteLine("[PreviewSession] Sending main DLL...");
-            await SendBlobAsync(mainDllName, mainDllBytes, ct);
-            System.Diagnostics.Debug.WriteLine($"[PreviewSession] Sending LoadControl... pipe connected={_pipeStream?.IsConnected}");
+            await SendBlobAsync(s, mainDllName, mainDllBytes, ct);
 
-            // Send LoadControl command
             var req = new LoadControlRequest(
-                mainDllName,
-                "DynamicUserControl",
+                mainDllName, "DynamicUserControl",
                 dependencyDlls?.Keys.ToList() ?? new List<string>());
 
-            await SafeSendControlAsync(new IpcEnvelope(
-                IpcTypes.LoadControl,
-                Guid.NewGuid().ToString("N"),
-                Json.ToJson(req)));
+            await SafeSendControlAsync(s, new IpcEnvelope(
+                IpcTypes.LoadControl, Guid.NewGuid().ToString("N"), Json.ToJson(req)));
 
-            AddLog($"DLL loaded: {mainDllName} ({mainDllBytes.Length:N0} bytes).");
+            s.AddLog($"DLL loaded: {mainDllName} ({mainDllBytes.Length:N0} bytes).");
             return true;
         }
         catch (Exception ex)
         {
-            AddLog($"ERROR sending DLL: {ex.Message}");
+            s.AddLog($"ERROR sending DLL: {ex.Message}");
             return false;
         }
     }
 
-    /// <summary>
-    /// Unloads the current control, sends a new DLL, and reloads.
-    /// </summary>
     public async Task<bool> UpdateAsync(
-        byte[] mainDllBytes,
-        string mainDllName,
+        byte[] mainDllBytes, string mainDllName,
         Dictionary<string, byte[]>? dependencyDlls = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default, string? windowId = null)
     {
-        if (!IsRunning || _messenger == null)
-            return false;
+        var s = GetRunningSession(windowId);
+        if (s == null) return false;
 
-        // Unload current control
-        await SafeSendControlAsync(new IpcEnvelope(
-            IpcTypes.UnloadControl,
-            Guid.NewGuid().ToString("N"),
-            "{}"));
-
-        // Small delay to let the child process clean up
+        await SafeSendControlAsync(s, new IpcEnvelope(
+            IpcTypes.UnloadControl, Guid.NewGuid().ToString("N"), "{}"));
         await Task.Delay(100, ct);
 
-        return await SendDllAsync(mainDllBytes, mainDllName, dependencyDlls, ct);
+        return await SendDllAsync(mainDllBytes, mainDllName, dependencyDlls, ct, windowId);
     }
 
-    /// <summary>
-    /// Captures a screenshot of the running preview window as Base64 PNG.
-    /// </summary>
-    public async Task<ScreenshotResultMessage?> CaptureScreenshotAsync(CancellationToken ct = default)
+    // ========================================
+    // IPC Request-Response methods
+    // ========================================
+
+    public async Task<ScreenshotResultMessage?> CaptureScreenshotAsync(
+        CancellationToken ct = default, string? windowId = null)
     {
-        if (!IsRunning || _messenger == null)
-            return null;
-
-        var corrId = Guid.NewGuid().ToString("N");
-        var tcs = new TaskCompletionSource<IpcEnvelope>();
-        _pendingRequests[corrId] = tcs;
-
-        try
-        {
-            await SafeSendControlAsync(new IpcEnvelope(
-                IpcTypes.CaptureScreenshot, corrId, "{}"));
-
-            // Wait for ScreenshotResult with timeout
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(5));
-            cts.Token.Register(() => tcs.TrySetCanceled());
-
-            var response = await tcs.Task;
-
-            if (response.Type == IpcTypes.ScreenshotResult)
-                return Json.FromJson<ScreenshotResultMessage>(response.PayloadJson);
-
-            return null;
-        }
-        catch (OperationCanceledException)
-        {
-            AddLog("Screenshot timed out.");
-            return null;
-        }
-        catch (Exception ex)
-        {
-            AddLog($"Screenshot failed: {ex.Message}");
-            return null;
-        }
-        finally
-        {
-            _pendingRequests.TryRemove(corrId, out _);
-        }
+        var r = await SendRequestAsync(windowId, IpcTypes.CaptureScreenshot, "{}", 5, ct);
+        return r?.Type == IpcTypes.ScreenshotResult
+            ? Json.FromJson<ScreenshotResultMessage>(r.PayloadJson) : null;
     }
 
-    /// <summary>
-    /// Inspects the visual tree of the running app and returns a JSON representation.
-    /// </summary>
-    public async Task<string?> InspectVisualTreeAsync(CancellationToken ct = default)
+    public async Task<string?> InspectVisualTreeAsync(
+        CancellationToken ct = default, string? windowId = null)
     {
-        if (!IsRunning || _messenger == null)
-            return null;
-
-        var corrId = Guid.NewGuid().ToString("N");
-        var tcs = new TaskCompletionSource<IpcEnvelope>();
-        _pendingRequests[corrId] = tcs;
-
-        try
-        {
-            await SafeSendControlAsync(new IpcEnvelope(
-                IpcTypes.InspectVisualTree, corrId, "{}"));
-
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(5));
-            cts.Token.Register(() => tcs.TrySetCanceled());
-
-            var response = await tcs.Task;
-
-            if (response.Type == IpcTypes.InspectVisualTreeResult)
-                return response.PayloadJson;
-
-            return null;
-        }
-        catch (OperationCanceledException)
-        {
-            return null;
-        }
-        finally
-        {
-            _pendingRequests.TryRemove(corrId, out _);
-        }
+        var r = await SendRequestAsync(windowId, IpcTypes.InspectVisualTree, "{}", 5, ct);
+        return r?.Type == IpcTypes.InspectVisualTreeResult ? r.PayloadJson : null;
     }
 
-    /// <summary>Last WebBridge HTML content — used by save_session.</summary>
-    public string? LastWebBridgeHtml { get; private set; }
+    public async Task<string?> ExtractCodeAsync(
+        CancellationToken ct = default, string? windowId = null)
+    {
+        var r = await SendRequestAsync(windowId, IpcTypes.ExtractCode, "{}", 10, ct);
+        return r?.Type == IpcTypes.ExtractCodeResult ? r.PayloadJson : null;
+    }
 
-    /// <summary>
-    /// Starts an HTTP + WebSocket bridge in the PluginWindow process.
-    /// </summary>
+    public async Task<SetPropertyResultMessage?> SetPropertyAsync(
+        SetPropertyRequest request, CancellationToken ct = default, string? windowId = null)
+    {
+        var r = await SendRequestAsync(windowId, IpcTypes.SetProperty, Json.ToJson(request), 5, ct);
+        if (r == null) return new SetPropertyResultMessage(false, "No response.");
+        return r.Type == IpcTypes.SetPropertyResult
+            ? Json.FromJson<SetPropertyResultMessage>(r.PayloadJson)
+            : new SetPropertyResultMessage(false, "Unexpected response.");
+    }
+
+    public async Task<InjectDataResult?> InjectDataAsync(
+        InjectDataRequest request, CancellationToken ct = default, string? windowId = null)
+    {
+        var r = await SendRequestAsync(windowId, IpcTypes.InjectData, Json.ToJson(request), 15, ct);
+        if (r == null) return new InjectDataResult(false, "No response.");
+        return r.Type == IpcTypes.InjectDataResult
+            ? Json.FromJson<InjectDataResult>(r.PayloadJson)
+            : new InjectDataResult(false, "Unexpected response.");
+    }
+
+    public async Task<ReadDataResult?> ReadDataAsync(
+        ReadDataRequest request, CancellationToken ct = default, string? windowId = null)
+    {
+        var r = await SendRequestAsync(windowId, IpcTypes.ReadData, Json.ToJson(request), 5, ct);
+        if (r == null) return new ReadDataResult(false, "No response.");
+        return r.Type == IpcTypes.ReadDataResult
+            ? Json.FromJson<ReadDataResult>(r.PayloadJson)
+            : new ReadDataResult(false, "Unexpected response.");
+    }
+
     public async Task<StartWebBridgeResult?> StartWebBridgeAsync(
-        StartWebBridgeRequest request, CancellationToken ct = default)
+        StartWebBridgeRequest request, CancellationToken ct = default, string? windowId = null)
     {
-        if (!IsRunning || _messenger == null)
-            return new StartWebBridgeResult(false, null, null, "No preview is running.");
+        var s = GetRunningSession(windowId);
+        if (s == null) return new StartWebBridgeResult(false, null, null, "No preview is running.");
+        s.LastWebBridgeHtml = request.HtmlContent;
 
-        LastWebBridgeHtml = request.HtmlContent;
-
-        var corrId = Guid.NewGuid().ToString("N");
-        var tcs = new TaskCompletionSource<IpcEnvelope>();
-        _pendingRequests[corrId] = tcs;
-
-        try
-        {
-            await SafeSendControlAsync(new IpcEnvelope(
-                IpcTypes.StartWebBridge, corrId, Json.ToJson(request)));
-
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(10));
-            cts.Token.Register(() => tcs.TrySetCanceled());
-
-            var response = await tcs.Task;
-
-            if (response.Type == IpcTypes.StartWebBridgeResult)
-                return Json.FromJson<StartWebBridgeResult>(response.PayloadJson);
-
-            return new StartWebBridgeResult(false, null, null, "Unexpected response.");
-        }
-        catch (OperationCanceledException)
-        {
-            return new StartWebBridgeResult(false, null, null, "StartWebBridge timed out.");
-        }
-        catch (Exception ex)
-        {
-            return new StartWebBridgeResult(false, null, null, $"StartWebBridge failed: {ex.Message}");
-        }
-        finally
-        {
-            _pendingRequests.TryRemove(corrId, out _);
-        }
+        var r = await SendRequestAsync(windowId, IpcTypes.StartWebBridge, Json.ToJson(request), 10, ct);
+        if (r == null) return new StartWebBridgeResult(false, null, null, "No response.");
+        return r.Type == IpcTypes.StartWebBridgeResult
+            ? Json.FromJson<StartWebBridgeResult>(r.PayloadJson)
+            : new StartWebBridgeResult(false, null, null, "Unexpected response.");
     }
 
-    /// <summary>
-    /// Sends a message to all connected web bridge clients.
-    /// </summary>
-    public async Task<bool> SendToWebBridgeAsync(string message, CancellationToken ct = default)
+    public async Task<bool> SendToWebBridgeAsync(
+        string message, CancellationToken ct = default, string? windowId = null)
     {
-        if (!IsRunning || _messenger == null) return false;
-
-        await SafeSendControlAsync(new IpcEnvelope(
+        var s = GetRunningSession(windowId);
+        if (s == null) return false;
+        await SafeSendControlAsync(s, new IpcEnvelope(
             IpcTypes.SendToWebBridge, Guid.NewGuid().ToString("N"), message));
         return true;
     }
 
-    /// <summary>
-    /// Stops the web bridge server.
-    /// </summary>
-    public async Task StopWebBridgeAsync(CancellationToken ct = default)
+    public async Task StopWebBridgeAsync(CancellationToken ct = default, string? windowId = null)
     {
-        if (!IsRunning || _messenger == null) return;
-
-        await SafeSendControlAsync(new IpcEnvelope(
+        var s = GetRunningSession(windowId);
+        if (s == null) return;
+        await SafeSendControlAsync(s, new IpcEnvelope(
             IpcTypes.StopWebBridge, Guid.NewGuid().ToString("N"), "{}"));
     }
 
-    /// <summary>
-    /// Extracts the current visual state as compilable C# source code.
-    /// </summary>
-    public async Task<string?> ExtractCodeAsync(CancellationToken ct = default)
+    /// <summary>Positions a window at specific coordinates.</summary>
+    public async Task PositionWindowAsync(string windowId, double x, double y, double width, double height)
     {
-        if (!IsRunning || _messenger == null)
-            return null;
+        var s = GetRunningSession(windowId);
+        if (s == null) return;
 
-        var corrId = Guid.NewGuid().ToString("N");
-        var tcs = new TaskCompletionSource<IpcEnvelope>();
-        _pendingRequests[corrId] = tcs;
-
-        try
-        {
-            await SafeSendControlAsync(new IpcEnvelope(
-                IpcTypes.ExtractCode, corrId, "{}"));
-
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(10));
-            cts.Token.Register(() => tcs.TrySetCanceled());
-
-            var response = await tcs.Task;
-
-            if (response.Type == IpcTypes.ExtractCodeResult)
-                return response.PayloadJson; // Raw C# code string
-
-            return null;
-        }
-        catch (OperationCanceledException)
-        {
-            return null;
-        }
-        finally
-        {
-            _pendingRequests.TryRemove(corrId, out _);
-        }
+        var bounds = new ParentWindowBoundsMessage(x, y, width, height, true);
+        await SafeSendControlAsync(s, new IpcEnvelope(
+            IpcTypes.PositionWindow, "", Json.ToJson(bounds)));
     }
 
-    /// <summary>
-    /// Injects data into controls in the running app.
-    /// </summary>
-    public async Task<InjectDataResult?> InjectDataAsync(
-        InjectDataRequest request, CancellationToken ct = default)
+    // ========================================
+    // Generic request-response helper
+    // ========================================
+
+    private async Task<IpcEnvelope?> SendRequestAsync(
+        string? windowId, string ipcType, string payloadJson, int timeoutSeconds,
+        CancellationToken ct = default)
     {
-        if (!IsRunning || _messenger == null)
-            return new InjectDataResult(false, "No preview is running.");
+        var s = GetRunningSession(windowId);
+        if (s == null) return null;
 
         var corrId = Guid.NewGuid().ToString("N");
         var tcs = new TaskCompletionSource<IpcEnvelope>();
-        _pendingRequests[corrId] = tcs;
+        s.PendingRequests[corrId] = tcs;
 
         try
         {
-            await SafeSendControlAsync(new IpcEnvelope(
-                IpcTypes.InjectData, corrId, Json.ToJson(request)));
+            await SafeSendControlAsync(s, new IpcEnvelope(ipcType, corrId, payloadJson));
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(15)); // longer timeout for large data
+            cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
             cts.Token.Register(() => tcs.TrySetCanceled());
 
-            var response = await tcs.Task;
-
-            if (response.Type == IpcTypes.InjectDataResult)
-                return Json.FromJson<InjectDataResult>(response.PayloadJson);
-
-            return new InjectDataResult(false, "Unexpected response.");
+            return await tcs.Task;
         }
-        catch (OperationCanceledException)
-        {
-            return new InjectDataResult(false, "InjectData timed out (15s).");
-        }
+        catch (OperationCanceledException) { return null; }
         catch (Exception ex)
         {
-            return new InjectDataResult(false, $"InjectData failed: {ex.Message}");
+            s.AddLog($"{ipcType} failed: {ex.Message}");
+            return null;
         }
         finally
         {
-            _pendingRequests.TryRemove(corrId, out _);
+            s.PendingRequests.TryRemove(corrId, out _);
         }
-    }
-
-    /// <summary>
-    /// Reads data from controls in the running app.
-    /// </summary>
-    public async Task<ReadDataResult?> ReadDataAsync(
-        ReadDataRequest request, CancellationToken ct = default)
-    {
-        if (!IsRunning || _messenger == null)
-            return new ReadDataResult(false, "No preview is running.");
-
-        var corrId = Guid.NewGuid().ToString("N");
-        var tcs = new TaskCompletionSource<IpcEnvelope>();
-        _pendingRequests[corrId] = tcs;
-
-        try
-        {
-            await SafeSendControlAsync(new IpcEnvelope(
-                IpcTypes.ReadData, corrId, Json.ToJson(request)));
-
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(5));
-            cts.Token.Register(() => tcs.TrySetCanceled());
-
-            var response = await tcs.Task;
-
-            if (response.Type == IpcTypes.ReadDataResult)
-                return Json.FromJson<ReadDataResult>(response.PayloadJson);
-
-            return new ReadDataResult(false, "Unexpected response.");
-        }
-        catch (OperationCanceledException)
-        {
-            return new ReadDataResult(false, "ReadData timed out.");
-        }
-        catch (Exception ex)
-        {
-            return new ReadDataResult(false, $"ReadData failed: {ex.Message}");
-        }
-        finally
-        {
-            _pendingRequests.TryRemove(corrId, out _);
-        }
-    }
-
-    /// <summary>
-    /// Sets a property on a control in the running app without recompilation.
-    /// </summary>
-    public async Task<SetPropertyResultMessage?> SetPropertyAsync(
-        SetPropertyRequest request, CancellationToken ct = default)
-    {
-        if (!IsRunning || _messenger == null)
-            return new SetPropertyResultMessage(false, "No preview is running.");
-
-        var corrId = Guid.NewGuid().ToString("N");
-        var tcs = new TaskCompletionSource<IpcEnvelope>();
-        _pendingRequests[corrId] = tcs;
-
-        try
-        {
-            await SafeSendControlAsync(new IpcEnvelope(
-                IpcTypes.SetProperty, corrId, Json.ToJson(request)));
-
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(5));
-            cts.Token.Register(() => tcs.TrySetCanceled());
-
-            var response = await tcs.Task;
-
-            if (response.Type == IpcTypes.SetPropertyResult)
-                return Json.FromJson<SetPropertyResultMessage>(response.PayloadJson);
-
-            return new SetPropertyResultMessage(false, "Unexpected response.");
-        }
-        catch (OperationCanceledException)
-        {
-            return new SetPropertyResultMessage(false, "SetProperty timed out.");
-        }
-        catch (Exception ex)
-        {
-            return new SetPropertyResultMessage(false, $"SetProperty failed: {ex.Message}");
-        }
-        finally
-        {
-            _pendingRequests.TryRemove(corrId, out _);
-        }
-    }
-
-    /// <summary>
-    /// Closes the preview window and cleans up.
-    /// </summary>
-    public async Task StopAsync()
-    {
-        await DisposeChildAsync();
-        AddLog("Preview window closed.");
     }
 
     // ========================================
     // Blob Streaming
     // ========================================
-    private async Task SendBlobAsync(string name, byte[] data, CancellationToken ct)
-    {
-        if (_messenger == null) return;
 
-        // Write to temp file first, then stream from file (matches AvaloniaChildProcessService pattern)
+    private static async Task SendBlobAsync(WindowSession s, string name, byte[] data, CancellationToken ct)
+    {
+        if (s.Messenger == null) return;
+
         var tempPath = Path.Combine(Path.GetTempPath(), "neo_mcp_blob", name);
         Directory.CreateDirectory(Path.GetDirectoryName(tempPath)!);
         await File.WriteAllBytesAsync(tempPath, data, ct);
 
         var corr = Guid.NewGuid();
-        var logicalName = Path.GetFileName(tempPath);
-
         await using var fs = File.Open(tempPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         var meta = new BlobStartMeta(Name: name, Length: fs.Length);
 
-        await _sendLock.WaitAsync(ct);
+        await s.SendLock.WaitAsync(ct);
         try
         {
-            await _messenger.SendBlobAsync(
-                correlationId: corr,
-                meta: meta,
+            await s.Messenger.SendBlobAsync(
+                correlationId: corr, meta: meta,
                 read: async (buffer, token) => await fs.ReadAsync(buffer, token),
-                chunkSize: 512 * 1024,
-                ct: ct);
+                chunkSize: 512 * 1024, ct: ct);
         }
-        finally
-        {
-            _sendLock.Release();
-        }
+        finally { s.SendLock.Release(); }
 
-        // Clean up temp file
         try { File.Delete(tempPath); } catch { }
     }
 
-    private async Task SafeSendControlAsync(IpcEnvelope env)
+    private static async Task SafeSendControlAsync(WindowSession s, IpcEnvelope env)
     {
-        if (_messenger == null || _pipeStream == null || !_pipeStream.IsConnected) return;
-        await _sendLock.WaitAsync();
+        if (s.Messenger == null || s.PipeStream == null || !s.PipeStream.IsConnected) return;
+        await s.SendLock.WaitAsync();
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            await _messenger.SendControlAsync(env, cts.Token);
-            System.Diagnostics.Debug.WriteLine($"[PreviewSession] SafeSendControl: {env.Type} sent OK");
+            await s.Messenger.SendControlAsync(env, cts.Token);
         }
         catch (Exception ex)
         {
-            AddLog($"Send failed: {ex.Message}");
-            System.Diagnostics.Debug.WriteLine($"[PreviewSession] SafeSendControl FAILED: {ex.Message}");
+            s.AddLog($"Send failed: {ex.Message}");
         }
-        finally
-        {
-            _sendLock.Release();
-        }
+        finally { s.SendLock.Release(); }
     }
 
     // ========================================
-    // Listen Loop (receives Hello, Ack, Error, Log from child)
+    // Listen Loop
     // ========================================
-    private async Task ListenLoopAsync(CancellationToken ct)
+
+    private static async Task ListenLoopAsync(WindowSession s, CancellationToken ct)
     {
-        if (_messenger == null) return;
+        if (s.Messenger == null) return;
 
         try
         {
-            await _messenger.ReceiveLoopAsync(
+            await s.Messenger.ReceiveLoopAsync(
                 onControl: async env =>
                 {
                     switch (env.Type)
                     {
                         case IpcTypes.Hello:
-                            _helloReceived = true;
-                            System.Diagnostics.Debug.WriteLine("[PreviewSession] ListenLoop: Hello received!");
-                            await SafeSendControlAsync(new IpcEnvelope(
+                            s.HelloReceived = true;
+                            await SafeSendControlAsync(s, new IpcEnvelope(
                                 IpcTypes.Ack, env.CorrelationId,
-                                Json.ToJson(new AckMessage("Hello acknowledged by MCP server"))));
+                                Json.ToJson(new AckMessage("Hello acknowledged"))));
                             break;
 
                         case IpcTypes.Log:
                             var logMsg = Json.FromJson<LogMessage>(env.PayloadJson);
-                            if (logMsg != null)
-                                AddLog($"[{logMsg.Level}] {logMsg.Message}");
+                            if (logMsg != null) s.AddLog($"[{logMsg.Level}] {logMsg.Message}");
                             break;
 
                         case IpcTypes.Error:
@@ -636,12 +483,10 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                             if (errMsg != null)
                             {
                                 var errorText = $"{errMsg.ExceptionType}: {errMsg.Message}";
-                                AddLog($"[CHILD ERROR] {errorText}\n{errMsg.StackTrace}");
-                                AddRuntimeError(errorText);
-
-                                // Complete pending request if this was a response
+                                s.AddLog($"[CHILD ERROR] {errorText}\n{errMsg.StackTrace}");
+                                s.AddRuntimeError(errorText);
                                 if (!string.IsNullOrEmpty(env.CorrelationId) &&
-                                    _pendingRequests.TryRemove(env.CorrelationId, out var errTcs))
+                                    s.PendingRequests.TryRemove(env.CorrelationId, out var errTcs))
                                     errTcs.TrySetResult(env);
                             }
                             break;
@@ -653,20 +498,19 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                         case IpcTypes.ReadDataResult:
                         case IpcTypes.ExtractCodeResult:
                         case IpcTypes.StartWebBridgeResult:
-                            // Complete pending request
+                        case IpcTypes.Ack:
                             if (!string.IsNullOrEmpty(env.CorrelationId) &&
-                                _pendingRequests.TryRemove(env.CorrelationId, out var resultTcs))
+                                s.PendingRequests.TryRemove(env.CorrelationId, out var resultTcs))
                                 resultTcs.TrySetResult(env);
                             break;
 
                         case IpcTypes.Heartbeat:
-                        case IpcTypes.Ack:
                         case IpcTypes.NotifyFirstChildVisibility:
                         case IpcTypes.ChildActivated:
                             break;
 
                         default:
-                            AddLog($"[IPC] Unknown: {env.Type}");
+                            s.AddLog($"[IPC] Unknown: {env.Type}");
                             break;
                     }
                 },
@@ -677,19 +521,32 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         }
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) { }
-        catch (IOException) when (_isShuttingDown) { }
+        catch (IOException) when (s.IsShuttingDown) { }
         catch (Exception ex)
         {
-            AddLog($"[ListenLoop] Disconnected: {ex.Message}");
+            s.AddLog($"[ListenLoop] Disconnected: {ex.Message}");
         }
     }
 
     // ========================================
-    // Child process discovery + cleanup
+    // Session lookup helpers
     // ========================================
-    private (string exePath, bool useDotnet)? FindChildExecutable()
+
+    private WindowSession? GetSession(string? windowId) =>
+        _sessions.TryGetValue(windowId ?? DefaultWindowId, out var s) ? s : null;
+
+    private WindowSession? GetRunningSession(string? windowId)
     {
-        // 1. Check NEO_PLUGIN_PATH environment variable
+        var s = GetSession(windowId);
+        return s?.IsRunning == true ? s : null;
+    }
+
+    // ========================================
+    // Child process discovery
+    // ========================================
+
+    private static (string exePath, bool useDotnet)? FindChildExecutable()
+    {
         var envPath = Environment.GetEnvironmentVariable("NEO_PLUGIN_PATH");
         if (!string.IsNullOrWhiteSpace(envPath))
         {
@@ -697,12 +554,10 @@ public sealed class PreviewSessionManager : IAsyncDisposable
             if (candidate != null) return candidate;
         }
 
-        // 2. Check relative to this executable
         var baseDir = AppDomain.CurrentDomain.BaseDirectory;
         var fromBase = FindInDirectory(baseDir);
         if (fromBase != null) return fromBase;
 
-        // 3. Dev-time: sibling project output (prefer .MCP variant, fallback to normal)
         foreach (var projectName in new[] { "Neo.PluginWindowAvalonia.MCP", "Neo.PluginWindowAvalonia" })
         {
             foreach (var config in new[] { "Debug", "Release" })
@@ -721,7 +576,6 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     {
         if (!Directory.Exists(dir)) return null;
 
-        // Try preferred name first (e.g. Neo.PluginWindowAvalonia.MCP), then fallback
         var names = preferredName != null
             ? new[] { preferredName, "Neo.PluginWindowAvalonia" }
             : new[] { "Neo.PluginWindowAvalonia.MCP", "Neo.PluginWindowAvalonia" };
@@ -739,53 +593,8 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         return null;
     }
 
-    private async Task DisposeChildAsync()
-    {
-        _isShuttingDown = true;
-
-        try { _pipeCts.Cancel(); } catch { }
-
-        if (_listenLoopTask != null)
-        {
-            try { await _listenLoopTask.WaitAsync(TimeSpan.FromSeconds(3)); }
-            catch { }
-            _listenLoopTask = null;
-        }
-
-        if (_pipeStream != null)
-        {
-            try
-            {
-                if (_pipeStream.IsConnected)
-                    _pipeStream.Disconnect();
-            }
-            catch { }
-            try { _pipeStream.Dispose(); } catch { }
-            _pipeStream = null;
-            _messenger = null;
-        }
-
-        if (_childProcess != null && !_childProcess.HasExited)
-        {
-            try
-            {
-                try { _childProcess.CloseMainWindow(); } catch { }
-
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                try { await _childProcess.WaitForExitAsync(cts.Token); }
-                catch (OperationCanceledException) { }
-
-                if (!_childProcess.HasExited)
-                    _childProcess.Kill(entireProcessTree: true);
-            }
-            catch { }
-            _childProcess.Dispose();
-            _childProcess = null;
-        }
-    }
-
     public async ValueTask DisposeAsync()
     {
-        await DisposeChildAsync();
+        await StopAllAsync();
     }
 }

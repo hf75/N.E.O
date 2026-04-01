@@ -79,7 +79,16 @@ public static class AvaloniaPrompt
             "For subsequent changes, use `update_preview` to hot-reload in the same window.\n\n" +
             "IMPORTANT: Before modifying existing code, ALWAYS call `extract_code` first to get the " +
             "current state of the app. The user may have modified the app via Smart Edit (Ctrl+K) " +
-            "or other tools — your chat history may be outdated. Never assume your last code is current.\n" +
+            "or other tools — your chat history may be outdated. Never assume your last code is current.\n\n" +
+            "## Multi-Window Mode\n\n" +
+            "You can create multiple windows by passing different `windowId` values to compile_and_preview. " +
+            "Use this when the user's request naturally maps to multiple views:\n" +
+            "- Data analysis → table window + chart window(s)\n" +
+            "- Dashboard → multiple panels in separate windows\n" +
+            "- Comparison → side-by-side views\n\n" +
+            "After creating windows, call `layout_windows` to arrange them (side_by_side, top_bottom, " +
+            "left_half_right_stack, grid). Use `inject_data` with windowId to fill each window with " +
+            "appropriate data. Use `list_windows` to see running windows.\n" +
             skillsSection + "\n\n" +
             "## User Request\n\n" +
             userRequest + "\n\n" +
