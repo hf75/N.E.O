@@ -169,7 +169,9 @@ N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.i
 
 3. In Claude Cowork, say: *"Create a calculator app with dark theme"* — the app appears live on your desktop.
 
-### MCP Tools (21)
+### MCP Tools (25)
+
+All tools accept an optional `windowId` parameter for multi-window mode. Omit it for single-window (backward compatible).
 
 | Tool | Description |
 |------|-------------|
@@ -191,9 +193,13 @@ N.E.O. includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.i
 | `start_web_bridge` | Start an HTTP + WebSocket server — Browser ↔ Avalonia real-time communication |
 | `send_to_web` | Push messages to connected browsers via WebSocket |
 | `stop_web_bridge` | Stop the web bridge server |
+| `list_windows` | List all running preview windows with IDs and status |
+| `close_all_windows` | Close all preview windows at once |
+| `position_window` | Set a window's position and size on screen |
+| `layout_windows` | Arrange windows in presets: side_by_side, top_bottom, left_half_right_stack, grid |
 | `get_runtime_errors` | Read runtime exceptions from the running app |
 | `get_preview_status` | Check preview status, logs, and error summary |
-| `close_preview` | Close the preview window |
+| `close_preview` | Close a specific preview window |
 
 See the [Wiki: MCP Server](https://github.com/hf75/N.E.O/wiki/MCP-Server) for full documentation.
 

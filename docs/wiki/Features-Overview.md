@@ -202,4 +202,10 @@ N.E.O. includes an MCP server (`Neo.McpServer`) with 21 tools that lets Claude C
 - Uses embedded Roslyn for compilation and Claude API for code generation
 - No MCP server or Cowork needed — the app is its own AI client
 
+**Multi-Window:**
+- All tools accept optional `windowId` for creating multiple windows
+- `layout_windows` arranges them: side_by_side, top_bottom, left_half_right_stack, grid
+- Windows persist across prompts — build a data table in one prompt, add a chart in the next
+- Claude can target specific windows for inject_data, set_property, capture_screenshot, etc.
+
 No SDK required — only the .NET 9 runtime. See [[MCP Server]] for full setup and documentation.

@@ -77,9 +77,11 @@ In Claude Code, you can verify with:
 claude mcp list
 ```
 
-The `neo-preview` server should appear with 21 tools.
+The `neo-preview` server should appear with 25 tools.
 
-## Available Tools (21)
+## Available Tools (25)
+
+> All tools accept an optional `windowId` parameter for multi-window mode. Use different IDs to create multiple windows. Omit for single-window (backward compatible).
 
 ### `compile_and_preview`
 
@@ -349,6 +351,54 @@ Neo.McpServer/
     PreviewTools.cs                 — MCP tool definitions (21 tools)
     AvaloniaPrompt.cs               — MCP prompt with auto-injected skills list
 ```
+
+## Multi-Window Mode
+
+All tools accept an optional `windowId` parameter. Use different IDs to create multiple preview windows simultaneously.
+
+### `list_windows`
+
+Lists all running preview windows with their IDs and status. No parameters.
+
+### `close_all_windows`
+
+Closes all running preview windows at once. No parameters.
+
+### `position_window`
+
+Sets a window's position and size on screen using absolute coordinates.
+
+**Parameters:**
+- `windowId` (string, required) — Which window to position.
+- `x` (double, required) — X coordinate in pixels from left edge.
+- `y` (double, required) — Y coordinate in pixels from top edge.
+- `width` (double, required) — Window width in pixels.
+- `height` (double, required) — Window height in pixels.
+
+### `layout_windows`
+
+Arranges all running windows in a predefined layout.
+
+**Parameters:**
+- `layout` (string, required) — Layout preset:
+  - `"side_by_side"` — Windows split horizontally (equal width)
+  - `"top_bottom"` — Windows stacked vertically (equal height)
+  - `"left_half_right_stack"` — First window takes left half, rest stack on right
+  - `"grid"` — Equal grid arrangement (auto-calculates rows/columns)
+
+### Example: Multi-Window Data Analysis
+
+```
+Prompt 1: "Create a data table with windowId 'table'"
+Prompt 2: "Create a chart with windowId 'chart'"
+Prompt 3: "Arrange them side by side"
+  → layout_windows(layout: "side_by_side")
+Prompt 4: "Fill the table with data and update the chart"
+  → inject_data(windowId: "table", ...)
+  → inject_data(windowId: "chart", ...)
+```
+
+Windows persist across prompts within the same Cowork session. Claude can target specific windows for any operation (set_property, inject_data, capture_screenshot, etc.) using the windowId parameter.
 
 ## Troubleshooting
 
