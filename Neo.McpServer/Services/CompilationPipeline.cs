@@ -14,6 +14,7 @@ public sealed class CompilationPipeline
 {
     private IReadOnlyList<string>? _referenceAssemblyDirs;
     private IReadOnlyList<string>? _avaloniaAdditionalDlls;
+    private IReadOnlyList<string>? _wpfAdditionalDlls;
     private string? _nugetCacheDir;
 
     /// <summary>Last successfully compiled source code files — used by patch_preview.</summary>
@@ -21,6 +22,9 @@ public sealed class CompilationPipeline
 
     /// <summary>Last successfully used NuGet packages — used by patch_preview.</summary>
     public IReadOnlyDictionary<string, string>? LastNuGetPackages { get; private set; }
+
+    /// <summary>Last framework used for compilation — used by patch_preview.</summary>
+    public string? LastFramework { get; private set; }
 
     public record CompilationResult(
         bool Success,
@@ -37,33 +41,38 @@ public sealed class CompilationPipeline
     public async Task<CompilationResult> CompileAsync(
         IReadOnlyList<string> sourceCode,
         IReadOnlyDictionary<string, string>? nugetPackages = null,
+        string framework = "avalonia",
         CancellationToken ct = default)
     {
         var errors = new List<string>();
+        framework = (framework ?? "avalonia").ToLowerInvariant();
 
         try
         {
             EnsureInitialized();
 
-            System.Diagnostics.Debug.WriteLine($"[CompilationPipeline] RefDirs: {_referenceAssemblyDirs!.Count}, AvaloniaAdditional: {_avaloniaAdditionalDlls!.Count}");
+            var frameworkDlls = framework == "wpf" ? _wpfAdditionalDlls : _avaloniaAdditionalDlls;
+            System.Diagnostics.Debug.WriteLine($"[CompilationPipeline] RefDirs: {_referenceAssemblyDirs!.Count}, {framework}Additional: {frameworkDlls?.Count ?? 0}");
 
             var compilationService = new CompilationService(_referenceAssemblyDirs!);
 
-            // Split packages: Avalonia ones are already available locally, only resolve others via NuGet
-            var nonAvaloniaPackages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            // Split packages: framework-specific ones are already available locally, only resolve others via NuGet
+            var nonFrameworkPackages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (nugetPackages != null)
             {
                 foreach (var (name, version) in nugetPackages)
                 {
-                    if (!name.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase))
-                        nonAvaloniaPackages[name] = version;
+                    // Skip Avalonia packages for Avalonia builds (they're local)
+                    if (framework == "avalonia" && name.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    nonFrameworkPackages[name] = version;
                 }
             }
 
-            System.Diagnostics.Debug.WriteLine($"[CompilationPipeline] NonAvaloniaNuGet: {nonAvaloniaPackages.Count}");
+            System.Diagnostics.Debug.WriteLine($"[CompilationPipeline] NonFrameworkNuGet: {nonFrameworkPackages.Count}");
 
             var nugetDllPaths = new List<string>();
-            if (nonAvaloniaPackages.Count > 0)
+            if (nonFrameworkPackages.Count > 0)
             {
                 System.Diagnostics.Debug.WriteLine("[CompilationPipeline] Resolving NuGet packages...");
                 var nugetService = new NuGetPackageService(
@@ -72,7 +81,7 @@ public sealed class CompilationPipeline
                     _referenceAssemblyDirs!);
 
                 var nugetResult = await nugetService.LoadPackagesAsync(
-                    nonAvaloniaPackages,
+                    nonFrameworkPackages,
                     Enumerable.Empty<string>(),
                     ct);
 
@@ -86,8 +95,8 @@ public sealed class CompilationPipeline
 
             var dllOutputPath = Path.Combine(tempDir, "DynamicUserControl.dll");
 
-            // Avalonia DLLs from PluginWindow output + any NuGet DLLs
-            var allAdditionalDlls = _avaloniaAdditionalDlls!.Concat(nugetDllPaths).ToList();
+            // Framework DLLs from PluginWindow output + any NuGet DLLs
+            var allAdditionalDlls = (frameworkDlls ?? Array.Empty<string>()).Concat(nugetDllPaths).ToList();
 
             System.Diagnostics.Debug.WriteLine($"[CompilationPipeline] Compiling with {allAdditionalDlls.Count} additional DLLs...");
 
@@ -102,11 +111,12 @@ public sealed class CompilationPipeline
             System.Diagnostics.Debug.WriteLine($"[CompilationPipeline] Compiled to: {compiledPath}");
             var dllBytes = await File.ReadAllBytesAsync(compiledPath, ct);
 
-            // Remember source code for patch_preview
+            // Remember source code and framework for patch_preview
             LastSourceCode = sourceCode.ToList();
             LastNuGetPackages = nugetPackages;
+            LastFramework = framework;
 
-            // Dependencies to stream to PluginWindow: only NuGet DLLs (Avalonia is already in the child)
+            // Dependencies to stream to PluginWindow: only NuGet DLLs (framework DLLs are already in the child)
             return new CompilationResult(
                 Success: true,
                 DllPath: compiledPath,
@@ -410,6 +420,10 @@ namespace Neo
 
         _avaloniaAdditionalDlls = DiscoverAvaloniaFromPluginWindow();
 
+        // Discover WPF DLLs (only on Windows)
+        if (OperatingSystem.IsWindows())
+            _wpfAdditionalDlls = DiscoverWpfFromPluginWindow();
+
         _nugetCacheDir = Path.Combine(Path.GetTempPath(), "neo_mcp_nuget");
         Directory.CreateDirectory(_nugetCacheDir);
     }
@@ -448,6 +462,49 @@ namespace Neo
             {
                 dlls.AddRange(Directory.GetFiles(devDir, "*.dll"));
                 if (dlls.Count > 0) return dlls;
+            }
+        }
+
+        return dlls;
+    }
+
+    /// <summary>
+    /// Finds WPF DLLs from the Neo.PluginWindowWPF.MCP build output.
+    /// These are used as reference assemblies for WPF compilation.
+    /// </summary>
+    private static List<string> DiscoverWpfFromPluginWindow()
+    {
+        var dlls = new List<string>();
+
+        // 1. NEO_PLUGIN_PATH_WPF environment variable
+        var pluginPath = Environment.GetEnvironmentVariable("NEO_PLUGIN_PATH_WPF");
+        if (!string.IsNullOrWhiteSpace(pluginPath) && Directory.Exists(pluginPath))
+        {
+            dlls.AddRange(Directory.GetFiles(pluginPath, "*.dll"));
+            if (dlls.Count > 0) return dlls;
+        }
+
+        // 2. Relative to this executable (deployed side-by-side)
+        var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        var candidate = Path.Combine(baseDir, "PresentationFramework.dll");
+        if (File.Exists(candidate))
+        {
+            dlls.AddRange(Directory.GetFiles(baseDir, "*.dll"));
+            return dlls;
+        }
+
+        // 3. Dev-time: sibling project output (WPF uses net9.0-windows TFM)
+        foreach (var projectName in new[] { "Neo.PluginWindowWPF.MCP", "Neo.PluginWindowWPF" })
+        {
+            foreach (var config in new[] { "Debug", "Release" })
+            {
+                var devDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
+                    projectName, "bin", config, "net9.0-windows"));
+                if (Directory.Exists(devDir))
+                {
+                    dlls.AddRange(Directory.GetFiles(devDir, "*.dll"));
+                    if (dlls.Count > 0) return dlls;
+                }
             }
         }
 

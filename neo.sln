@@ -53,6 +53,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.McpServer", "Neo.McpSer
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.PluginWindowAvalonia.MCP", "Neo.PluginWindowAvalonia.MCP\Neo.PluginWindowAvalonia.MCP.csproj", "{FA060EF3-6FEC-49B5-A0CC-D2CA32FCB551}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.PluginWindowWPF.MCP", "Neo.PluginWindowWPF.MCP\Neo.PluginWindowWPF.MCP.csproj", "{A5D769CF-D872-406F-8B14-A683669A1AF0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -351,6 +353,18 @@ Global
 		{FA060EF3-6FEC-49B5-A0CC-D2CA32FCB551}.Release|x64.Build.0 = Release|Any CPU
 		{FA060EF3-6FEC-49B5-A0CC-D2CA32FCB551}.Release|x86.ActiveCfg = Release|Any CPU
 		{FA060EF3-6FEC-49B5-A0CC-D2CA32FCB551}.Release|x86.Build.0 = Release|Any CPU
+		{A5D769CF-D872-406F-8B14-A683669A1AF0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A5D769CF-D872-406F-8B14-A683669A1AF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A5D769CF-D872-406F-8B14-A683669A1AF0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A5D769CF-D872-406F-8B14-A683669A1AF0}.Debug|x64.Build.0 = Debug|Any CPU
+		{A5D769CF-D872-406F-8B14-A683669A1AF0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A5D769CF-D872-406F-8B14-A683669A1AF0}.Debug|x86.Build.0 = Debug|Any CPU
+		{A5D769CF-D872-406F-8B14-A683669A1AF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A5D769CF-D872-406F-8B14-A683669A1AF0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A5D769CF-D872-406F-8B14-A683669A1AF0}.Release|x64.ActiveCfg = Release|Any CPU
+		{A5D769CF-D872-406F-8B14-A683669A1AF0}.Release|x64.Build.0 = Release|Any CPU
+		{A5D769CF-D872-406F-8B14-A683669A1AF0}.Release|x86.ActiveCfg = Release|Any CPU
+		{A5D769CF-D872-406F-8B14-A683669A1AF0}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -11,34 +11,43 @@ namespace Neo.McpServer.Tools;
 public sealed class PreviewTools
 {
     /// <summary>
-    /// Compiles C# Avalonia UserControl source code and displays it as a live preview window.
+    /// Compiles C# UserControl source code and displays it as a live preview window.
     /// If no preview window is running, one is started automatically.
+    /// Supports both Avalonia (cross-platform) and WPF (Windows-only) frameworks.
     /// </summary>
     [McpServerTool(Name = "compile_and_preview")]
-    [Description("Compiles C# Avalonia UserControl code and shows it in a live preview window on the user's desktop. " +
-        "The code must define a class 'DynamicUserControl' inheriting from Avalonia.Controls.UserControl. " +
-        "Avalonia 11.3.12 packages are always included automatically.")]
+    [Description("Compiles C# UserControl code and shows it in a LIVE PREVIEW window on the user's desktop. " +
+        "Supports TWO frameworks: 'avalonia' (default, cross-platform) and 'wpf' (Windows-only). " +
+        "WHEN THE USER ASKS FOR A WPF APP: Use this tool with framework='wpf'. " +
+        "Do NOT create project files — this tool compiles and previews WPF apps live, just like Avalonia. " +
+        "For WPF: use System.Windows.Controls.UserControl, System.Windows.* namespaces, no extra NuGet needed. " +
+        "For Avalonia: use Avalonia.Controls.UserControl, Avalonia packages are added automatically. " +
+        "Both: class MUST be named 'DynamicUserControl', pure C# code-behind (no XAML files).")]
     public static async Task<string> CompileAndPreview(
         CompilationPipeline compilation,
         PreviewSessionManager preview,
         [Description("Complete C# source code files. Each string is one .cs file. " +
             "The main file must contain a class 'DynamicUserControl : UserControl'.")] string[] sourceCode,
         [Description("NuGet packages as JSON object string, e.g. '{\"Humanizer\": \"default\", \"Bogus\": \"35.6.1\"}'. " +
-            "Use 'default' for latest stable version. Avalonia packages are added automatically. " +
+            "Use 'default' for latest stable version. Avalonia packages are added automatically for Avalonia framework. " +
             "Omit or pass empty string if no extra packages needed.")] string? nugetPackages = null,
         [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
-            "Omit for single-window mode (uses default window).")] string? windowId = null)
+            "Omit for single-window mode (uses default window).")] string? windowId = null,
+        [Description("UI framework: 'avalonia' (default, cross-platform) or 'wpf' (Windows-only). " +
+            "The preview window and compilation will use the specified framework.")] string? framework = null)
     {
         try
         {
+            var fw = ResolveFramework(framework, preview, compilation, windowId);
             var packages = ParseNuGetPackages(nugetPackages);
             Console.Error.WriteLine($"[compile_and_preview] Called with {sourceCode.Length} source file(s), " +
-                $"packages={string.Join(", ", packages.Select(kv => $"{kv.Key}={kv.Value}"))}");
+                $"framework={fw}, packages={string.Join(", ", packages.Select(kv => $"{kv.Key}={kv.Value}"))}");
 
-            EnsureAvaloniaPackages(packages);
+            if (fw == "avalonia")
+                EnsureAvaloniaPackages(packages);
 
             // Compile
-            var result = await compilation.CompileAsync(sourceCode, packages);
+            var result = await compilation.CompileAsync(sourceCode, packages, fw);
             if (!result.Success)
             {
                 return $"COMPILATION FAILED:\n{string.Join("\n", result.Errors)}\n\n" +
@@ -48,7 +57,7 @@ public sealed class PreviewTools
             // Start preview if not running
             if (!preview.IsRunning(windowId))
             {
-                var started = await preview.StartAsync(windowId);
+                var started = await preview.StartAsync(windowId, fw);
                 if (!started)
                 {
                     return $"Compilation succeeded but preview window failed to start.\n" +
@@ -100,17 +109,22 @@ public sealed class PreviewTools
         [Description("Updated C# source code files.")] string[] sourceCode,
         [Description("NuGet packages as JSON object string, e.g. '{\"Humanizer\": \"default\"}'. " +
             "Omit or pass empty string if no extra packages needed.")] string? nugetPackages = null,
-        [Description("Window ID for multi-window mode.")] string? windowId = null)
+        [Description("Window ID for multi-window mode.")] string? windowId = null,
+        [Description("UI framework: 'avalonia' (default) or 'wpf' (Windows-only). " +
+            "Auto-detected from running window if omitted.")] string? framework = null)
     {
         try
         {
+            var fw = ResolveFramework(framework, preview, compilation, windowId);
+
             if (!preview.IsRunning(windowId))
-                return await CompileAndPreview(compilation, preview, sourceCode, nugetPackages, windowId);
+                return await CompileAndPreview(compilation, preview, sourceCode, nugetPackages, windowId, fw);
 
             var packages = ParseNuGetPackages(nugetPackages);
-            EnsureAvaloniaPackages(packages);
+            if (fw == "avalonia")
+                EnsureAvaloniaPackages(packages);
 
-            var result = await compilation.CompileAsync(sourceCode, packages);
+            var result = await compilation.CompileAsync(sourceCode, packages, fw);
             if (!result.Success)
             {
                 return $"COMPILATION FAILED:\n{string.Join("\n", result.Errors)}\n\n" +
@@ -179,10 +193,12 @@ public sealed class PreviewTools
         "child process logs, and available Avalonia version.")]
     public static string GetPreviewStatus(
         PreviewSessionManager preview,
+        CompilationPipeline compilation,
         [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
             "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
         var status = preview.IsRunning(windowId) ? "RUNNING" : "STOPPED";
+        var fw = preview.GetFramework(windowId) ?? compilation.LastFramework ?? "avalonia";
         var logs = preview.GetChildLogs(windowId).Count > 0
             ? string.Join("\n", preview.GetChildLogs(windowId).TakeLast(20))
             : "(no logs)";
@@ -191,8 +207,10 @@ public sealed class PreviewTools
             ? $"\nRuntime Errors ({preview.GetRuntimeErrors(windowId).Count}):\n{string.Join("\n", preview.GetRuntimeErrors(windowId).TakeLast(10))}"
             : "\nRuntime Errors: none";
 
+        var frameworkInfo = fw == "wpf" ? "WPF (.NET 9 Windows Desktop)" : "Avalonia 11.3.12";
+
         return $"Preview Status: {status}\n" +
-               $"Avalonia Version: 11.3.12\n" +
+               $"UI Framework: {frameworkInfo}\n" +
                $"Framework: .NET 9\n" +
                $"Recent Logs:\n{logs}{errorsSection}";
     }
@@ -534,16 +552,18 @@ public sealed class PreviewTools
 
             var patchedCode = patchResult.PatchedText!;
 
-            // Determine NuGet packages
+            // Determine NuGet packages and framework
+            var fw = compilation.LastFramework ?? "avalonia";
             var packages = nugetPackages != null
                 ? ParseNuGetPackages(nugetPackages)
                 : compilation.LastNuGetPackages != null
                     ? new Dictionary<string, string>(compilation.LastNuGetPackages, StringComparer.OrdinalIgnoreCase)
                     : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            EnsureAvaloniaPackages(packages);
+            if (fw == "avalonia")
+                EnsureAvaloniaPackages(packages);
 
             // Compile the patched code
-            var result = await compilation.CompileAsync(new[] { patchedCode }, packages);
+            var result = await compilation.CompileAsync(new[] { patchedCode }, packages, fw);
             if (!result.Success)
                 return $"PATCH applied but COMPILATION FAILED:\n{string.Join("\n", result.Errors)}";
 
@@ -1239,5 +1259,18 @@ public sealed class PreviewTools
             if (!packages.ContainsKey(pkg))
                 packages[pkg] = "11.3.12";
         }
+    }
+
+    /// <summary>
+    /// Resolves the UI framework to use. Priority: explicit parameter > running window > last compilation > default.
+    /// </summary>
+    private static string ResolveFramework(string? requested, PreviewSessionManager preview,
+        CompilationPipeline compilation, string? windowId)
+    {
+        if (!string.IsNullOrWhiteSpace(requested)) return requested!.ToLowerInvariant();
+        var running = preview.GetFramework(windowId);
+        if (running != null) return running;
+        if (compilation.LastFramework != null) return compilation.LastFramework;
+        return "avalonia";
     }
 }

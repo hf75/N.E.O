@@ -27,7 +27,14 @@ builder.Services.AddSingleton<CompilationPipeline>();
 builder.Services.AddSingleton<SkillsRegistry>();
 
 builder.Services
-    .AddMcpServer()
+    .AddMcpServer(options =>
+    {
+        options.ServerInfo = new()
+        {
+            Name = "neo-preview",
+            Version = "2.0.0",
+        };
+    })
     .WithStdioServerTransport()
     .WithToolsFromAssembly()
     .WithPromptsFromAssembly();

@@ -21,6 +21,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     private sealed class WindowSession : IAsyncDisposable
     {
         public string WindowId { get; }
+        public string Framework { get; }
         public NamedPipeServerStream? PipeStream { get; set; }
         public FramedPipeMessenger? Messenger { get; set; }
         public SemaphoreSlim SendLock { get; } = new(1, 1);
@@ -37,7 +38,11 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
         public bool IsRunning => ChildProcess is { HasExited: false } && PipeStream is { IsConnected: true };
 
-        public WindowSession(string windowId) => WindowId = windowId;
+        public WindowSession(string windowId, string framework = "avalonia")
+        {
+            WindowId = windowId;
+            Framework = framework;
+        }
 
         public void AddLog(string message) { lock (LogLock) ChildLogs.Add(message); }
         public void AddRuntimeError(string error) { lock (LogLock) RuntimeErrors.Add(error); }
@@ -121,9 +126,22 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     // Start / Stop
     // ========================================
 
-    public async Task<bool> StartAsync(string? windowId = null, CancellationToken ct = default)
+    /// <summary>Returns the UI framework for the given window session.</summary>
+    public string? GetFramework(string? windowId = null) => GetSession(windowId)?.Framework;
+
+    public async Task<bool> StartAsync(string? windowId = null, string framework = "avalonia", CancellationToken ct = default)
     {
         windowId ??= DefaultWindowId;
+        framework = (framework ?? "avalonia").ToLowerInvariant();
+
+        // Validate: WPF only on Windows
+        if (framework == "wpf" && !OperatingSystem.IsWindows())
+        {
+            var errSession = new WindowSession(windowId, framework);
+            errSession.AddLog("ERROR: WPF framework is only available on Windows.");
+            _sessions[windowId] = errSession;
+            return false;
+        }
 
         // If already running, return true
         if (GetSession(windowId)?.IsRunning == true) return true;
@@ -132,7 +150,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         if (_sessions.TryRemove(windowId, out var oldSession))
             await oldSession.DisposeAsync();
 
-        var session = new WindowSession(windowId);
+        var session = new WindowSession(windowId, framework);
         _sessions[windowId] = session;
 
         session.PipeCts = new CancellationTokenSource();
@@ -145,10 +163,10 @@ public sealed class PreviewSessionManager : IAsyncDisposable
             PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
         session.Messenger = new FramedPipeMessenger(session.PipeStream);
 
-        var childPath = FindChildExecutable();
+        var childPath = FindChildExecutable(framework);
         if (childPath == null)
         {
-            session.AddLog("ERROR: Neo.PluginWindowAvalonia executable not found.");
+            session.AddLog($"ERROR: Neo.PluginWindow executable not found for framework '{framework}'.");
             return false;
         }
 
@@ -545,26 +563,45 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     // Child process discovery
     // ========================================
 
-    private static (string exePath, bool useDotnet)? FindChildExecutable()
+    private static (string exePath, bool useDotnet)? FindChildExecutable(string framework = "avalonia")
     {
-        var envPath = Environment.GetEnvironmentVariable("NEO_PLUGIN_PATH");
+        // Determine env var and project names based on framework
+        var envVar = framework == "wpf" ? "NEO_PLUGIN_PATH_WPF" : "NEO_PLUGIN_PATH";
+        var projectNames = framework == "wpf"
+            ? new[] { "Neo.PluginWindowWPF.MCP", "Neo.PluginWindowWPF" }
+            : new[] { "Neo.PluginWindowAvalonia.MCP", "Neo.PluginWindowAvalonia" };
+        // WPF uses net9.0-windows TFM
+        var tfm = framework == "wpf" ? "net9.0-windows" : "net9.0";
+
+        var envPath = Environment.GetEnvironmentVariable(envVar);
         if (!string.IsNullOrWhiteSpace(envPath))
         {
-            var candidate = FindInDirectory(envPath);
+            var candidate = FindInDirectory(envPath, null, projectNames);
             if (candidate != null) return candidate;
         }
 
+        // Also check the generic NEO_PLUGIN_PATH for WPF (in case both are deployed together)
+        if (framework == "wpf")
+        {
+            var genericPath = Environment.GetEnvironmentVariable("NEO_PLUGIN_PATH");
+            if (!string.IsNullOrWhiteSpace(genericPath))
+            {
+                var candidate = FindInDirectory(genericPath, null, projectNames);
+                if (candidate != null) return candidate;
+            }
+        }
+
         var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        var fromBase = FindInDirectory(baseDir);
+        var fromBase = FindInDirectory(baseDir, null, projectNames);
         if (fromBase != null) return fromBase;
 
-        foreach (var projectName in new[] { "Neo.PluginWindowAvalonia.MCP", "Neo.PluginWindowAvalonia" })
+        foreach (var projectName in projectNames)
         {
             foreach (var config in new[] { "Debug", "Release" })
             {
                 var devDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
-                    projectName, "bin", config, "net9.0"));
-                var devCandidate = FindInDirectory(devDir, projectName);
+                    projectName, "bin", config, tfm));
+                var devCandidate = FindInDirectory(devDir, projectName, projectNames);
                 if (devCandidate != null) return devCandidate;
             }
         }
@@ -572,13 +609,13 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         return null;
     }
 
-    private static (string exePath, bool useDotnet)? FindInDirectory(string dir, string? preferredName = null)
+    private static (string exePath, bool useDotnet)? FindInDirectory(string dir, string? preferredName, string[]? namesList = null)
     {
         if (!Directory.Exists(dir)) return null;
 
         var names = preferredName != null
-            ? new[] { preferredName, "Neo.PluginWindowAvalonia" }
-            : new[] { "Neo.PluginWindowAvalonia.MCP", "Neo.PluginWindowAvalonia" };
+            ? new[] { preferredName }.Concat(namesList ?? Array.Empty<string>()).Distinct().ToArray()
+            : namesList ?? new[] { "Neo.PluginWindowAvalonia.MCP", "Neo.PluginWindowAvalonia" };
 
         foreach (var name in names)
         {

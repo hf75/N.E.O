@@ -15,7 +15,7 @@ public static class AvaloniaPrompt
     /// Automatically includes registered skills so Claude can match user requests to existing apps.
     /// </summary>
     [McpServerPrompt(Name = "create_avalonia_app")]
-    [Description("Guides you in creating an Avalonia UserControl for live preview. " +
+    [Description("Guides you in creating an Avalonia UserControl for live preview (cross-platform). " +
         "Use this prompt to learn the coding conventions, required patterns, and constraints.")]
     public static string CreateAvaloniaApp(
         [Description("What the user wants to build (e.g. 'a calculator with dark theme')")] string userRequest)
@@ -71,10 +71,93 @@ public static class AvaloniaPrompt
             "    }\n" +
             "}\n" +
             "```\n\n" +
-            "## How to Use the Tools\n\n" +
+            CommonToolSection() +
+            skillsSection + "\n\n" +
+            "## User Request\n\n" +
+            userRequest + "\n\n" +
+            "Generate the complete C# code and call `compile_and_preview` (with framework: \"avalonia\") to show the live result.";
+    }
+
+    /// <summary>
+    /// System prompt that teaches Claude how to write WPF UserControls for the N.E.O. live preview system.
+    /// Windows-only variant using WPF instead of Avalonia.
+    /// </summary>
+    [McpServerPrompt(Name = "create_wpf_app")]
+    [Description("Guides you in creating a WPF UserControl for live preview (Windows-only). " +
+        "Use this prompt when the user explicitly wants a WPF app instead of Avalonia.")]
+    public static string CreateWpfApp(
+        [Description("What the user wants to build (e.g. 'a calculator with dark theme')")] string userRequest)
+    {
+        var skillsSection = Skills?.GetSkillsPromptSection() ?? "";
+
+        return "You are the leading world expert in C#/WPF programming. You are creating\n" +
+            "a UserControl that will be compiled at runtime and loaded into a live preview window via the\n" +
+            "N.E.O. (Native Executable Orchestrator) system. This is a WPF (Windows-only) build.\n\n" +
+            "## Constraints\n\n" +
+            "1. **Class name**: The UserControl class MUST be named `DynamicUserControl`.\n" +
+            "2. **Namespace**: Use any namespace you like, but the class must be discoverable as a `UserControl`.\n" +
+            "3. **No XAML**: Write everything in C# code-behind. Do not use XAML files.\n" +
+            "4. **Framework**: WPF on .NET 9 — no additional NuGet packages needed for the UI framework.\n" +
+            "   WPF ships with the .NET Windows Desktop runtime.\n" +
+            "5. **Thread safety**: Always access or modify UI elements on the WPF Dispatcher thread.\n" +
+            "   Use `System.Windows.Application.Current.Dispatcher.CheckAccess()` and, if false, marshal with\n" +
+            "   `Application.Current.Dispatcher.InvokeAsync(...)` or `Dispatcher.BeginInvoke(...)`.\n" +
+            "   Use `System.Windows.Threading.DispatcherTimer` for any timer that touches the UI.\n" +
+            "6. **Namespaces**: Use `System.Windows`, `System.Windows.Controls`, `System.Windows.Media`,\n" +
+            "   `System.Windows.Shapes`, etc. Do NOT use Avalonia namespaces.\n" +
+            "7. **Design**: Create a refined, minimalist aesthetic emphasizing elegance, clarity, and precision.\n" +
+            "8. **No XAML designer IDs**: Do not use `__neo_` prefixed names (those are for the visual designer).\n" +
+            "9. **Exception handling**: Rethrow all caught exceptions — the host app handles error recovery.\n" +
+            "10. **File access**: If using file dialogs, initialize the path from the `SHARED_FOLDER` environment variable.\n\n" +
+            "## Key WPF Differences from Avalonia\n\n" +
+            "- `Visibility.Collapsed` instead of `IsVisible = false`\n" +
+            "- `new SolidColorBrush(Colors.Red)` or `Brushes.Red` (from `System.Windows.Media`)\n" +
+            "- `Color.FromRgb(r, g, b)` instead of `Color.Parse(\"#RRGGBB\")`\n" +
+            "- `FontWeights.Bold` instead of `FontWeight.Bold`\n" +
+            "- `StackPanel` does not have a `Spacing` property — use `Margin` on children instead\n" +
+            "- Use `ColumnDefinition`/`RowDefinition` with `Width = new GridLength(...)` for Grid layout\n" +
+            "- `Mouse.OverrideCursor = Cursors.Hand` for cursor changes\n" +
+            "- `DispatcherTimer` is in `System.Windows.Threading`\n\n" +
+            "## Code Structure Template\n\n" +
+            "```csharp\n" +
+            "using System;\n" +
+            "using System.Windows;\n" +
+            "using System.Windows.Controls;\n" +
+            "using System.Windows.Media;\n\n" +
+            "namespace DynamicApp;\n\n" +
+            "public class DynamicUserControl : UserControl\n" +
+            "{\n" +
+            "    public DynamicUserControl()\n" +
+            "    {\n" +
+            "        Content = BuildUI();\n" +
+            "    }\n\n" +
+            "    private UIElement BuildUI()\n" +
+            "    {\n" +
+            "        var panel = new StackPanel\n" +
+            "        {\n" +
+            "            Margin = new Thickness(20),\n" +
+            "            HorizontalAlignment = HorizontalAlignment.Center,\n" +
+            "            VerticalAlignment = VerticalAlignment.Center,\n" +
+            "        };\n" +
+            "        // Add controls with Margin for spacing...\n" +
+            "        return panel;\n" +
+            "    }\n" +
+            "}\n" +
+            "```\n\n" +
+            CommonToolSection() +
+            skillsSection + "\n\n" +
+            "## User Request\n\n" +
+            userRequest + "\n\n" +
+            "Generate the complete C# WPF code and call `compile_and_preview` with framework: \"wpf\" to show the live result.";
+    }
+
+    private static string CommonToolSection()
+    {
+        return "## How to Use the Tools\n\n" +
             "After writing the code, call the `compile_and_preview` tool:\n" +
             "- Pass the complete C# source as `sourceCode` (array of strings, one per file)\n" +
             "- Pass required NuGet packages as `nugetPackages` (dictionary: name -> version)\n" +
+            "- Pass `framework` as `\"avalonia\"` (default, cross-platform) or `\"wpf\"` (Windows-only)\n" +
             "- The preview window will open automatically on the user's desktop\n\n" +
             "For subsequent changes, use `update_preview` to hot-reload in the same window.\n\n" +
             "IMPORTANT: Before modifying existing code, ALWAYS call `extract_code` first to get the " +
@@ -88,10 +171,6 @@ public static class AvaloniaPrompt
             "- Comparison → side-by-side views\n\n" +
             "After creating windows, call `layout_windows` to arrange them (side_by_side, top_bottom, " +
             "left_half_right_stack, grid). Use `inject_data` with windowId to fill each window with " +
-            "appropriate data. Use `list_windows` to see running windows.\n" +
-            skillsSection + "\n\n" +
-            "## User Request\n\n" +
-            userRequest + "\n\n" +
-            "Generate the complete C# code and call `compile_and_preview` to show the live result.";
+            "appropriate data. Use `list_windows` to see running windows.\n\n";
     }
 }
