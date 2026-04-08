@@ -20,7 +20,7 @@ N.E.O. is a .NET desktop application that lets you create small, ready-to-use ut
 - Incremental updates through unified diff patches
 - Export WPF apps as native Windows executables
 - Export Avalonia apps for Windows, Linux, and macOS
-- **MCP Server for Claude Cowork/Code** — Claude generates and previews live Avalonia apps on your desktop
+- **MCP Server for Claude Cowork/Code** — Claude generates and previews live Avalonia or WPF apps on your desktop
 - Branching undo/redo history
 - Visual designer mode (click-to-edit)
 - Optional sandboxed execution via Windows AppContainer

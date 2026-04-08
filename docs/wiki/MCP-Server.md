@@ -1,10 +1,14 @@
 # MCP Server (Claude Cowork / Claude Code)
 
-N.E.O. includes an MCP (Model Context Protocol) server that lets **Claude Cowork** or **Claude Code** compile and display live Avalonia desktop apps on your screen — without running the full N.E.O. host application.
+N.E.O. includes an MCP (Model Context Protocol) server that lets **Claude Cowork** or **Claude Code** compile and display live **Avalonia** or **WPF** desktop apps on your screen — without running the full N.E.O. host application.
 
 ## What This Enables
 
-You type a prompt in Claude Cowork — *"Build me a calculator with dark theme"* — and a real, native Avalonia window appears on your desktop. Changes are hot-reloaded in place.
+You type a prompt in Claude Cowork — *"Build me a calculator with dark theme"* — and a real, native desktop window appears on your desktop. Changes are hot-reloaded in place.
+
+Supports two UI frameworks:
+- **Avalonia** (default) — cross-platform (Windows, Linux, macOS)
+- **WPF** — Windows-only, for apps that need WPF-specific features
 
 ```
 Claude Cowork/Code                  Neo.McpServer
@@ -12,12 +16,12 @@ Claude Cowork/Code                  Neo.McpServer
 | "Create a        | ------------> | 1. Roslyn compiles C#       |
 |  calculator"     |               | 2. Starts PluginWindow      |
 |                  | <------------ | 3. Streams DLL over pipe    |
-| "SUCCESS"        |               | 4. Live Avalonia UI appears |
+| "SUCCESS"        |               | 4. Live UI appears          |
 +------------------+               +-----------------------------+
                                               |
                                    +----------v----------+
                                    | Neo.PluginWindow    |
-                                   | Avalonia            |
+                                   | Avalonia or WPF     |
                                    | (Desktop Window)    |
                                    +---------------------+
 ```
@@ -35,11 +39,12 @@ Claude Cowork/Code                  Neo.McpServer
 cd N.E.O
 dotnet build Neo.McpServer -c Release
 dotnet build Neo.PluginWindowAvalonia.MCP -c Release
+dotnet build Neo.PluginWindowWPF.MCP -c Release      # optional, Windows-only, for WPF support
 ```
 
-Both `Debug` and `Release` builds work. Use `Release` for better performance. Just make sure both paths below use the same configuration you built with.
+Both `Debug` and `Release` builds work. Use `Release` for better performance.
 
-> **Note:** `Neo.PluginWindowAvalonia.MCP` is the MCP variant with all MCP-specific IPC handlers plus the Smart Edit feature (Ctrl+K). The normal `Neo.PluginWindowAvalonia` is the slim variant for the standalone host app (Neo.App / Neo.App.Avalonia) without MCP features.
+> **Note:** The `.MCP` variants include all MCP-specific IPC handlers plus the Smart Edit feature (Ctrl+K). The normal `Neo.PluginWindowAvalonia` / `Neo.PluginWindowWPF` are slim variants for the standalone host apps without MCP features.
 
 ### 2. Configure Claude
 
@@ -53,8 +58,6 @@ Add the MCP server to your Claude settings.
       "command": "dotnet",
       "args": ["/full/path/to/Neo.McpServer/bin/Release/net9.0/Neo.McpServer.dll"],
       "env": {
-        "NEO_PLUGIN_PATH": "/full/path/to/Neo.PluginWindowAvalonia.MCP/bin/Release/net9.0",
-        "NEO_SKILLS_PATH": "/full/path/to/your/neo-apps",
         "ANTHROPIC_API_KEY": "sk-ant-your-key-here"
       }
     }
@@ -62,8 +65,17 @@ Add the MCP server to your Claude settings.
 }
 ```
 
-> `NEO_SKILLS_PATH` is optional — enables the App Skills Registry.
 > `ANTHROPIC_API_KEY` is needed for the Smart Edit feature (Ctrl+K). API keys are inherited by child processes — add any keys you need here.
+
+**Optional environment variables:**
+
+| Variable | Purpose | Required? |
+|----------|---------|-----------|
+| `NEO_PLUGIN_PATH` | Override Avalonia plugin window path | No — auto-discovered from dev-time paths |
+| `NEO_PLUGIN_PATH_WPF` | Override WPF plugin window path | No — auto-discovered from dev-time paths |
+| `NEO_SKILLS_PATH` | Directory for the App Skills Registry | No — skills feature inactive without it |
+
+The MCP server automatically discovers plugin windows relative to its own location. Environment variables are only needed for non-standard deployments (e.g., self-contained publish to a different directory).
 
 **Claude Desktop / Cowork** (MCP settings):
 Same JSON structure — add via Settings > Extensions > Advanced, or edit the MCP config file directly.
@@ -85,14 +97,16 @@ The `neo-preview` server should appear with 25 tools.
 
 ### `compile_and_preview`
 
-Compiles C# Avalonia UserControl code and shows it in a live preview window.
+Compiles C# UserControl code and shows it in a live preview window. Supports both Avalonia and WPF.
 
 **Parameters:**
 - `sourceCode` (string[], required) — Complete C# source files. The main file must contain a class `DynamicUserControl : UserControl`.
-- `nugetPackages` (string, optional) — NuGet packages as JSON object string, e.g. `'{"Humanizer": "default", "Bogus": "35.6.1"}'`. Use `"default"` for latest stable version. Avalonia packages are included automatically.
+- `nugetPackages` (string, optional) — NuGet packages as JSON object string, e.g. `'{"Humanizer": "default", "Bogus": "35.6.1"}'`. Use `"default"` for latest stable version. Avalonia packages are included automatically when using the Avalonia framework.
+- `framework` (string, optional) — `"avalonia"` (default, cross-platform) or `"wpf"` (Windows-only). WPF apps use `System.Windows.Controls.UserControl` and don't need NuGet packages for the UI framework.
 
-**Example prompt in Claude Cowork:**
-> "Create a calculator app with dark theme using the DynamicUserControl class."
+**Example prompts in Claude Cowork:**
+> "Create a calculator app with dark theme." → Avalonia (default)
+> "Create a WPF calculator app with dark theme." → Uses `framework: "wpf"`
 
 ### `update_preview`
 
@@ -269,7 +283,17 @@ A prompt template that teaches Claude the coding conventions for N.E.O. Avalonia
 - Thread-safe UI access via `Avalonia.Threading.Dispatcher.UIThread`
 - Fully qualified dispatcher types to avoid naming conflicts
 
-Claude uses this prompt automatically when the MCP server is connected.
+### `create_wpf_app`
+
+A prompt template for WPF UserControls (Windows-only):
+
+- Class must be named `DynamicUserControl`
+- No XAML — everything in C# code-behind
+- WPF on .NET 9 (no extra NuGet packages needed)
+- Uses `System.Windows.*` namespaces
+- Includes WPF-specific guidance (no `Spacing` on StackPanel, `Visibility.Collapsed`, `FontWeights.Bold`, etc.)
+
+Claude uses these prompts automatically when the MCP server is connected.
 
 ## How It Works Internally
 
@@ -277,14 +301,20 @@ Claude uses this prompt automatically when the MCP server is connected.
 
 The MCP server uses **Roslyn as an in-process library** (not the `dotnet` CLI). Reference assemblies are discovered from two sources:
 
-1. **.NET runtime DLLs** — found via `dotnet --list-runtimes` (same approach as the N.E.O. host app)
-2. **Avalonia DLLs** — taken directly from the `Neo.PluginWindowAvalonia` build output (set via `NEO_PLUGIN_PATH`)
+1. **.NET runtime DLLs** — found via `dotnet --list-runtimes` (same approach as the N.E.O. host app). On Windows, the Windows Desktop runtime (WPF/WinForms) is also discovered automatically.
+2. **Framework DLLs** — taken directly from the plugin window build output:
+   - **Avalonia**: DLLs from `Neo.PluginWindowAvalonia.MCP` (auto-discovered or via `NEO_PLUGIN_PATH`)
+   - **WPF**: DLLs from `Neo.PluginWindowWPF.MCP` (auto-discovered or via `NEO_PLUGIN_PATH_WPF`)
 
 This means **only the .NET runtime is needed**, not the full SDK. Compilation typically completes in under 2 seconds.
 
 ### Preview Window
 
-The compiled DLL is sent to `Neo.PluginWindowAvalonia.exe` — the same child process used by the main N.E.O. application. It runs in **standalone mode** (`--standalone`), showing a decorated window titled "N.E.O. — Live Preview".
+The compiled DLL is sent to the appropriate plugin window child process:
+- **Avalonia**: `Neo.PluginWindowAvalonia.MCP.exe` — cross-platform
+- **WPF**: `Neo.PluginWindowWPF.MCP.exe` — Windows-only
+
+Both run in **standalone mode** (`--standalone`), showing a decorated window. The `framework` parameter on `compile_and_preview` determines which child process is launched.
 
 Communication uses the same **Named Pipes IPC protocol** (framed binary with blob streaming) as the main app. The DLL bytes are streamed directly into a `SandboxPluginLoadContext` — no files written to disk for the main assembly.
 
@@ -292,15 +322,15 @@ Communication uses the same **Named Pipes IPC protocol** (framed binary with blo
 
 If the generated code needs additional NuGet packages (beyond Avalonia), the MCP server resolves them using N.E.O.'s built-in `NuGetPackageLoaderAgent` — a custom NuGet resolver that works without the SDK.
 
-Avalonia packages are **never downloaded** — they come from the local `NEO_PLUGIN_PATH` directory, which already contains all Avalonia assemblies.
+Framework packages are **never downloaded** — Avalonia DLLs come from the Avalonia plugin window output, and WPF assemblies ship with the .NET Windows Desktop runtime.
 
 ### Screenshot Capture
 
-When `capture_screenshot` is called, the MCP server sends a `CaptureScreenshot` command over the Named Pipe. The PluginWindow renders its content to an Avalonia `RenderTargetBitmap`, encodes it as PNG, and sends the bytes back. The MCP server returns it as an `ImageContentBlock` that Claude can analyze visually.
+When `capture_screenshot` is called, the MCP server sends a `CaptureScreenshot` command over the Named Pipe. The PluginWindow renders its content to a `RenderTargetBitmap` (Avalonia or WPF variant), encodes it as PNG, and sends the bytes back. The MCP server returns it as an `ImageContentBlock` that Claude can analyze visually.
 
 ### Live Property Editing
 
-The `set_property` tool sends a `SetProperty` command over the Named Pipe. The PluginWindow traverses the Avalonia visual tree to find the target control (by name, type, or index), looks up the property via `AvaloniaPropertyRegistry`, parses the value string into the correct type (brushes, colors, thickness, enums, primitives), and sets it. No assembly reload occurs — all app state is preserved.
+The `set_property` tool sends a `SetProperty` command over the Named Pipe. The PluginWindow traverses the visual tree to find the target control (by name, type, or index), looks up the property (via `AvaloniaPropertyRegistry` for Avalonia or `DependencyProperty` reflection for WPF), parses the value string into the correct type (brushes, colors, thickness, enums, primitives), and sets it. No assembly reload occurs — all app state is preserved.
 
 ### Runtime Error Collection
 
@@ -344,12 +374,15 @@ Requires `NEO_SKILLS_PATH` environment variable. Without it, the skills feature 
 Neo.McpServer/
   Program.cs                        — MCP host with STDIO transport
   Services/
-    CompilationPipeline.cs          — Roslyn + NuGet wrapper + export pipeline
-    PreviewSessionManager.cs        — PluginWindow lifecycle + Named Pipe IPC
+    CompilationPipeline.cs          — Roslyn + NuGet wrapper + export pipeline (Avalonia + WPF)
+    PreviewSessionManager.cs        — PluginWindow lifecycle + Named Pipe IPC (framework-aware)
     SkillsRegistry.cs               — App skills registry (skills.json read/write)
   Tools/
-    PreviewTools.cs                 — MCP tool definitions (21 tools)
-    AvaloniaPrompt.cs               — MCP prompt with auto-injected skills list
+    PreviewTools.cs                 — MCP tool definitions (25 tools, framework parameter)
+    AvaloniaPrompt.cs               — MCP prompts (create_avalonia_app + create_wpf_app)
+
+Neo.PluginWindowAvalonia.MCP/       — Avalonia preview child process (cross-platform)
+Neo.PluginWindowWPF.MCP/            — WPF preview child process (Windows-only)
 ```
 
 ## Multi-Window Mode
@@ -403,16 +436,20 @@ Windows persist across prompts within the same Cowork session. Claude can target
 ## Troubleshooting
 
 **Preview window doesn't appear:**
-- Check that `NEO_PLUGIN_PATH` points to a directory containing `Neo.PluginWindowAvalonia.exe` (or `.dll` on Linux/macOS)
-- Ensure `Neo.PluginWindowAvalonia` is built: `dotnet build Neo.PluginWindowAvalonia`
+- Ensure the plugin window projects are built: `dotnet build Neo.PluginWindowAvalonia.MCP` (and `Neo.PluginWindowWPF.MCP` for WPF)
+- The MCP server auto-discovers plugin windows relative to its own location. If using a non-standard layout, set `NEO_PLUGIN_PATH` / `NEO_PLUGIN_PATH_WPF`
 
 **Compilation fails with "No .NET reference assemblies found":**
 - The .NET 9 runtime must be installed and `dotnet` must be on your PATH
 - Run `dotnet --list-runtimes` to verify
 
 **Compilation fails with Avalonia type errors:**
-- Ensure `NEO_PLUGIN_PATH` contains Avalonia DLLs (e.g., `Avalonia.Base.dll`)
-- Rebuild: `dotnet build Neo.PluginWindowAvalonia`
+- Rebuild: `dotnet build Neo.PluginWindowAvalonia.MCP`
+
+**WPF preview doesn't work:**
+- WPF is Windows-only — it won't work on Linux/macOS
+- Ensure `Neo.PluginWindowWPF.MCP` is built: `dotnet build Neo.PluginWindowWPF.MCP`
+- Check that Claude passes `framework: "wpf"` in the `compile_and_preview` call
 
 **NuGet resolution hangs:**
 - Only non-Avalonia NuGet packages are downloaded. If it hangs, check your network connection.
@@ -426,7 +463,7 @@ Windows persist across prompts within the same Cowork session. Claude can target
 
 ## Smart Edit (Ctrl+K)
 
-The MCP variant of the preview window (`Neo.PluginWindowAvalonia.MCP`) includes an embedded Claude chat overlay for modifying apps directly — without going through the MCP server or Cowork.
+Both MCP variants of the preview window (`Neo.PluginWindowAvalonia.MCP` and `Neo.PluginWindowWPF.MCP`) include an embedded Claude chat overlay for modifying apps directly — without going through the MCP server or Cowork.
 
 ### How to Use
 
