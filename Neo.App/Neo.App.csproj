@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="AgentHelper.cs" />
+    <EmbeddedResource Include="..\Neo.App.Core\AgentHelper.cs" Link="AgentHelper.cs" />
     <EmbeddedResource Include="IconLoader.cs" />
     <EmbeddedResource Include="PythonInterop\PythonHost.cs" />
     <EmbeddedResource Include="PythonInterop\PythonModuleLoader.cs" />	  

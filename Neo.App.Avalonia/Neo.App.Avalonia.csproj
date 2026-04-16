@@ -60,7 +60,7 @@
 
   <!-- Embedded resources shared with Neo.App (read at runtime by AppController) -->
   <ItemGroup>
-    <EmbeddedResource Include="..\Neo.App\AgentHelper.cs" Link="AgentHelper.cs" LogicalName="Neo.App.Avalonia.AgentHelper.cs" />
+    <EmbeddedResource Include="..\Neo.App.Core\AgentHelper.cs" Link="AgentHelper.cs" LogicalName="Neo.App.Avalonia.AgentHelper.cs" />
     <EmbeddedResource Include="..\Neo.App\IconLoader.cs" Link="IconLoader.cs" LogicalName="Neo.App.Avalonia.IconLoader.cs" />
     <EmbeddedResource Include="..\Neo.App\PythonInterop\PythonHost.cs" Link="PythonHost.cs" LogicalName="Neo.App.Avalonia.PythonHost.cs" />
     <EmbeddedResource Include="..\Neo.App\PythonInterop\PythonModuleLoader.cs" Link="PythonModuleLoader.cs" LogicalName="Neo.App.Avalonia.PythonModuleLoader.cs" />

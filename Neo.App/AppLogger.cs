@@ -1,11 +1,3 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.NetworkInformation;
-using System.Text;
-using System.Threading.Tasks;
-using static System.Net.Mime.MediaTypeNames;
-
 namespace Neo.App
 {
     public class AppLogger : IAppLogger
@@ -28,7 +20,7 @@ namespace Neo.App
 
         public void LogHistory(StructuredResponse response)
         {
-            _appState.History += StructuredResponseToText(response);
+            _appState.History += LogFormatHelper.StructuredResponseToText(response);
         }
 
         public void LogMessage(string msg, BubbleType bubbleType)
@@ -50,102 +42,5 @@ namespace Neo.App
             _chatView.Clear();
             _appState.History = string.Empty;
         }
-
-        public static string StructuredResponseToText(StructuredResponse response)
-        {
-            if( response == null ) return string.Empty;
-
-            string finalString = string.Empty;
-            if (!string.IsNullOrWhiteSpace(response.Patch))
-            {
-                finalString = "\n\nPatch:\n\n" +
-                              "```diff\n" +
-                              IndentHelper.NormalizeIndentation(response.Patch) +
-                              "\n```";
-            }
-            else if (!string.IsNullOrWhiteSpace(response.Code))
-            {
-                finalString = "\n\nCode:\n\n" +
-                              "```csharp\n" +
-                              IndentHelper.NormalizeIndentation(response.Code) +
-                              "\n```";
-            }
-
-            if (response.NuGetPackages != null)
-                finalString += "\n\nUsed nuget packages:\n" + string.Join(", ", response.NuGetPackages);
-
-            if (response.Explanation != null)
-                finalString += "\n\nExplanation:\n" + response.Explanation;
-
-            return finalString;
-        }
     }
-
-    public static class IndentHelper
-    {
-        /// <summary>
-        /// Entfernt die gemeinsame, minimale Einrückung aller nicht-leeren Zeilen.
-        /// Die relativen Einrückungen innerhalb des Codes bleiben erhalten,
-        /// aber das Snippet beginnt so weit wie möglich links.
-        /// </summary>
-        public static string NormalizeIndentation(string text)
-        {
-            if (string.IsNullOrEmpty(text))
-                return text;
-
-            // Zeilen vereinheitlichen: \r\n, \r -> \n
-            var normalized = text.Replace("\r\n", "\n").Replace("\r", "\n");
-            var lines = normalized.Split('\n');
-
-            int minIndent = int.MaxValue;
-
-            // 1. minimale Einrückung bestimmen
-            foreach (var line in lines)
-            {
-                // Leere oder nur aus Whitespaces bestehende Zeilen ignorieren
-                if (string.IsNullOrWhiteSpace(line))
-                    continue;
-
-                int currentIndent = 0;
-
-                // Zähle führende Spaces oder Tabs
-                while (currentIndent < line.Length &&
-                       (line[currentIndent] == ' ' || line[currentIndent] == '\t'))
-                {
-                    currentIndent++;
-                }
-
-                // Nur berücksichtigen, wenn die Zeile überhaupt Inhalt hat
-                if (currentIndent < line.Length)
-                {
-                    if (currentIndent < minIndent)
-                        minIndent = currentIndent;
-                }
-            }
-
-            // Falls keine sinnvolle Einrückung gefunden wurde, Text unverändert zurückgeben
-            if (minIndent == int.MaxValue || minIndent == 0)
-                return text;
-
-            // 2. diese Einrückung von allen Zeilen entfernen
-            for (int i = 0; i < lines.Length; i++)
-            {
-                var line = lines[i];
-
-                if (line.Length >= minIndent)
-                {
-                    lines[i] = line.Substring(minIndent);
-                }
-                else
-                {
-                    // Zeile ist kürzer als minIndent → einfach komplett leeren
-                    lines[i] = string.Empty;
-                }
-            }
-
-            // 3. Zeilen mit System-spezifischem NewLine wieder zusammenfügen
-            return string.Join(Environment.NewLine, lines);
-        }
-    }
-
 }
