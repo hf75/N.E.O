@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(NeoTargetFrameworkWindows)</TargetFramework>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- UseWindowsForms adds Microsoft.WindowsDesktop.App to the runtimeconfig.
+         We don't use WinForms ourselves, but the ExcelDna host needs the
+         Desktop Runtime, and this is how the SDK includes it. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>false</UseWPF>
+    <AssemblyName>Neo.ExcelMcp.AddIn</AssemblyName>
+    <RootNamespace>Neo.ExcelMcp.AddIn</RootNamespace>
+    <!-- LatestMajor: hostfxr will use .NET 9 even though the ExcelDna host
+         was compiled against .NET 6. Without this, it demands .NET 6 Desktop Runtime. -->
+    <RollForward>LatestMajor</RollForward>
+    <!-- true = ExcelDna skips generating its own runtimeconfig (which requests
+         .NET 6.0.2) and uses ours (which requests .NET 9 + LatestMajor). -->
+    <ExcelAddInCustomRuntimeConfiguration>true</ExcelAddInCustomRuntimeConfiguration>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ExcelDna.AddIn" Version="1.9.0" />
+  </ItemGroup>
+
+  <!-- Copy runtimeconfig beside packed .xll so the bootstrapper finds it. -->
+  <Target Name="CopyRuntimeConfigToPublish" AfterTargets="Build"
+          Condition="Exists('$(TargetDir)publish')">
+    <Copy SourceFiles="$(TargetDir)$(AssemblyName).runtimeconfig.json"
+          DestinationFiles="$(TargetDir)publish\$(AssemblyName).runtimeconfig.json"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

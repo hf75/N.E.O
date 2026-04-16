@@ -21,6 +21,7 @@ N.E.O. is a .NET desktop application that lets you create small, ready-to-use ut
 - Export WPF apps as native Windows executables
 - Export Avalonia apps for Windows, Linux, and macOS
 - **MCP Server for Claude Cowork/Code** — Claude generates and previews live Avalonia or WPF apps on your desktop
+- **Excel MCP Server (Neo for Excel)** — In-process Excel COM add-in that gives Claude live read/write access to the active workbook
 - Branching undo/redo history
 - Visual designer mode (click-to-edit)
 - Optional sandboxed execution via Windows AppContainer
@@ -122,6 +123,7 @@ Neo.App.Avalonia (Cross-plat) ─┘       |
   |-- Neo.PluginWindowAvalonia (Avalonia child process)
   |-- Neo.PluginWindowAvalonia.MCP (Avalonia child + Smart Edit + embedded Claude + Roslyn)
   |-- Neo.McpServer (MCP Server for Claude Cowork / Claude Code)
+  |-- Neo.ExcelMcp (Excel MCP — in-process COM add-in + STDIO bridge)
 ```
 
 The host application sends prompts to an AI agent, receives structured responses (code or patches), compiles them into DLLs via Roslyn, and streams the binaries over named pipes to a child process for display.
@@ -202,6 +204,34 @@ All tools accept an optional `windowId` parameter for multi-window mode. Omit it
 | `close_preview` | Close a specific preview window |
 
 See the [Wiki: MCP Server](https://github.com/hf75/N.E.O/wiki/MCP-Server) for full documentation.
+
+## Excel MCP Server (Neo for Excel)
+
+A second MCP server that gives Claude **live access to your Excel workbook** — not by reading files, but by running as an in-process COM add-in inside `Excel.exe`. Sub-50ms response times, sees your active selection, reads and writes cells directly.
+
+```bash
+dotnet build Neo.ExcelMcp/Neo.ExcelMcp.AddIn -c Debug
+dotnet build Neo.ExcelMcp/Neo.ExcelMcp.Bridge -c Debug
+```
+
+Load the `.xll` in Excel, add the bridge to your Claude config, and ask Claude: *"What's in my spreadsheet?"*
+
+### Excel MCP Tools (8)
+
+| Tool | Description |
+|------|-------------|
+| `excel_context` | Workbook name, active sheet, selection, sheet list |
+| `excel_read` | Read cell values (range or current selection) |
+| `excel_write` | Write values to cells |
+| `excel_write_formula` | Write formulas (SUM, AVERAGE, VLOOKUP...) |
+| `excel_tables` | List all Excel Tables with headers |
+| `excel_read_table` | Read a Table as array of records |
+| `excel_format` | Bold, colors, number format, borders, alignment |
+| `excel_create_sheet` | Create a new worksheet |
+
+When both MCP servers are connected, Claude can read Excel data, build a native Avalonia UI, and write results back — all from a single conversation.
+
+See the [Wiki: Excel MCP](https://github.com/hf75/N.E.O/wiki/Excel-MCP) for full documentation.
 
 ## Documentation
 

@@ -13,6 +13,7 @@ N.E.O. is a .NET desktop application that lets you create desktop apps through n
 - [[Getting Started]] — Install, configure, run
 - [[Features Overview]] — All features at a glance
 - [[MCP Server]] — Use N.E.O. with Claude Cowork / Claude Code
+- [[Excel MCP]] — Live Excel integration for Claude (read, write, format)
 - [[Designer Mode]] — Click-to-edit visual editing
 - [[Export and Import]] — Save and share your creations
 - [[Settings and Configuration]] — AI providers, frameworks, options
