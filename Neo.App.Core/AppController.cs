@@ -1054,11 +1054,13 @@ namespace Neo.App
 
                 if (installDesktop == true || installStartmenu == true)
                 {
-                    AppInstaller.InstallApplicationPerUser(
+                    _platformServices.InstallApplicationPerUser(
                         basePath: exportPath,
                         appName: assemblyName,
                         installStartMenu: installStartmenu,
-                        installDesktop: installDesktop);
+                        installDesktop: installDesktop,
+                        displayVersion: null,
+                        publisher: null);
                 }
             }
             finally
@@ -1526,7 +1528,7 @@ namespace Neo.App
 
                     _view.PromptText = originalPrompt;
 
-                    Logger.LogMessageWithMarkdownFormating(AppLogger.StructuredResponseToText(structuredResponse!), BubbleType.CompletionError);
+                    Logger.LogMessageWithMarkdownFormating(LogFormatHelper.StructuredResponseToText(structuredResponse!), BubbleType.CompletionError);
                     Logger.LogMessage(msg, BubbleType.CompletionError);
                 }
                 catch(OperationCanceledException)
@@ -1554,7 +1556,7 @@ namespace Neo.App
                 string? newLastCode = AppState.LastCode;
                 if (structuredResponse != null)
                 {
-                    var answerText = AppLogger.StructuredResponseToText(structuredResponse);
+                    var answerText = LogFormatHelper.StructuredResponseToText(structuredResponse);
                     newHistory += answerText;
                     Logger.LogMessageWithMarkdownFormating(answerText, BubbleType.Answer);
                     newLastCode = structuredResponse.Code;
@@ -2448,7 +2450,7 @@ namespace Neo.App
         /// On Windows: tries User-level (registry) first, falls back to Process.
         /// On Linux/macOS: reads from Process (shell environment).
         /// </summary>
-        internal static string? GetEnvVar(string name)
+        public static string? GetEnvVar(string name)
         {
             if (OperatingSystem.IsWindows())
             {

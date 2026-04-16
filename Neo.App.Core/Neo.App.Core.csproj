@@ -13,6 +13,16 @@
   <ItemGroup>
     <ProjectReference Include="..\Neo.AssemblyForge\Neo.AssemblyForge.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Core\Neo.Agents.Core.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.Claude\Neo.Agents.Claude.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.OpenAI\Neo.Agents.OpenAI.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.Gemini\Neo.Agents.Gemini.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.Ollama\Neo.Agents.Ollama.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.LmStudio\Neo.Agents.LmStudio.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpCompile\Neo.Agents.CSharpCompile.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpDllCompile\Neo.Agents.CSharpDllCompile.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.NugetLoader\Neo.Agents.NugetLoader.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.PowerShell\Neo.Agents.PowerShell.csproj" />
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
+    <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
   </ItemGroup>
 </Project>

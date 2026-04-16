@@ -284,7 +284,7 @@ namespace Neo.App
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            _appController = new AppController(this);
+            _appController = new AppController(this, new WpfPlatformServices());
 
             if (_appController.AvailableAgents.Count == 0)
             {

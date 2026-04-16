@@ -125,7 +125,7 @@ namespace Neo.App
             preSettings.UseAvalonia = true;
             SettingsService.Save(preSettings);
 
-            _appController = new AppController(this);
+            _appController = new AppController(this, new AvaloniaPlatformServices());
 
             if (_appController.AvailableAgents.Count == 0)
             {
