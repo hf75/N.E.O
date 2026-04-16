@@ -123,6 +123,7 @@ Neo.App.Avalonia (Cross-plat) ─┘       |
   |-- Neo.PluginWindowAvalonia (Avalonia child process)
   |-- Neo.PluginWindowAvalonia.MCP (Avalonia child + Smart Edit + embedded Claude + Roslyn)
   |-- Neo.McpServer (MCP Server for Claude Cowork / Claude Code)
+  |-- Neo.App.Api (Neo.Trigger API referenced by generated apps — channel back-reporting)
   |-- Neo.ExcelMcp (Excel MCP — in-process COM add-in + STDIO bridge)
 ```
 
@@ -204,6 +205,63 @@ All tools accept an optional `windowId` parameter for multi-window mode. Omit it
 | `close_preview` | Close a specific preview window |
 
 See the [Wiki: MCP Server](https://github.com/hf75/N.E.O/wiki/MCP-Server) for full documentation.
+
+### Channel Back-Reporting (Research Preview)
+
+N.E.O.'s MCP server supports [Claude Code Channels](https://code.claude.com/docs/en/channels-reference) — a mechanism where the running preview app can push events back into the Claude Code session **without waiting for user input**. Claude automatically starts a new turn and reacts.
+
+Two event types are supported:
+
+- **`runtime_error`** (system, always active) — Runtime exceptions in the generated app are automatically pushed so Claude can fix them.
+- **`user_trigger`** (user-defined via `Neo.Trigger(...)` API) — The generated code itself decides what events to push. The content of a trigger is a complete prompt that Claude executes as if the user had typed it.
+
+**Example.** You say:
+
+> *"Build an app with a combobox of vacation destinations and a 'Research' button. When I click the button, research the selected country and write the result into a TextBlock named 'resultText'."*
+
+Claude generates code that includes:
+
+```csharp
+using Neo.App;
+// ...
+private void OnResearchClick(object sender, RoutedEventArgs e)
+{
+    var country = CountryCombo.SelectedItem?.ToString() ?? "(unknown)";
+    Neo.Trigger(
+        $"Research vacation destination {country}: best time to visit, " +
+        $"top 3 sights, typical prices. Write the result with set_property into TextBlock 'resultText'.");
+}
+```
+
+Click the button → `Neo.Trigger(...)` pushes the prompt via MCP channel → Claude starts a new turn → executes the research → writes the result back into the running app via `set_property`. No user input in between.
+
+**What this enables:**
+- Self-healing apps — Runtime errors fix themselves
+- Apps with arbitrary business logic expressed as prompts, not pre-coded
+- Timer-based behaviors via `Neo.ScheduleTrigger(TimeSpan, string)`
+- "AI as Runtime" — the generated UI is the only thing the app owns; all logic is Claude
+
+**Pros:**
+- Genuinely new paradigm. The AI that generated the app also runs it.
+- Extremely flexible — any behavior the user can describe can be implemented without writing business logic.
+- Leverages official Anthropic [Channels protocol](https://code.claude.com/docs/en/channels-reference) — not a hack.
+- Generated apps stay small and readable — no buried business logic.
+- Each trigger has full current app state interpolated into the prompt, so Claude has context.
+
+**Cons / caveats:**
+- Requires Claude Code CLI v2.1.80+ with `--dangerously-load-development-channels server:neo-preview` flag (custom channels are not yet on the approved allowlist).
+- Channels are currently **Claude Code only** — Claude Desktop / Cowork do not yet support them (as of writing).
+- Every trigger costs an API call. Not suitable for high-frequency events (avoid `MouseMoved`, `TextChanged` on every keystroke, etc.).
+- Latency — each trigger → new turn → tool calls → UI update loop takes a few seconds. Fine for user-initiated actions, bad for real-time feedback.
+- Prompt injection risk — the channel pushes arbitrary text from the running app into Claude's context. Don't run untrusted generated code with channels enabled.
+- Research preview — API may change, SDK may break. Don't build production systems on this yet.
+- Single-window assumption at the moment — multi-window routing of channel events is a future exercise.
+
+**Quick start:**
+```bash
+claude --dangerously-load-development-channels server:neo-preview
+```
+Then describe an app and the event behavior you want. See the [Channels reference](https://code.claude.com/docs/en/channels-reference) for protocol details.
 
 ## Excel MCP Server (Neo for Excel)
 

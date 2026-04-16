@@ -35,5 +35,6 @@
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpDllCompile\Neo.Agents.CSharpDllCompile.csproj" />
     <ProjectReference Include="..\Neo.AssemblyForge\Neo.AssemblyForge.csproj" />
     <ProjectReference Include="..\Neo.App.Core\Neo.App.Core.csproj" />
+    <ProjectReference Include="..\Neo.App.Api\Neo.App.Api.csproj" />
   </ItemGroup>
 </Project>

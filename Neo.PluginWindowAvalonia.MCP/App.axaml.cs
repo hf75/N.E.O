@@ -146,6 +146,12 @@ namespace Neo.PluginWindowAvalonia.MCP
                     Json.ToJson(new HelloMessage("Child", Environment.ProcessId, Hwnd: handle == IntPtr.Zero ? 0 : handle.ToInt64()))
                 ));
 
+                // Wire the Neo.Trigger API so generated app code can push prompts to Claude
+                Neo.App.Neo.SetEmitter(prompt =>
+                {
+                    _ = SendAppEventAsync("user_trigger", "Neo.Trigger", prompt);
+                });
+
                 // Framed-Listen-Loop starten
                 _ = Task.Run(() => FramedListenLoopAsync(_ipcCts.Token));
 
@@ -727,6 +733,14 @@ namespace Neo.PluginWindowAvalonia.MCP
             if (_client == null) return Task.CompletedTask;
             var log = new LogMessage(level, message, category, details);
             return SafeSendAsync(new IpcEnvelope(IpcTypes.Log, "", Json.ToJson(log)));
+        }
+
+        /// <summary>Send a user-interaction event to the MCP server for channel push to Claude.</summary>
+        private Task SendAppEventAsync(string eventType, string target, string? value = null, string? details = null)
+        {
+            if (_client == null) return Task.CompletedTask;
+            var evt = new AppEventMessage(eventType, target, value, details);
+            return SafeSendAsync(new IpcEnvelope(IpcTypes.AppEvent, "", Json.ToJson(evt)));
         }
 
         private Task SendErrorAsync(string context, Exception? ex)

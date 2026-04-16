@@ -65,6 +65,9 @@ namespace Neo.IPC
         public const string StartWebBridgeResult = "StartWebBridgeResult";
         public const string StopWebBridge = "StopWebBridge";
         public const string SendToWebBridge = "SendToWebBridge";
+
+        /// <summary>Unsolicited event from child: user interaction or state change.</summary>
+        public const string AppEvent = "AppEvent";
     }
 
     public record StartWebBridgeRequest(string HtmlContent, int Port = 0);
@@ -139,6 +142,14 @@ namespace Neo.IPC
         string Message,
         string? Category = null,
         string? Details = null
+    );
+
+    /// <summary>Unsolicited event from child: button click, text change, selection, etc.</summary>
+    public record AppEventMessage(
+        string EventType,        // "button_click", "text_changed", "selection_changed", "runtime_error"
+        string Target,           // Control name or type, e.g. "submitBtn", "TextBox:0"
+        string? Value = null,    // Optional: new text, selected item, error message
+        string? Details = null   // Optional: stack trace or extra context
     );
 
     public record HelloMessage(string Role, int ProcessId, long? Hwnd = null);

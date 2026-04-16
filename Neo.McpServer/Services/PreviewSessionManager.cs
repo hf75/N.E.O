@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Text.Json.Nodes;
 using Neo.IPC;
+using McpServerInstance = ModelContextProtocol.Server.McpServer;
 
 namespace Neo.McpServer.Services;
 
@@ -14,6 +16,64 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     private const string DefaultWindowId = "default";
     private readonly ConcurrentDictionary<string, WindowSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
     private int _sessionCounter;
+
+    // ── Channel support: push events to Claude Code ──
+    private McpServerInstance? _channelServer;
+
+    /// <summary>Wire up the MCP server instance for pushing channel notifications.</summary>
+    public void SetChannelServer(McpServerInstance server) => _channelServer = server;
+
+    /// <summary>Push an app event to Claude via MCP channel notification.</summary>
+    private async Task PushChannelEventAsync(string windowId, AppEventMessage evt)
+    {
+        if (_channelServer == null) return;
+        try
+        {
+            // Build meta object: each key becomes an attribute on the <channel> tag
+            var meta = new JsonObject
+            {
+                ["event_type"] = evt.EventType,
+                ["target"] = evt.Target,
+                ["window_id"] = windowId
+            };
+            if (!string.IsNullOrEmpty(evt.Value))
+                meta["value"] = evt.Value;
+
+            // Channel notification params per MCP channel spec
+            var parameters = new JsonObject
+            {
+                ["content"] = FormatChannelContent(evt),
+                ["meta"] = meta
+            };
+
+            await _channelServer.SendNotificationAsync(
+                "notifications/claude/channel",
+                parameters,
+                serializerOptions: null,
+                cancellationToken: default);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Channel] Failed to push event: {ex.Message}");
+        }
+    }
+
+    private static string FormatChannelContent(AppEventMessage evt)
+    {
+        return evt.EventType switch
+        {
+            // User-defined trigger from generated code — prompt is passed through verbatim
+            "user_trigger" => evt.Value ?? "(empty trigger)",
+
+            // System events — always active
+            "runtime_error" => $"Runtime error in {evt.Target}: {evt.Value}" +
+                               (evt.Details != null ? $"\n{evt.Details}" : ""),
+
+            // Fallback (rarely used now that auto-hooks are gone)
+            _ => $"{evt.EventType} on '{evt.Target}'" +
+                 (evt.Value != null ? $": {evt.Value}" : "")
+        };
+    }
 
     // ========================================
     // WindowSession — per-window state
@@ -473,7 +533,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     // Listen Loop
     // ========================================
 
-    private static async Task ListenLoopAsync(WindowSession s, CancellationToken ct)
+    private async Task ListenLoopAsync(WindowSession s, CancellationToken ct)
     {
         if (s.Messenger == null) return;
 
@@ -506,6 +566,13 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                                 if (!string.IsNullOrEmpty(env.CorrelationId) &&
                                     s.PendingRequests.TryRemove(env.CorrelationId, out var errTcs))
                                     errTcs.TrySetResult(env);
+
+                                // Also push runtime errors to Claude via channel
+                                _ = PushChannelEventAsync(s.WindowId, new AppEventMessage(
+                                    EventType: "runtime_error",
+                                    Target: errMsg.Context ?? "app",
+                                    Value: errMsg.Message,
+                                    Details: errMsg.StackTrace));
                             }
                             break;
 
@@ -520,6 +587,17 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                             if (!string.IsNullOrEmpty(env.CorrelationId) &&
                                 s.PendingRequests.TryRemove(env.CorrelationId, out var resultTcs))
                                 resultTcs.TrySetResult(env);
+                            break;
+
+                        case IpcTypes.AppEvent:
+                            var appEvt = Json.FromJson<AppEventMessage>(env.PayloadJson);
+                            if (appEvt != null)
+                            {
+                                s.AddLog($"[APP EVENT] {appEvt.EventType}: {appEvt.Target}" +
+                                         (appEvt.Value != null ? $" = {appEvt.Value}" : ""));
+                                // Push to Claude via channel notification
+                                _ = PushChannelEventAsync(s.WindowId, appEvt);
+                            }
                             break;
 
                         case IpcTypes.Heartbeat:
