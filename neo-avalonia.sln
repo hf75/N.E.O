@@ -47,6 +47,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.App.Avalonia", "Neo.App
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.App.Api", "Neo.App.Api\Neo.App.Api.csproj", "{92CF2B9E-2DB8-4CCE-98C6-240DF3CE64E0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.AssemblyForge.Core", "Neo.AssemblyForge.Core\Neo.AssemblyForge.Core.csproj", "{08DDEE7F-111E-48F9-9436-256C6917DB5F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -309,6 +311,18 @@ Global
 		{92CF2B9E-2DB8-4CCE-98C6-240DF3CE64E0}.Release|x64.Build.0 = Release|Any CPU
 		{92CF2B9E-2DB8-4CCE-98C6-240DF3CE64E0}.Release|x86.ActiveCfg = Release|Any CPU
 		{92CF2B9E-2DB8-4CCE-98C6-240DF3CE64E0}.Release|x86.Build.0 = Release|Any CPU
+		{08DDEE7F-111E-48F9-9436-256C6917DB5F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{08DDEE7F-111E-48F9-9436-256C6917DB5F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{08DDEE7F-111E-48F9-9436-256C6917DB5F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{08DDEE7F-111E-48F9-9436-256C6917DB5F}.Debug|x64.Build.0 = Debug|Any CPU
+		{08DDEE7F-111E-48F9-9436-256C6917DB5F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{08DDEE7F-111E-48F9-9436-256C6917DB5F}.Debug|x86.Build.0 = Debug|Any CPU
+		{08DDEE7F-111E-48F9-9436-256C6917DB5F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{08DDEE7F-111E-48F9-9436-256C6917DB5F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{08DDEE7F-111E-48F9-9436-256C6917DB5F}.Release|x64.ActiveCfg = Release|Any CPU
+		{08DDEE7F-111E-48F9-9436-256C6917DB5F}.Release|x64.Build.0 = Release|Any CPU
+		{08DDEE7F-111E-48F9-9436-256C6917DB5F}.Release|x86.ActiveCfg = Release|Any CPU
+		{08DDEE7F-111E-48F9-9436-256C6917DB5F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

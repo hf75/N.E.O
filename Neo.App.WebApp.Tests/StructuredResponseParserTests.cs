@@ -1,13 +1,23 @@
-using Neo.App.WebApp.Services.Ai;
+using Neo.AssemblyForge;
 
 namespace Neo.App.WebApp.Tests;
 
 public class StructuredResponseParserTests
 {
     [Fact]
-    public void ParsesPlainJson()
+    public void ParsesPlainJson_Lowercase()
     {
         var r = StructuredResponseParser.Parse("{\"code\":\"x\",\"chat\":\"hi\"}");
+        Assert.NotNull(r);
+        Assert.Equal("x", r!.Code);
+        Assert.Equal("hi", r.Chat);
+    }
+
+    [Fact]
+    public void ParsesPlainJson_PascalCase()
+    {
+        // Desktop/MCP wire format.
+        var r = StructuredResponseParser.Parse("{\"Code\":\"x\",\"Chat\":\"hi\"}");
         Assert.NotNull(r);
         Assert.Equal("x", r!.Code);
         Assert.Equal("hi", r.Chat);
@@ -19,7 +29,7 @@ public class StructuredResponseParserTests
         var raw = """
             Here you go:
             ```json
-            {"code":"Console.WriteLine(1);","explanation":"trivial"}
+            {"Code":"Console.WriteLine(1);","Explanation":"trivial"}
             ```
             """;
         var r = StructuredResponseParser.Parse(raw);
@@ -30,7 +40,7 @@ public class StructuredResponseParserTests
     [Fact]
     public void ParsesEmbeddedJson()
     {
-        var raw = "Let me think... {\"code\":\"A\",\"chat\":null} hope that helps.";
+        var raw = "Let me think... {\"Code\":\"A\",\"Chat\":null} hope that helps.";
         var r = StructuredResponseParser.Parse(raw);
         Assert.NotNull(r);
         Assert.Equal("A", r!.Code);
@@ -39,7 +49,7 @@ public class StructuredResponseParserTests
     [Fact]
     public void HandlesEscapedQuotesInside()
     {
-        var raw = "{\"code\":\"var s = \\\"hello\\\";\",\"chat\":\"done\"}";
+        var raw = "{\"Code\":\"var s = \\\"hello\\\";\",\"Chat\":\"done\"}";
         var r = StructuredResponseParser.Parse(raw);
         Assert.NotNull(r);
         Assert.Contains("\"hello\"", r!.Code);
@@ -61,30 +71,31 @@ public class StructuredResponseParserTests
     [Fact]
     public void AllowsChatOnlyResponse()
     {
-        var r = StructuredResponseParser.Parse("{\"chat\":\"only a chat message\"}");
+        var r = StructuredResponseParser.Parse("{\"Chat\":\"only a chat message\"}");
         Assert.NotNull(r);
-        Assert.Null(r!.Code);
+        Assert.Equal(string.Empty, r!.Code);
         Assert.Equal("only a chat message", r.Chat);
     }
 
     [Fact]
-    public void ParsesNuGetArray()
+    public void ParsesNuGetPackagesArray()
     {
-        var raw = "{\"code\":\"class X{}\",\"nuget\":[{\"id\":\"MathNet.Numerics\",\"version\":\"5.0.0\"},{\"id\":\"NodaTime\",\"version\":\"3.1.9\"}]}";
+        // Forge wire format: list of "Id|Version" strings.
+        var raw = """
+            {"Code":"class X{}","NuGetPackages":["MathNet.Numerics|5.0.0","NodaTime|3.1.9"]}
+            """;
         var r = StructuredResponseParser.Parse(raw);
         Assert.NotNull(r);
-        Assert.NotNull(r!.NuGet);
-        Assert.Equal(2, r.NuGet!.Length);
-        Assert.Equal("MathNet.Numerics", r.NuGet[0].Id);
-        Assert.Equal("5.0.0", r.NuGet[0].Version);
-        Assert.Equal("NodaTime", r.NuGet[1].Id);
+        Assert.Equal(2, r!.NuGetPackages.Count);
+        Assert.Equal("MathNet.Numerics|5.0.0", r.NuGetPackages[0]);
+        Assert.Equal("NodaTime|3.1.9", r.NuGetPackages[1]);
     }
 
     [Fact]
-    public void OmittingNuGet_YieldsNull()
+    public void OmittingNuGet_YieldsEmptyList()
     {
-        var r = StructuredResponseParser.Parse("{\"code\":\"class X{}\"}");
+        var r = StructuredResponseParser.Parse("{\"Code\":\"class X{}\"}");
         Assert.NotNull(r);
-        Assert.Null(r!.NuGet);
+        Assert.Empty(r!.NuGetPackages);
     }
 }

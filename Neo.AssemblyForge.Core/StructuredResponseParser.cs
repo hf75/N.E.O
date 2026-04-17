@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json;
 
-namespace Neo.App.WebApp.Services.Ai;
+namespace Neo.AssemblyForge;
 
 public static class StructuredResponseParser
 {

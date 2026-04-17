@@ -1,28 +1,21 @@
-using Newtonsoft.Json;
 using System.Collections.Generic;
 
 namespace Neo.AssemblyForge;
 
+/// <summary>
+/// The shape every Neo surface (desktop host, MCP server, Web App) expects
+/// the AI to return. Fields are optional; consumers pick the ones they care
+/// about. Property names are PascalCase by C# convention — deserialize with
+/// <c>PropertyNameCaseInsensitive = true</c> so both PascalCase (desktop +
+/// MCP wire format) and camelCase (Web App wire format) inputs parse cleanly.
+/// </summary>
 public sealed class StructuredResponse
 {
-    [JsonProperty("Code")]
     public string Code { get; set; } = string.Empty;
-
-    [JsonProperty("Patch")]
     public string Patch { get; set; } = string.Empty;
-
-    [JsonProperty("NuGetPackages")]
     public List<string> NuGetPackages { get; set; } = new();
-
-    [JsonProperty("Explanation")]
     public string Explanation { get; set; } = string.Empty;
-
-    [JsonProperty("Chat")]
     public string Chat { get; set; } = string.Empty;
-
-    [JsonProperty("PowerShellScript")]
     public string PowerShellScript { get; set; } = string.Empty;
-
-    [JsonProperty("ConsoleAppCode")]
     public string ConsoleAppCode { get; set; } = string.Empty;
 }

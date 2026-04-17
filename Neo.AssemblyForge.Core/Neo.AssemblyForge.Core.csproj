@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(NeoTargetFramework)</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Neo.AssemblyForge.Core</AssemblyName>
+    <RootNamespace>Neo.AssemblyForge</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Pure code-generation pipeline primitives with no storage/host dependencies:
+       the StructuredResponse DTO, the unified-diff patcher/generator, code
+       validators, history formatter, JSON schemata, and the system-prompt text.
+
+       This project is referenced by Neo.AssemblyForge (desktop/MCP compile
+       pipeline) AND by Neo.App.WebApp (WASM) — same logic, both surfaces.
+
+       Microsoft.CodeAnalysis.CSharp is needed by CodeValidators; Roslyn is
+       also a dependency of the WebApp already, so no extra weight. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+  </ItemGroup>
+
+</Project>

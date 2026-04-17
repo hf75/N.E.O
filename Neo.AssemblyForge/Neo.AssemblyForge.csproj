@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>$(NeoTargetFramework)</TargetFramework>
@@ -9,10 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <!-- Neo.AssemblyForge.Core carries every primitive that doesn't need
+         Roslyn-to-disk or NuGet: StructuredResponse, diff patcher/generator,
+         code validators, history formatter, JSON schemata, system messages.
+         Kept in a separate assembly so Neo.App.WebApp can reference it
+         WITHOUT pulling NuGet.Protocol's Win32 P/Invoke into the WASM bundle. -->
+    <ProjectReference Include="..\Neo.AssemblyForge.Core\Neo.AssemblyForge.Core.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Core\Neo.Agents.Core.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpCompile\Neo.Agents.CSharpCompile.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpDllCompile\Neo.Agents.CSharpDllCompile.csproj" />

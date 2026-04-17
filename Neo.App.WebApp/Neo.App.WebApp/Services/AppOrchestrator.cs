@@ -10,6 +10,7 @@ using Neo.App.WebApp.Services.Compilation;
 using Neo.App.WebApp.Services.Sessions;
 using Microsoft.CodeAnalysis;
 using Neo.AssemblyForge;
+using System.Collections.Generic;
 
 namespace Neo.App.WebApp.Services;
 
@@ -47,7 +48,7 @@ public sealed class AppOrchestrator
     public int MaxCompileRetries { get; set; } = 4;
 
     public string? LastCode { get; private set; }
-    public NuGetRef[]? LastNuGet { get; private set; }
+    public List<string>? LastNuGet { get; private set; }
     public System.Collections.Generic.IReadOnlyDictionary<string, byte[]>? LastDepAssemblies { get; private set; }
 
     public event Action<OrchestratorEvent>? StatusChanged;
@@ -168,13 +169,14 @@ public sealed class AppOrchestrator
             // Resolve any NuGet packages the AI requested.
             System.Collections.Generic.IReadOnlyList<Microsoft.CodeAnalysis.MetadataReference>? extraRefs = null;
             System.Collections.Generic.IReadOnlyDictionary<string, byte[]>? depAssemblies = null;
-            if (parsed.NuGet is { Length: > 0 } && _nuget is not null)
+            if (parsed.NuGetPackages is { Count: > 0 } && _nuget is not null)
             {
-                var pkgList = string.Join(", ", parsed.NuGet.Select(p => p.Id));
+                var pkgList = string.Join(", ",
+                    parsed.NuGetPackages.Select(s => s.Split('|', 2)[0]));
                 Emit(OrchestratorStatus.Compiling,
                     $"Resolving NuGet: {pkgList} (first time may take 10-30s while the backend downloads from nuget.org)…");
                 var nugetSw = System.Diagnostics.Stopwatch.StartNew();
-                var resolved = await _nuget.ResolveAsync(parsed.NuGet);
+                var resolved = await _nuget.ResolveAsync(parsed.NuGetPackages);
                 nugetSw.Stop();
                 extraRefs = resolved.References;
                 depAssemblies = resolved.AssemblyBytes;
@@ -219,7 +221,7 @@ public sealed class AppOrchestrator
             {
                 control = _pluginHost.LoadFromBytes(compile.AssemblyBytes!, pdbBytes: null, depAssemblies);
                 LastCode = codeToCompile;
-                LastNuGet = parsed.NuGet;
+                LastNuGet = parsed.NuGetPackages?.ToList();
                 LastDepAssemblies = depAssemblies;
             }
             catch (Exception ex)
@@ -325,8 +327,8 @@ public sealed class AppOrchestrator
             History = History.ToList(),
             UpdatedUtc = DateTime.UtcNow.ToString("O"),
         };
-        if (LastNuGet is { Length: > 0 })
-            s.NuGet = LastNuGet.Select(p => $"{p.Id}@{p.Version}").ToList();
+        if (LastNuGet is { Count: > 0 })
+            s.NuGet = LastNuGet.ToList();
         return s;
     }
 
@@ -355,16 +357,16 @@ public sealed class AppOrchestrator
         System.Collections.Generic.IReadOnlyDictionary<string, byte[]>? depAssemblies = null;
         if (session.NuGet is { Count: > 0 } && _nuget is not null)
         {
-            var packages = session.NuGet
-                .Select(s => s.Split('@', 2))
-                .Where(p => p.Length >= 1 && !string.IsNullOrWhiteSpace(p[0]))
-                .Select(p => new NuGetRef { Id = p[0].Trim(), Version = p.Length > 1 ? p[1].Trim() : "default" })
-                .ToArray();
-            Emit(OrchestratorStatus.Compiling, $"Restoring {packages.Length} NuGet package(s)…");
-            var resolved = await _nuget.ResolveAsync(packages);
+            // Session stores NuGet specs as-is (Forge wire format: "Id|Version"),
+            // though older sessions may still use "Id@Version" — accept both.
+            var specs = session.NuGet
+                .Select(s => s.Contains('|') ? s : s.Replace('@', '|'))
+                .ToList();
+            Emit(OrchestratorStatus.Compiling, $"Restoring {specs.Count} NuGet package(s)…");
+            var resolved = await _nuget.ResolveAsync(specs);
             extraRefs = resolved.References;
             depAssemblies = resolved.AssemblyBytes;
-            LastNuGet = packages;
+            LastNuGet = specs;
             LastDepAssemblies = depAssemblies;
         }
 

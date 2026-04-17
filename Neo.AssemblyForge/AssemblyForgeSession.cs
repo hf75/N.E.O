@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using Neo.AssemblyForge.Completion;
 using Neo.AssemblyForge.Services;
 using Neo.AssemblyForge.Utils;
@@ -116,7 +116,9 @@ public sealed class AssemblyForgeSession
                     },
                     cancellationToken);
 
-                structuredResponse = JsonConvert.DeserializeObject<StructuredResponse>(completionJson)
+                structuredResponse = JsonSerializer.Deserialize<StructuredResponse>(
+                    completionJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? new StructuredResponse();
 
                 if (!string.IsNullOrWhiteSpace(structuredResponse.Chat))

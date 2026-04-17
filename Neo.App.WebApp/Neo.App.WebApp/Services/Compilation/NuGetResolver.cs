@@ -9,7 +9,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
-using Neo.App.WebApp.Services.Ai;
 
 namespace Neo.App.WebApp.Services.Compilation;
 
@@ -40,15 +39,26 @@ public sealed class NuGetResolver
         public List<string> Errors { get; } = new();
     }
 
-    public async Task<ResolveResult> ResolveAsync(IEnumerable<NuGetRef> packages)
+    /// <summary>
+    /// Resolves NuGet packages expressed in Neo.AssemblyForge's wire format:
+    /// each entry is a <c>"Id|Version"</c> string (version may be <c>"default"</c>
+    /// or a version range).
+    /// </summary>
+    public async Task<ResolveResult> ResolveAsync(IEnumerable<string> packageSpecs)
     {
         var result = new ResolveResult();
 
         var pkgDict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var p in packages)
+        foreach (var spec in packageSpecs)
         {
-            if (string.IsNullOrWhiteSpace(p.Id)) continue;
-            pkgDict[p.Id] = string.IsNullOrWhiteSpace(p.Version) ? "default" : p.Version.Trim();
+            if (string.IsNullOrWhiteSpace(spec)) continue;
+            var parts = spec.Split('|', 2);
+            var id = parts[0].Trim();
+            if (string.IsNullOrEmpty(id)) continue;
+            var version = parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1])
+                ? parts[1].Trim()
+                : "default";
+            pkgDict[id] = version;
         }
         if (pkgDict.Count == 0) return result;
 

@@ -23,12 +23,12 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
   </ItemGroup>
 
-  <!-- Share the AssemblyForge's platform-agnostic patch utilities by source-linking
-       (same pattern Neo.App.Avalonia uses to pull files from Neo.App). A ProjectReference
-       isn't viable here because Neo.AssemblyForge transitively pulls NuGet.Protocol
-       into the dependency graph, and that package is not WASM-compatible. -->
+  <!-- Neo.AssemblyForge.Core ships the storage-agnostic primitives
+       (StructuredResponse, unified-diff patcher/generator, validators,
+       history formatter, JSON schemata, system messages). Safe to reference
+       from a net9.0-browser head because Core has no NuGet.Protocol
+       transitive dep. -->
   <ItemGroup>
-    <Compile Include="..\..\Neo.AssemblyForge\Utils\UnifiedDiffPatcher.cs" Link="Shared\UnifiedDiffPatcher.cs" />
-    <Compile Include="..\..\Neo.AssemblyForge\Utils\UnifiedDiffGenerator.cs" Link="Shared\UnifiedDiffGenerator.cs" />
+    <ProjectReference Include="..\..\Neo.AssemblyForge.Core\Neo.AssemblyForge.Core.csproj" />
   </ItemGroup>
 </Project>

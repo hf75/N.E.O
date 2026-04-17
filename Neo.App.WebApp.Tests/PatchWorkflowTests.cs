@@ -1,13 +1,12 @@
-using Neo.App.WebApp.Services.Ai;
 using Neo.AssemblyForge;
 
 namespace Neo.App.WebApp.Tests;
 
 /// <summary>
 /// The web orchestrator relies on two things to do patch-first iterations:
-/// the AI's StructuredResponse must carry a `patch` field, and the source-linked
-/// UnifiedDiffPatcher must be able to apply it against the previous code.
-/// These tests exercise both pieces without needing an AI call.
+/// the shared StructuredResponse must carry a Patch field, and UnifiedDiffPatcher
+/// must be able to apply it against the previous code. Both live in
+/// Neo.AssemblyForge.Core and are tested here from the WebApp's perspective.
 /// </summary>
 public class PatchWorkflowTests
 {
@@ -16,15 +15,15 @@ public class PatchWorkflowTests
     {
         var raw = """
             {
-              "patch": "--- a/GeneratedApp.cs\n+++ b/GeneratedApp.cs\n@@ -3,1 +3,1 @@\n-Hello\n+Hi there",
-              "explanation": "greeting shortened"
+              "Patch": "--- a/GeneratedApp.cs\n+++ b/GeneratedApp.cs\n@@ -3,1 +3,1 @@\n-Hello\n+Hi there",
+              "Explanation": "greeting shortened"
             }
             """;
         var r = StructuredResponseParser.Parse(raw);
         Assert.NotNull(r);
-        Assert.Null(r!.Code);
+        Assert.Equal(string.Empty, r!.Code);
         Assert.NotNull(r.Patch);
-        Assert.Contains("@@", r.Patch!);
+        Assert.Contains("@@", r.Patch);
     }
 
     [Fact]
@@ -62,11 +61,13 @@ public class PatchWorkflowTests
         // When both are present the orchestrator prefers Patch; the parser
         // shouldn't drop either.
         var raw = """
-            {"code": "class X{}", "patch": "--- a/GeneratedApp.cs\n+++ b/GeneratedApp.cs\n@@ -1,1 +1,1 @@\n-old\n+new"}
+            {"Code": "class X{}", "Patch": "--- a/GeneratedApp.cs\n+++ b/GeneratedApp.cs\n@@ -1,1 +1,1 @@\n-old\n+new"}
             """;
         var r = StructuredResponseParser.Parse(raw);
         Assert.NotNull(r);
         Assert.NotNull(r!.Code);
+        Assert.NotEmpty(r.Code);
         Assert.NotNull(r.Patch);
+        Assert.NotEmpty(r.Patch);
     }
 }
