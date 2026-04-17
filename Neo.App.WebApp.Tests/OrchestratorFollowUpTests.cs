@@ -1,31 +1,19 @@
 using System;
-using System.Reflection;
-using Neo.App.WebApp.Services;
 
 namespace Neo.App.WebApp.Tests;
 
 /// <summary>
-/// The AppOrchestrator retry loop depends on two small helpers that build the
-/// follow-up prompts it sends back to the AI. They are private static; the
-/// tests reach them via reflection to keep the production surface minimal.
+/// The retry loop in AppOrchestrator delegates to CodeIterationHelpers in
+/// Neo.AssemblyForge.Core. The same helpers back the desktop/MCP
+/// AssemblyForgeSession, so a regression here affects both surfaces.
 /// </summary>
 public class OrchestratorFollowUpTests
 {
     private static string InvokeCompileFollowUp(string[] diagnostics)
-    {
-        var m = typeof(AppOrchestrator).GetMethod("BuildCompileErrorFollowUp",
-            BindingFlags.NonPublic | BindingFlags.Static);
-        Assert.NotNull(m);
-        return (string)m!.Invoke(null, new object[] { diagnostics })!;
-    }
+        => Neo.AssemblyForge.CodeIterationHelpers.BuildCompileErrorFollowUp(diagnostics);
 
     private static string InvokeLoadFollowUp(Exception ex)
-    {
-        var m = typeof(AppOrchestrator).GetMethod("BuildLoadErrorFollowUp",
-            BindingFlags.NonPublic | BindingFlags.Static);
-        Assert.NotNull(m);
-        return (string)m!.Invoke(null, new object[] { ex })!;
-    }
+        => Neo.AssemblyForge.CodeIterationHelpers.BuildLoadErrorFollowUp(ex);
 
     [Fact]
     public void CompileFollowUp_IncludesAllDiagnostics()
@@ -39,7 +27,8 @@ public class OrchestratorFollowUpTests
 
         Assert.Contains("Foo", prompt);
         Assert.Contains("Bar", prompt);
-        Assert.Contains("`code` field", prompt);
+        // The Core helper uses PascalCase (Code), matching the Forge wire format.
+        Assert.Contains("`Code` field", prompt);
         Assert.Contains("FULL updated", prompt);
     }
 

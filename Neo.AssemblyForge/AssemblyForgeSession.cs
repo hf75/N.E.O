@@ -389,62 +389,15 @@ public sealed class AssemblyForgeSession
         };
     }
 
+    // Prompt-building and error-formatting helpers live in
+    // Neo.AssemblyForge.Core.CodeIterationHelpers so the WebApp orchestrator
+    // can reuse them verbatim. Session delegates all calls there.
     private static string BuildDiffFirstPrompt(string userPrompt, string currentCode, string mainFilePath)
-    {
-        userPrompt ??= string.Empty;
-        currentCode ??= string.Empty;
-        mainFilePath ??= "./currentcode.cs";
-
-        return "You are editing the existing C# file '" + mainFilePath + "'.\n\n" +
-               "PATCH REQUIREMENTS: The Patch field must include at least one hunk header line starting with '@@' (prefer numeric unified diff like '@@ -10,7 +10,8 @@').\n\n" +
-               "CURRENT FILE CONTENT:\n" +
-               "```csharp\n" +
-               currentCode +
-               "\n```\n\n" +
-               "TASK:\n" +
-               userPrompt +
-               "\n\n" +
-               "Prefer PATCH RESPONSE. If the patch would be extremely large or cannot be made to apply cleanly, use CODE RESPONSE instead.";
-    }
+        => CodeIterationHelpers.BuildDiffFirstPrompt(userPrompt, currentCode, mainFilePath);
 
     private static Dictionary<string, string> ConvertPackageListToDictionary(IEnumerable<string>? packageList)
-    {
-        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (packageList == null)
-            return result;
-
-        foreach (var package in packageList)
-        {
-            if (string.IsNullOrWhiteSpace(package))
-                continue;
-
-            var parts = package.Split('|', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 2)
-            {
-                var name = parts[0].Trim();
-                var version = parts[1].Trim();
-                if (name.Length > 0)
-                    result[name] = version.Length > 0 ? version : "default";
-            }
-            else if (parts.Length == 1)
-            {
-                var name = parts[0].Trim();
-                if (name.Length > 0)
-                    result[name] = "default";
-            }
-        }
-
-        return result;
-    }
+        => CodeIterationHelpers.ConvertPackageListToDictionary(packageList);
 
     private static string BuildErrorForModel(Exception ex)
-    {
-        if (ex is null) return string.Empty;
-
-        var inner = ex.InnerException?.Message;
-        if (!string.IsNullOrWhiteSpace(inner))
-            return $"Exception Message:\n{ex.Message}\n\nInner Exception:\n{inner}";
-
-        return $"Exception Message:\n{ex.Message}";
-    }
+        => CodeIterationHelpers.BuildErrorForModel(ex);
 }

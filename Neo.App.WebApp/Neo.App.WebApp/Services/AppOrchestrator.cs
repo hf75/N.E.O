@@ -296,27 +296,13 @@ public sealed class AppOrchestrator
         return (parsed, raw, error, assistantEntry);
     }
 
+    // Retry-prompt builders live in Neo.AssemblyForge.Core.CodeIterationHelpers
+    // and are shared with Neo desktop's AssemblyForgeSession.
     private static string BuildCompileErrorFollowUp(string[] diagnostics)
-    {
-        var joined = string.Join("\n", diagnostics.Take(10));
-        return
-            "The code you just produced failed to compile with the following Roslyn errors:\n\n" +
-            joined +
-            "\n\nFix the errors and return the FULL updated C# source in the `code` field of the JSON, " +
-            "preserving every element, event handler, and behavior that wasn't at fault. " +
-            "Do not apologise, do not explain — just the corrected JSON object.";
-    }
+        => CodeIterationHelpers.BuildCompileErrorFollowUp(diagnostics);
 
     private static string BuildLoadErrorFollowUp(Exception ex)
-    {
-        return
-            "The code compiled but failed to load at runtime:\n\n" +
-            $"{ex.GetType().Name}: {ex.Message}\n\n" +
-            "This usually means a referenced type can't be resolved in the WASM sandbox (missing NuGet, " +
-            "forbidden API, or an Avalonia API that doesn't exist). Fix the cause and return the FULL " +
-            "updated C# source in the `code` field of the JSON. If the fix requires an extra NuGet package, " +
-            "include it in the `nuget` field.";
-    }
+        => CodeIterationHelpers.BuildLoadErrorFollowUp(ex);
 
     public NeoSession ToSession(string name)
     {
