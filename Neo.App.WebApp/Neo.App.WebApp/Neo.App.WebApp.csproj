@@ -22,4 +22,13 @@
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
   </ItemGroup>
+
+  <!-- Share the AssemblyForge's platform-agnostic patch utilities by source-linking
+       (same pattern Neo.App.Avalonia uses to pull files from Neo.App). A ProjectReference
+       isn't viable here because Neo.AssemblyForge transitively pulls NuGet.Protocol
+       into the dependency graph, and that package is not WASM-compatible. -->
+  <ItemGroup>
+    <Compile Include="..\..\Neo.AssemblyForge\Utils\UnifiedDiffPatcher.cs" Link="Shared\UnifiedDiffPatcher.cs" />
+    <Compile Include="..\..\Neo.AssemblyForge\Utils\UnifiedDiffGenerator.cs" Link="Shared\UnifiedDiffGenerator.cs" />
+  </ItemGroup>
 </Project>

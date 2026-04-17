@@ -9,6 +9,7 @@ using Neo.App.WebApp.Services.Ai;
 using Neo.App.WebApp.Services.Compilation;
 using Neo.App.WebApp.Services.Sessions;
 using Microsoft.CodeAnalysis;
+using Neo.AssemblyForge;
 
 namespace Neo.App.WebApp.Services;
 
@@ -105,13 +106,61 @@ public sealed class AppOrchestrator
 
             var chatText = parsed?.Chat
                            ?? parsed?.Explanation
-                           ?? (parsed?.Code is null ? rawReply : "(code updated)");
+                           ?? (parsed?.Code is null && string.IsNullOrWhiteSpace(parsed?.Patch) ? rawReply : "(code updated)");
             assistantEntry.DisplayText = chatText;
             AssistantComplete?.Invoke(chatText);
 
-            if (parsed is null || string.IsNullOrWhiteSpace(parsed.Code))
+            if (parsed is null)
             {
-                // No code → AI is chatting. Done.
+                Emit(OrchestratorStatus.Done, chatText);
+                return null;
+            }
+
+            // Resolve patch → code if the AI sent a diff instead of full code.
+            // Shared with desktop Neo via source-linked UnifiedDiffPatcher.
+            string? codeToCompile = parsed.Code;
+            if (!string.IsNullOrWhiteSpace(parsed.Patch))
+            {
+                var baseCode = LastCode ?? "";
+                var patchResult = UnifiedDiffPatcher.TryApply(
+                    originalText: baseCode,
+                    patchText: parsed.Patch,
+                    targetFilePath: "GeneratedApp.cs",
+                    expectedClassNameForFallback: null);
+                if (patchResult.Success && !string.IsNullOrWhiteSpace(patchResult.PatchedText))
+                {
+                    codeToCompile = patchResult.PatchedText;
+                    Emit(OrchestratorStatus.Compiling,
+                        $"Applied patch ({parsed.Patch!.Length} B) against previous code.");
+                }
+                else if (string.IsNullOrWhiteSpace(codeToCompile))
+                {
+                    // Patch broken and no full-code fallback — ask for a fresh one.
+                    if (attempt >= MaxCompileRetries)
+                    {
+                        Emit(OrchestratorStatus.Failed,
+                            $"Patch could not be applied: {patchResult.ErrorMessage}");
+                        return null;
+                    }
+                    promptForAttempt =
+                        $"Your previous PATCH could not be applied ({patchResult.ErrorMessage}). " +
+                        "Return a valid unified diff targeting 'GeneratedApp.cs' (must include at least one '@@' hunk), " +
+                        "OR — if that's not feasible — return the FULL updated C# source in the `code` field.";
+                    History.Add(new ChatEntry
+                    {
+                        Role = "user",
+                        Content = promptForAttempt,
+                        DisplayText = $"↻ Patch didn't apply ({patchResult.ErrorMessage}). Asking for a fresh one."
+                    });
+                    Emit(OrchestratorStatus.Streaming,
+                        $"Patch rejected — requesting fix (retry {attempt + 1}/{MaxCompileRetries})…");
+                    continue;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(codeToCompile))
+            {
+                // Neither code nor applicable patch → AI is chatting.
                 Emit(OrchestratorStatus.Done, chatText);
                 return null;
             }
@@ -140,7 +189,7 @@ public sealed class AppOrchestrator
             Emit(OrchestratorStatus.Compiling,
                 attempt == 0 ? "Compiling generated code…" : $"Compiling retry {attempt}/{MaxCompileRetries}…");
             var compile = await _compiler.CompileAsync(
-                parsed.Code,
+                codeToCompile,
                 $"Generated_{DateTime.UtcNow.Ticks}",
                 extraRefs);
 
@@ -169,7 +218,7 @@ public sealed class AppOrchestrator
             try
             {
                 control = _pluginHost.LoadFromBytes(compile.AssemblyBytes!, pdbBytes: null, depAssemblies);
-                LastCode = parsed.Code;
+                LastCode = codeToCompile;
                 LastNuGet = parsed.NuGet;
                 LastDepAssemblies = depAssemblies;
             }
