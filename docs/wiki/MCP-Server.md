@@ -498,3 +498,15 @@ User types in ChatOverlay
 ### Interaction with MCP Server
 
 Smart Edit and the MCP server can both modify the same app. Changes made via Ctrl+K are visible to the MCP server — `extract_code` and `inspect_visual_tree` always read the current live state. The MCP prompt instructs Claude to call `extract_code` before modifying existing code, so it picks up Smart Edit changes automatically.
+
+## Channel back-reporting
+
+The MCP server supports Claude Code Channels — the running preview app can push prompts back into the Claude Code session, so Claude reacts without user input. Runtime errors auto-report. Your generated code can call `Neo.Trigger(prompt)` to escalate user actions into AI-driven follow-up turns.
+
+Full details, examples, and caveats: [[Channels]].
+
+## Related pages
+
+- [[Architecture]] — where Neo.McpServer fits into the overall project map
+- [[Excel MCP]] — a second MCP server for live Excel access
+- [[Web App]] — browser-hosted Neo variant (complementary, not MCP-based)

@@ -173,39 +173,11 @@ Switch between frameworks in **Settings**:
 | Avalonia | Enable Avalonia | Cross-platform apps (Win/Linux/macOS) |
 | React | Enable REACT-UI | Web-based UIs, JavaScript ecosystem |
 
-## MCP Server (Claude Cowork / Claude Code)
+## Other surfaces
 
-N.E.O. includes an MCP server (`Neo.McpServer`) with 21 tools that lets Claude Cowork or Claude Code compile and display live Avalonia apps directly on your desktop — without running the full N.E.O. host application.
+The desktop host is one of three ways to use Neo. The same prompt → compile → run loop is also available:
 
-**Core workflow:**
-- Claude generates C# code and calls `compile_and_preview` — app appears in ~1 second
-- `update_preview` hot-reloads, `patch_preview` applies minimal diffs
-- `capture_screenshot` lets Claude see the app, `inspect_visual_tree` gives structural JSON
-- `set_property` changes colors/fonts/text live without recompile
-- `inject_data` / `read_data` push and pull data at runtime
-- `extract_code` reverse-engineers the current visual state back to clean C#
-- `run_test` checks UI assertions (pass/fail)
-- `export_app` exports as standalone executable (Windows/Linux/macOS)
+- **[[MCP Server]]** — Claude Code / Cowork drives Neo as an MCP server (25 tools). Covers compile-and-preview, hot-reload, unified-diff patches, screenshots, visual-tree inspection, live property edits, data injection, session save/load, skills registry, multi-window layouts, standalone-`.exe` export, and the Smart-Edit overlay (`Ctrl+K` inside the preview window).
+- **[[Web App]]** — Everything runs in a browser tab. Roslyn-in-WASM compiles the generated code; the backend proxies AI and NuGet. Good if you don't want to install Neo itself on the target machine.
 
-**Sessions and Skills:**
-- `save_session` / `load_session` persist apps as `.neo` files
-- `register_skill` / `unregister_skill` create a personal app ecosystem — Claude recognizes saved apps by keywords and loads them automatically in future conversations
-
-**Web Bridge:**
-- `start_web_bridge` serves an HTML page + WebSocket from the Avalonia process
-- Browser and desktop app communicate bidirectionally in real-time
-- No Node.js — pure .NET BCL
-
-**Smart Edit (Ctrl+K):**
-- The MCP preview window (`Neo.PluginWindowAvalonia.MCP`) includes an embedded Claude chat overlay
-- Press **Ctrl+K** → type a change → the app modifies itself in real-time
-- Uses embedded Roslyn for compilation and Claude API for code generation
-- No MCP server or Cowork needed — the app is its own AI client
-
-**Multi-Window:**
-- All tools accept optional `windowId` for creating multiple windows
-- `layout_windows` arranges them: side_by_side, top_bottom, left_half_right_stack, grid
-- Windows persist across prompts — build a data table in one prompt, add a chart in the next
-- Claude can target specific windows for inject_data, set_property, capture_screenshot, etc.
-
-No SDK required — only the .NET 9 runtime. See [[MCP Server]] for full setup and documentation.
+See also **[[Channels]]** — running apps that push prompts back into Claude (MCP-only, research preview).

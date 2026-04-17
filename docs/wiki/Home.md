@@ -1,66 +1,67 @@
 # N.E.O. — Native Executable Orchestrator
 
-**AI-powered desktop application builder** — describe what you want in natural language, and N.E.O. generates, compiles, and runs it in real time.
+**AI-powered tool builder** — describe what you want in natural language, and N.E.O. generates, compiles, and runs it in real time.
 
-N.E.O. runs on **Windows, Linux, and macOS** via its Avalonia-based host, or on Windows with its original WPF-based host.
+N.E.O. comes in three flavours that share the same core: a **desktop host** (WPF or Avalonia), an **MCP server** driven by Claude Code / Cowork, and a **web app** running inside your browser.
 
-## What is N.E.O.?
+## Pick your surface
 
-N.E.O. is a .NET desktop application that lets you create desktop apps through natural language prompts. It uses AI (Claude, ChatGPT, Gemini, or local models) to generate C# code, compiles it at runtime using Roslyn, and displays the result in a child process.
+| | Desktop host | MCP server | Web app |
+|---|---|---|---|
+| Who drives it | You, in the Neo window | Claude Code / Cowork | You, in a browser tab |
+| Install footprint | The full .NET SDK + repo | The repo (no Neo app running) | The repo (plus a local backend) |
+| Cross-platform | WPF → Windows · Avalonia → Win/Linux/macOS | Same | Everywhere a browser runs |
+| Exports | Standalone `.exe` | Same, via `export_app` tool | `.neo` file download |
+| Jump to docs | [[Getting Started]] | [[MCP Server]] | [[Web App]] |
 
-## Quick Links
+## Guides
 
-- [[Getting Started]] — Install, configure, run
+### Running Neo
+
+- [[Getting Started]] — Install and run the desktop host (WPF / Avalonia)
+- [[Web App]] — Browser-hosted variant; setup and features
+- [[MCP Server]] — Register Neo as an MCP server for Claude
+- [[Excel MCP]] — Second MCP server: live access to the active Excel workbook
+
+### Building with Neo
+
 - [[Features Overview]] — All features at a glance
-- [[MCP Server]] — Use N.E.O. with Claude Cowork / Claude Code
-- [[Excel MCP]] — Live Excel integration for Claude (read, write, format)
-- [[Designer Mode]] — Click-to-edit visual editing
-- [[Export and Import]] — Save and share your creations
-- [[Settings and Configuration]] — AI providers, frameworks, options
-- [[Keyboard Shortcuts]] — All shortcuts in one place
-- [[Troubleshooting]] — Common issues and solutions
+- [[Designer Mode]] — Click-to-edit UI
+- [[Export and Import]] — Save, share, and export as `.exe`
+- [[Channels]] — Generated apps that push prompts back into Claude
 
-## How It Works
+### Reference
+
+- [[Architecture]] — Project map and data-flow for contributors
+- [[Settings and Configuration]] — AI providers, frameworks, environment variables
+- [[Backend API]] — Endpoints served by Neo.Backend (used by the Web App)
+- [[Keyboard Shortcuts]] — All shortcuts in one place
+- [[Troubleshooting]] — Common issues and fixes
+
+## How it works
 
 ```
 You type a prompt
-    → AI generates C# code
+    → AI generates C# (code or patch)
         → Roslyn compiles it to a DLL
-            → DLL is streamed to a child process via named pipes
+            → DLL runs in a collectible AssemblyLoadContext
                 → Your app appears in real time
 ```
 
-Each iteration builds on the previous one. Ask for changes, and the AI sends a patch — no full rewrite needed.
+The context lives in the **same conversation**, so follow-up prompts see the
+previous code and produce incremental updates. The loading path differs per
+surface:
 
-### Three Ways to Use N.E.O.
+- **Desktop host** — DLL is streamed to a child process (`Neo.PluginWindow*`) over Named Pipes.
+- **MCP server** — Same as desktop, but the preview process is spawned on demand by `compile_and_preview`.
+- **Web app** — Roslyn runs in the browser WASM runtime; the DLL is loaded into a collectible ALC in the same page.
 
-1. **Standalone host app** — Type prompts directly in the N.E.O. desktop application (WPF or Avalonia host)
-2. **MCP Server** — Claude Cowork / Claude Code controls the entire pipeline via 21 MCP tools
-3. **Smart Edit (Ctrl+K)** — Press Ctrl+K in the preview window to modify the running app directly via an embedded Claude chat — no MCP server or Cowork needed
+## Supported AI providers
 
-## Two Host Applications
-
-| Host | Project | Platform | Solution |
-|------|---------|----------|----------|
-| **WPF host** | `Neo.App` | Windows | `neo.sln` |
-| **Avalonia host** | `Neo.App.Avalonia` | Windows, Linux, macOS | `neo-avalonia.sln` |
-
-Both hosts share the same core engine (`Neo.App.Core`), AI agents, compilation pipeline, and IPC layer. Choose the one that matches your platform.
-
-## Supported UI Frameworks
-
-| Framework | Platform | Use Case |
-|-----------|----------|----------|
-| **WPF** (default) | Windows | Native Windows desktop UIs |
-| **Avalonia** | Windows, Linux, macOS | Cross-platform desktop UIs |
-| **React** (WebView2) | Windows | Web-based UIs with full React ecosystem |
-
-## Supported AI Providers
-
-| Provider | Requires | Key Variable |
-|----------|----------|--------------|
+| Provider | Requires | Key variable |
+|---|---|---|
 | Anthropic Claude | API key | `ANTHROPIC_API_KEY` |
 | OpenAI | API key | `OPENAI_API_KEY` |
 | Google Gemini | API key | `GEMINI_API_KEY` |
-| Ollama | Local server | — |
-| LM Studio | Local server | — |
+| Ollama (local) | Local server | `OLLAMA_HOST` (e.g. `http://localhost:11434`) |
+| LM Studio (local) | Local server | `LMSTUDIO_HOST` (e.g. `http://localhost:1234`) |

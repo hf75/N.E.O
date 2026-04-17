@@ -1,72 +1,74 @@
 # Getting Started
 
+Install, configure a provider, run your first prompt. This page covers the
+**desktop host** path. If you want the browser variant, jump to [[Web App]];
+for the Claude-driven MCP workflow, see [[MCP Server]].
+
 ## Prerequisites
 
 - [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) or later
-- An API key for at least one AI provider, **or** a local model server (Ollama / LM Studio)
+- One AI provider configured, or a local model server (Ollama / LM Studio)
 
-**Platform requirements:**
-- **WPF host** (`Neo.App`): Windows 10/11
-- **Avalonia host** (`Neo.App.Avalonia`): Windows, Linux, or macOS
+**Platform requirements**
 
-> **Tip:** To use a different .NET version (e.g. .NET 10), change `NeoNetMajor` in `Directory.Build.props` at the solution root.
+- **WPF host** (`Neo.App`) — Windows 10/11
+- **Avalonia host** (`Neo.App.Avalonia`) — Windows, Linux, or macOS
 
-## 1. Clone and Build
+> To use a different .NET version (e.g. .NET 10), change `NeoNetMajor` in `Directory.Build.props` at the repo root.
 
-There are two solution files. Use the one that matches your platform:
+## 1. Clone and build
 
-### Windows (full solution, includes WPF host)
+Two solutions ship. Pick the one that matches your platform.
 
 ```bash
 git clone https://github.com/hf75/N.E.O.git
 cd N.E.O
+```
+
+**Windows** — full solution, includes the WPF host:
+
+```bash
 dotnet build neo.sln
 ```
 
-### Cross-platform (Avalonia host only)
+**Cross-platform** — Avalonia only:
 
 ```bash
-git clone https://github.com/hf75/N.E.O.git
-cd N.E.O
 dotnet build neo-avalonia.sln
 ```
 
-The solution is fully self-contained — all dependencies are included in the repository.
+Every agent implementation lives in the repo — no private packages.
 
-## 2. Configure an AI Provider
+## 2. Configure an AI provider
 
-N.E.O. reads API keys from **environment variables**. Set at least one:
+Neo reads API keys from environment variables.
 
-### Windows (PowerShell)
+**Windows (PowerShell)**
 
 ```powershell
-# Pick one or more
-[Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-...", "User")
-[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "sk-...", "User")
-[Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "AI...", "User")
+[Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-…", "User")
+[Environment]::SetEnvironmentVariable("OPENAI_API_KEY",    "sk-…",     "User")
+[Environment]::SetEnvironmentVariable("GEMINI_API_KEY",    "AI…",      "User")
 ```
 
-### Linux / macOS (Bash)
-
-Add to your `~/.bashrc`, `~/.zshrc`, or equivalent:
+**Linux / macOS** — add to `~/.bashrc`, `~/.zshrc`, or equivalent:
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-export OPENAI_API_KEY="sk-..."
-export GEMINI_API_KEY="AI..."
+export ANTHROPIC_API_KEY="sk-ant-…"
+export OPENAI_API_KEY="sk-…"
+export GEMINI_API_KEY="AI…"
 ```
 
-Then reload your shell (`source ~/.bashrc`) or open a new terminal.
+Then reload your shell or open a new terminal.
 
-Or use the **built-in setup wizard** — if no keys are detected on first launch, N.E.O. will open a setup window where you can enter your keys directly.
+If Neo can't see any keys on first launch, it opens a setup window where you
+can enter them directly — no manual env editing needed.
 
-### Using Local Models (No API Key Required)
-
-If you prefer to run models locally:
+### Local models (no API key)
 
 1. Install [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai)
 2. Start the server (default ports: Ollama `11434`, LM Studio `1234`)
-3. Launch N.E.O. — it will auto-detect the running server
+3. Launch Neo — it auto-detects the running server
 
 ## 3. Run
 
@@ -78,38 +80,41 @@ dotnet run --project Neo.App
 dotnet run --project Neo.App.Avalonia
 ```
 
-Or open the appropriate solution file (`neo.sln` or `neo-avalonia.sln`) in Visual Studio / Rider and press F5.
+Or open the solution in Visual Studio / Rider and press F5.
 
-## 4. Your First Prompt
+## 4. Your first prompt
 
-Type a prompt in the text box at the bottom and press **Enter**:
+Type a prompt in the input at the bottom and press **Enter**:
 
 ```
 Create a calculator with large colorful buttons and a display at the top
 ```
 
-N.E.O. will:
-1. Send your prompt to the AI
-2. Receive generated C# code
-3. Download any required NuGet packages
-4. Compile the code with Roslyn
-5. Display the result in the Live Preview (embedded panel in WPF, separate window in Avalonia)
+Neo will:
 
-The entire process takes a few seconds. On the first run, NuGet packages are downloaded which may take longer.
+1. Send the prompt to the AI
+2. Receive generated C# code
+3. Download any requested NuGet packages
+4. Compile with Roslyn
+5. Show the result in the Live Preview (embedded panel in WPF, separate docked window in Avalonia)
+
+The whole round-trip takes a few seconds. First-run NuGet downloads take longer — cached from then on.
 
 ## 5. Iterate
 
-Now refine your creation with follow-up prompts:
+Follow up in the chat:
 
 ```
 Make the buttons round and add a history panel on the right side
 ```
 
-The AI will send a **patch** (unified diff) instead of rewriting everything, preserving your existing code.
+The AI sends a unified-diff patch, not a full rewrite — your existing code is preserved.
 
-## Next Steps
+## Where next
 
-- [[Features Overview]] — Learn about all available features
-- [[Designer Mode]] — Click on UI elements to edit them visually
-- [[Export and Import]] — Save your creation as a standalone executable
+- [[Features Overview]] — Every feature the desktop host exposes
+- [[Designer Mode]] — Click a UI element to edit its properties
+- [[Export and Import]] — Save your generation as a standalone `.exe`
 - [[Keyboard Shortcuts]] — Speed up your workflow
+- Want the same flow without installing Neo? → [[Web App]]
+- Want Claude Code / Cowork to drive the whole thing? → [[MCP Server]]
