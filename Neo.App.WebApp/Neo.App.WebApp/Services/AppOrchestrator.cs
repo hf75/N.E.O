@@ -36,6 +36,15 @@ public sealed class AppOrchestrator
     public string CurrentProviderId { get; set; } = "claude";
     public string? CurrentModel { get; set; }
     public ObservableCollection<ChatEntry> History { get; } = new();
+
+    /// <summary>
+    /// Number of additional retries after a compile or load failure — each
+    /// retry feeds the error back to the AI and asks for a fix. Zero disables
+    /// retrying entirely. Matches the Neo desktop default of up to 5 total
+    /// attempts.
+    /// </summary>
+    public int MaxCompileRetries { get; set; } = 4;
+
     public string? LastCode { get; private set; }
     public NuGetRef[]? LastNuGet { get; private set; }
     public System.Collections.Generic.IReadOnlyDictionary<string, byte[]>? LastDepAssemblies { get; private set; }
@@ -66,21 +75,145 @@ public sealed class AppOrchestrator
 
     public async Task<Control?> ExecutePromptAsync(string userPrompt, CancellationToken ct = default)
     {
-        // Snapshot the history BEFORE appending the new user turn, so the AI
-        // sees the conversation up to and including its own last reply but
-        // doesn't get the current prompt twice.
-        var historyForAi = History
-            .Select(h => new ChatTurn(h.Role, h.Content))
-            .ToList();
+        var started = Environment.TickCount64;
 
+        // Snapshot history BEFORE appending the new user turn (AI mustn't see
+        // the current prompt twice) and add the user turn to the live history.
+        var historyForAi = History.Select(h => new ChatTurn(h.Role, h.Content)).ToList();
         History.Add(new ChatEntry { Role = "user", Content = userPrompt, DisplayText = userPrompt });
-        // Placeholder assistant entry that fills as tokens arrive — gives the
-        // chat UI something to show live while the model is still streaming.
+
+        // Each attempt appends (a) its own assistant-turn to History and (b)
+        // the turn snapshot to historyForAi for the next call. Retries feed
+        // the compile error as a new user-turn between assistant turns.
+        string promptForAttempt = userPrompt;
+        for (int attempt = 0; attempt <= MaxCompileRetries; attempt++)
+        {
+            var (parsed, rawReply, streamError, assistantEntry) =
+                await StreamSingleTurnAsync(promptForAttempt, historyForAi, ct);
+
+            if (streamError is not null)
+            {
+                assistantEntry.DisplayText = "⚠ " + streamError;
+                Emit(OrchestratorStatus.Failed, "AI error: " + streamError);
+                AssistantComplete?.Invoke("⚠ " + streamError);
+                return null;
+            }
+
+            // Record what the AI said for the NEXT retry iteration.
+            historyForAi.Add(new ChatTurn("user", promptForAttempt));
+            historyForAi.Add(new ChatTurn("assistant", rawReply));
+
+            var chatText = parsed?.Chat
+                           ?? parsed?.Explanation
+                           ?? (parsed?.Code is null ? rawReply : "(code updated)");
+            assistantEntry.DisplayText = chatText;
+            AssistantComplete?.Invoke(chatText);
+
+            if (parsed is null || string.IsNullOrWhiteSpace(parsed.Code))
+            {
+                // No code → AI is chatting. Done.
+                Emit(OrchestratorStatus.Done, chatText);
+                return null;
+            }
+
+            // Resolve any NuGet packages the AI requested.
+            System.Collections.Generic.IReadOnlyList<Microsoft.CodeAnalysis.MetadataReference>? extraRefs = null;
+            System.Collections.Generic.IReadOnlyDictionary<string, byte[]>? depAssemblies = null;
+            if (parsed.NuGet is { Length: > 0 } && _nuget is not null)
+            {
+                var pkgList = string.Join(", ", parsed.NuGet.Select(p => p.Id));
+                Emit(OrchestratorStatus.Compiling,
+                    $"Resolving NuGet: {pkgList} (first time may take 10-30s while the backend downloads from nuget.org)…");
+                var nugetSw = System.Diagnostics.Stopwatch.StartNew();
+                var resolved = await _nuget.ResolveAsync(parsed.NuGet);
+                nugetSw.Stop();
+                extraRefs = resolved.References;
+                depAssemblies = resolved.AssemblyBytes;
+                if (resolved.Errors.Count > 0)
+                    Emit(OrchestratorStatus.Compiling,
+                        $"NuGet warnings ({nugetSw.ElapsedMilliseconds} ms): " + string.Join("; ", resolved.Errors));
+                else
+                    Emit(OrchestratorStatus.Compiling,
+                        $"NuGet resolved ({resolved.AssemblyBytes.Count} DLL{(resolved.AssemblyBytes.Count == 1 ? "" : "s")} in {nugetSw.ElapsedMilliseconds} ms).");
+            }
+
+            Emit(OrchestratorStatus.Compiling,
+                attempt == 0 ? "Compiling generated code…" : $"Compiling retry {attempt}/{MaxCompileRetries}…");
+            var compile = await _compiler.CompileAsync(
+                parsed.Code,
+                $"Generated_{DateTime.UtcNow.Ticks}",
+                extraRefs);
+
+            if (!compile.Success)
+            {
+                if (attempt >= MaxCompileRetries)
+                {
+                    Emit(OrchestratorStatus.Failed,
+                        $"Compile failed after {attempt + 1} attempts:\n  "
+                        + string.Join("\n  ", compile.Diagnostics));
+                    return null;
+                }
+                // Build a follow-up prompt containing the errors and a
+                // request to fix them. Next iteration sends this as the user
+                // turn with the prior assistant code in history.
+                promptForAttempt = BuildCompileErrorFollowUp(compile.Diagnostics);
+                History.Add(new ChatEntry { Role = "user", Content = promptForAttempt, DisplayText = $"↻ Compile failed ({compile.Diagnostics.Length} error{(compile.Diagnostics.Length == 1 ? "" : "s")}). Asking the AI to fix." });
+                Emit(OrchestratorStatus.Streaming, $"Compile failed — requesting fix (retry {attempt + 1}/{MaxCompileRetries})…");
+                continue;
+            }
+
+            // Compile OK — try to load.
+            Emit(OrchestratorStatus.Loading,
+                $"Loading {compile.AssemblySize} B + {depAssemblies?.Count ?? 0} dep(s) into plugin host…");
+            Control? control;
+            try
+            {
+                control = _pluginHost.LoadFromBytes(compile.AssemblyBytes!, pdbBytes: null, depAssemblies);
+                LastCode = parsed.Code;
+                LastNuGet = parsed.NuGet;
+                LastDepAssemblies = depAssemblies;
+            }
+            catch (Exception ex)
+            {
+                var full = ex;
+                while (full.InnerException is not null) full = full.InnerException;
+                System.Diagnostics.Debug.WriteLine("[Neo.WebApp] Load failed:");
+                System.Diagnostics.Debug.WriteLine(ex.ToString());
+
+                if (attempt >= MaxCompileRetries)
+                {
+                    Emit(OrchestratorStatus.Failed,
+                        "Load failed: " + full.GetType().Name + ": " + full.Message);
+                    return null;
+                }
+                // Ask the AI to fix runtime-load problems too (often a
+                // missing dependency or a bad base-class reference).
+                promptForAttempt = BuildLoadErrorFollowUp(full);
+                History.Add(new ChatEntry { Role = "user", Content = promptForAttempt, DisplayText = $"↻ Load failed ({full.GetType().Name}). Asking the AI to fix." });
+                Emit(OrchestratorStatus.Streaming, $"Load failed — requesting fix (retry {attempt + 1}/{MaxCompileRetries})…");
+                continue;
+            }
+
+            var elapsed = Environment.TickCount64 - started;
+            var msg = attempt == 0
+                ? $"Done in {elapsed} ms. Compile: {compile.CompileTimeMs} ms, DLL: {compile.AssemblySize} B."
+                : $"Done in {elapsed} ms after {attempt} retr{(attempt == 1 ? "y" : "ies")}. Compile: {compile.CompileTimeMs} ms, DLL: {compile.AssemblySize} B.";
+            Emit(OrchestratorStatus.Done, msg, elapsed);
+            return control;
+        }
+
+        // Unreachable: either we returned from inside the loop or the retry
+        // limit branch returned null after failing.
+        return null;
+    }
+
+    private async Task<(StructuredResponse? parsed, string raw, string? error, ChatEntry assistantEntry)>
+        StreamSingleTurnAsync(string userPrompt, System.Collections.Generic.IReadOnlyList<ChatTurn> history, CancellationToken ct)
+    {
         var assistantEntry = new ChatEntry { Role = "assistant", Content = "", DisplayText = "…" };
         History.Add(assistantEntry);
         Emit(OrchestratorStatus.Streaming, "AI streaming…");
 
-        var started = Environment.TickCount64;
         var sb = new StringBuilder();
         string? error = null;
 
@@ -88,16 +221,13 @@ public sealed class AppOrchestrator
             CurrentProviderId, userPrompt,
             model: CurrentModel,
             systemPrompt: SystemPrompts.AvaloniaBrowser,
-            history: historyForAi,
+            history: history,
             ct: ct))
         {
             switch (chunk.Kind)
             {
                 case "text":
                     sb.Append(chunk.Data);
-                    // Keep the UI fed: show recent characters only, because the
-                    // raw JSON would otherwise dump the full generated source
-                    // into the chat bubble during streaming.
                     assistantEntry.DisplayText = "streaming… " + (sb.Length > 200
                         ? sb.ToString(sb.Length - 200, 200)
                         : sb.ToString());
@@ -110,92 +240,31 @@ public sealed class AppOrchestrator
         }
 
         var raw = sb.ToString();
-        // Keep the raw JSON in Content so the next turn feeds it back to the
-        // model; overwrite DisplayText below with the human-readable summary.
         assistantEntry.Content = raw;
+        var parsed = error is null ? StructuredResponseParser.Parse(raw) : null;
+        return (parsed, raw, error, assistantEntry);
+    }
 
-        if (error is not null)
-        {
-            assistantEntry.DisplayText = "⚠ " + error;
-            Emit(OrchestratorStatus.Failed, "AI error: " + error);
-            AssistantComplete?.Invoke("⚠ " + error);
-            return null;
-        }
+    private static string BuildCompileErrorFollowUp(string[] diagnostics)
+    {
+        var joined = string.Join("\n", diagnostics.Take(10));
+        return
+            "The code you just produced failed to compile with the following Roslyn errors:\n\n" +
+            joined +
+            "\n\nFix the errors and return the FULL updated C# source in the `code` field of the JSON, " +
+            "preserving every element, event handler, and behavior that wasn't at fault. " +
+            "Do not apologise, do not explain — just the corrected JSON object.";
+    }
 
-        var parsed = StructuredResponseParser.Parse(raw);
-        var chatText = parsed?.Chat
-                       ?? parsed?.Explanation
-                       ?? (parsed?.Code is null ? raw : "(code updated)");
-        assistantEntry.DisplayText = chatText;
-        AssistantComplete?.Invoke(chatText);
-
-        if (parsed is null || string.IsNullOrWhiteSpace(parsed.Code))
-        {
-            Emit(OrchestratorStatus.Done, chatText);
-            return null;
-        }
-
-        // Resolve any NuGet packages the AI requested.
-        System.Collections.Generic.IReadOnlyList<Microsoft.CodeAnalysis.MetadataReference>? extraRefs = null;
-        System.Collections.Generic.IReadOnlyDictionary<string, byte[]>? depAssemblies = null;
-        if (parsed.NuGet is { Length: > 0 } && _nuget is not null)
-        {
-            var pkgList = string.Join(", ", parsed.NuGet.Select(p => p.Id));
-            Emit(OrchestratorStatus.Compiling,
-                $"Resolving NuGet: {pkgList} (first time may take 10-30s while the backend downloads from nuget.org)…");
-            var nugetSw = System.Diagnostics.Stopwatch.StartNew();
-            var resolved = await _nuget.ResolveAsync(parsed.NuGet);
-            nugetSw.Stop();
-            extraRefs = resolved.References;
-            depAssemblies = resolved.AssemblyBytes;
-            if (resolved.Errors.Count > 0)
-                Emit(OrchestratorStatus.Compiling,
-                    $"NuGet warnings ({nugetSw.ElapsedMilliseconds} ms): " + string.Join("; ", resolved.Errors));
-            else
-                Emit(OrchestratorStatus.Compiling,
-                    $"NuGet resolved ({resolved.AssemblyBytes.Count} DLL{(resolved.AssemblyBytes.Count == 1 ? "" : "s")} in {nugetSw.ElapsedMilliseconds} ms).");
-        }
-
-        Emit(OrchestratorStatus.Compiling, "Compiling generated code…");
-        var compile = await _compiler.CompileAsync(
-            parsed.Code,
-            $"Generated_{DateTime.UtcNow.Ticks}",
-            extraRefs);
-        if (!compile.Success)
-        {
-            Emit(OrchestratorStatus.Failed,
-                "Compile failed:\n  " + string.Join("\n  ", compile.Diagnostics));
-            return null;
-        }
-
-        Emit(OrchestratorStatus.Loading,
-            $"Loading {compile.AssemblySize} B + {depAssemblies?.Count ?? 0} dep(s) into plugin host…");
-        Control? control;
-        try
-        {
-            control = _pluginHost.LoadFromBytes(compile.AssemblyBytes!, pdbBytes: null, depAssemblies);
-            LastCode = parsed.Code;
-            LastNuGet = parsed.NuGet;
-            LastDepAssemblies = depAssemblies;
-        }
-        catch (Exception ex)
-        {
-            // Drill into inner exceptions so the UI shows the root cause
-            // instead of the generic TargetInvocationException wrapper.
-            var full = ex;
-            while (full.InnerException is not null) full = full.InnerException;
-            // Dump the whole chain to console for DevTools debugging.
-            System.Diagnostics.Debug.WriteLine("[Neo.WebApp] Load failed:");
-            System.Diagnostics.Debug.WriteLine(ex.ToString());
-            Emit(OrchestratorStatus.Failed, "Load failed: " + full.GetType().Name + ": " + full.Message);
-            return null;
-        }
-
-        var elapsed = Environment.TickCount64 - started;
-        Emit(OrchestratorStatus.Done,
-            $"Done in {elapsed} ms. Compile: {compile.CompileTimeMs} ms, DLL: {compile.AssemblySize} B.",
-            elapsed);
-        return control;
+    private static string BuildLoadErrorFollowUp(Exception ex)
+    {
+        return
+            "The code compiled but failed to load at runtime:\n\n" +
+            $"{ex.GetType().Name}: {ex.Message}\n\n" +
+            "This usually means a referenced type can't be resolved in the WASM sandbox (missing NuGet, " +
+            "forbidden API, or an Avalonia API that doesn't exist). Fix the cause and return the FULL " +
+            "updated C# source in the `code` field of the JSON. If the fix requires an extra NuGet package, " +
+            "include it in the `nuget` field.";
     }
 
     public NeoSession ToSession(string name)
