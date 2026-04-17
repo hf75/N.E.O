@@ -7,10 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NuGet.Common" Version="7.0.0" />
-    <PackageReference Include="NuGet.Packaging" Version="7.0.0" />
-    <PackageReference Include="NuGet.Protocol" Version="7.0.0" />
-    <PackageReference Include="NuGet.Resolver" Version="7.0.0" />
+    <PackageReference Include="NuGet.Common" Version="7.3.1" />
+    <PackageReference Include="NuGet.Packaging" Version="7.3.1" />
+    <PackageReference Include="NuGet.Protocol" Version="7.3.1" />
+    <PackageReference Include="NuGet.Resolver" Version="7.3.1" />
   </ItemGroup>
 
   <ItemGroup>
