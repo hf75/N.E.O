@@ -1,0 +1,20 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="Neo.App.WebApp.Views.LoadSessionDialog"
+        Width="480" Height="420"
+        CanResize="True"
+        Title="Load session">
+  <Grid RowDefinitions="Auto,*,Auto" Margin="12">
+    <TextBlock Grid.Row="0" Text="Saved sessions" FontWeight="SemiBold" Margin="0,0,0,8"/>
+    <ListBox Name="SessionList" Grid.Row="1"/>
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+      <Button Name="DeleteBtn" Content="Delete"/>
+      <Button Name="CancelBtn" Content="Cancel"/>
+      <Button Name="LoadBtn"   Content="Load"  IsDefault="True"
+              Background="#4f46e5" Foreground="White"/>
+    </StackPanel>
+  </Grid>
+</Window>

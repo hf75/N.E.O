@@ -1,0 +1,122 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:sessions="using:Neo.App.WebApp.Services.Sessions"
+             mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="800"
+             x:Class="Neo.App.WebApp.Views.MainView">
+  <Grid RowDefinitions="Auto,*,Auto">
+
+    <!-- Header -->
+    <Border Grid.Row="0" Background="#1f2937" Padding="12,8">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+        <TextBlock Grid.Column="0" Text="Neo.WebApp" Foreground="White"
+                   FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="1" Text=" — AI-powered tool builder in your browser"
+                   Foreground="#94a3b8" VerticalAlignment="Center" Margin="8,0,0,0"/>
+
+        <ComboBox Name="ProviderCombo" Grid.Column="2" MinWidth="180" Margin="4,0"/>
+        <Button Name="NewBtn" Grid.Column="3" Content="New" Margin="4,0"/>
+        <Button Name="LoadBtn" Grid.Column="4" Content="Load…" Margin="4,0"/>
+        <Button Name="SaveBtn" Grid.Column="5" Content="Save .neo" Margin="4,0"/>
+      </Grid>
+    </Border>
+
+    <!-- Body: left = chat + prompt, right = preview / code tabs -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,6,2*">
+
+      <!-- LEFT column -->
+      <Grid Grid.Column="0" RowDefinitions="*,Auto,Auto">
+        <Border Grid.Row="0" Background="#f9fafb" Padding="8">
+          <ScrollViewer Name="ChatScroll">
+            <ItemsControl Name="ChatList">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="sessions:ChatEntry">
+                  <Border Margin="0,0,0,6" Padding="8" CornerRadius="6" Background="White">
+                    <StackPanel>
+                      <TextBlock Text="{Binding Role}" FontWeight="SemiBold" Foreground="#475569" FontSize="11"/>
+                      <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" FontSize="13" Margin="0,4,0,0"/>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Border>
+
+        <Border Grid.Row="1" Background="#eef2ff" Padding="8">
+          <TextBlock Name="StatusBox" FontFamily="Consolas" FontSize="11"
+                     Text="Ready. Describe what you want to build." TextWrapping="Wrap"/>
+        </Border>
+
+        <Grid Grid.Row="2" RowDefinitions="Auto,Auto" Margin="8">
+          <TextBox Name="PromptBox"
+                   AcceptsReturn="True" TextWrapping="Wrap"
+                   Height="90"
+                   Watermark="Describe the app you want, e.g. 'A pomodoro timer with start/stop'"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+          <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+            <TextBlock Grid.Column="0" Foreground="#64748b" FontSize="11"
+                       Text="Ctrl+Enter to submit" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Name="SubmitBtn" Content="Generate &amp; Run"
+                    Background="#4f46e5" Foreground="White" Padding="16,6"/>
+          </Grid>
+        </Grid>
+      </Grid>
+
+      <GridSplitter Grid.Column="1" Background="#e5e7eb"/>
+
+      <!-- RIGHT column -->
+      <TabControl Grid.Column="2" Name="RightTabs">
+        <TabItem Header="Preview">
+          <Border Background="#f3f4f6" Padding="8">
+            <Grid RowDefinitions="Auto,*">
+              <TextBlock Grid.Row="0" Margin="0,0,0,8" Foreground="#64748b"
+                         Text="The generated plugin is hosted live below. Click/type into it directly."/>
+              <Border Grid.Row="1" Background="White" BorderBrush="#cbd5e1" BorderThickness="1"
+                      CornerRadius="4" Padding="4">
+                <ContentControl Name="MountSlot"/>
+              </Border>
+            </Grid>
+          </Border>
+        </TabItem>
+        <TabItem Header="Code">
+          <Grid RowDefinitions="*,Auto">
+            <TextBox Grid.Row="0" Name="CodeBox"
+                     AcceptsReturn="True" TextWrapping="NoWrap"
+                     FontFamily="Consolas, Menlo, monospace" FontSize="12"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     IsReadOnly="False"/>
+            <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="8">
+              <TextBlock Grid.Column="0" Foreground="#64748b" FontSize="11"
+                         Text="Edit the generated code and click 'Recompile' to apply."
+                         VerticalAlignment="Center"/>
+              <Button Grid.Column="1" Name="ApplyMonacoBtn" Content="Recompile"/>
+            </Grid>
+          </Grid>
+        </TabItem>
+        <TabItem Header="Monaco">
+          <Grid RowDefinitions="Auto,*,Auto">
+            <TextBlock Grid.Row="0" Padding="8" Foreground="#64748b" TextWrapping="Wrap"
+                       Text="Monaco loads as an HTML overlay on top of the Avalonia canvas. Click 'Recompile (Monaco)' to apply edits back to the running app."/>
+            <!-- The Monaco overlay is positioned via JS; this Border only
+                 exists so we can track its bounds and push them into JS. -->
+            <Border Grid.Row="1" Name="MonacoHost" Background="#1e1e1e" MinHeight="300"/>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                        Margin="8" Spacing="8">
+              <Button Name="MonacoSyncBtn" Content="Sync from Code tab"/>
+              <Button Name="MonacoApplyBtn" Content="Recompile (Monaco)"/>
+            </StackPanel>
+          </Grid>
+        </TabItem>
+      </TabControl>
+    </Grid>
+
+    <!-- Footer -->
+    <Border Grid.Row="2" Background="#f3f4f6" Padding="8">
+      <TextBlock Name="Footer" FontSize="11" Foreground="#475569"
+                 Text="Neo.WebApp — open source · local-only · BYO keys"/>
+    </Border>
+  </Grid>
+</UserControl>

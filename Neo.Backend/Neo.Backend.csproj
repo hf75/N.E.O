@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InternalsVisibleTo>Neo.Backend.Tests</InternalsVisibleTo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neo.Backend.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reuse the exact NuGet resolver Neo.App.Core and Neo.McpServer use,
+         instead of hand-rolling a parallel one. Brings in NuGet.* 7.0.0
+         transitively via Neo.Agents.NugetLoader. -->
+    <ProjectReference Include="..\Neo.AssemblyForge\Neo.AssemblyForge.csproj" />
+  </ItemGroup>
+
+  <!-- Copy the published Neo.App.WebApp.Browser bundle into wwwroot so the
+       backend serves it at '/'. Runs AFTER the Browser head's Publish target.
+       We clear the destination's _framework first so stale fingerprinted DLLs
+       from a previous publish can't linger and get served alongside the fresh
+       ones (which would confuse the browser's SRI integrity check). -->
+  <Target Name="CopyWebAppToWwwRoot" AfterTargets="Build"
+          Condition="Exists('..\Neo.App.WebApp\Neo.App.WebApp.Browser\bin\$(Configuration)\net9.0-browser\publish\wwwroot')">
+    <RemoveDir Directories="$(TargetDir)wwwroot\_framework"
+               Condition="Exists('$(TargetDir)wwwroot\_framework')"/>
+    <ItemGroup>
+      <_WebAppFiles Include="..\Neo.App.WebApp\Neo.App.WebApp.Browser\bin\$(Configuration)\net9.0-browser\publish\wwwroot\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WebAppFiles)"
+          DestinationFiles="@(_WebAppFiles->'$(TargetDir)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

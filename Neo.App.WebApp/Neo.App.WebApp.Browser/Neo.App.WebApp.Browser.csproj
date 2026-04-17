@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net9.0-browser</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <!-- Ship raw PE assemblies so Roslyn can parse them at runtime.
+         WebCIL is a browser-friendly wrapper that isn't a valid PE image. -->
+    <WasmEnableWebcil>false</WasmEnableWebcil>
+    <!-- System.Text.Json falls back to reflection for types without a
+         source-gen context. In WASM trimmed builds that's off by default;
+         turn it on so the MVP's Deserialize<T> calls work. Future:
+         introduce a JsonSerializerContext and drop this. -->
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+    <!-- Without this, the linker trims property setters/constructors of
+         DTO classes even when reflection is enabled — System.Text.Json
+         then throws DeserializeNoConstructor at runtime. Keep trimming
+         off for MVP; switch to source-generated JSON later to recover size. -->
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Neo.App.WebApp\Neo.App.WebApp.csproj" />
+  </ItemGroup>
+</Project>
