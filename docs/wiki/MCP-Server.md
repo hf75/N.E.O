@@ -6,6 +6,8 @@ N.E.O. includes an MCP (Model Context Protocol) server that lets **Claude Cowork
 
 You type a prompt in Claude Cowork — *"Build me a calculator with dark theme"* — and a real, native desktop window appears on your desktop. Changes are hot-reloaded in place.
 
+With **[channel back-reporting](#channel-back-reporting-bidirectional-claude--app)** (Claude Code only, research preview) the generated app can also push events back to Claude — button clicks, timers, runtime errors — so Claude reacts without waiting for a user prompt. Jump to that section for details, or keep reading for the one-way basics.
+
 Supports two UI frameworks:
 - **Avalonia** (default) — cross-platform (Windows, Linux, macOS)
 - **WPF** — Windows-only, for apps that need WPF-specific features
@@ -499,11 +501,55 @@ User types in ChatOverlay
 
 Smart Edit and the MCP server can both modify the same app. Changes made via Ctrl+K are visible to the MCP server — `extract_code` and `inspect_visual_tree` always read the current live state. The MCP prompt instructs Claude to call `extract_code` before modifying existing code, so it picks up Smart Edit changes automatically.
 
-## Channel back-reporting
+## Channel back-reporting (bidirectional Claude ↔ app)
 
-The MCP server supports Claude Code Channels — the running preview app can push prompts back into the Claude Code session, so Claude reacts without user input. Runtime errors auto-report. Your generated code can call `Neo.Trigger(prompt)` to escalate user actions into AI-driven follow-up turns.
+> **Research preview.** Claude Code CLI only (v2.1.80+), started with the development flag below.
 
-Full details, examples, and caveats: [[Channels]].
+Everything above describes a **one-way** flow: Claude pushes, the app displays. Channel back-reporting adds the reverse direction — the running preview app can push events **back** into the same Claude Code session, and Claude automatically starts a new turn in response. No user prompt needed in between.
+
+This turns Neo into something qualitatively different from a normal previewer. Generated apps can carry almost no business logic of their own: Claude generates UI plus trigger calls, and then becomes the runtime that handles every interaction at request time.
+
+### Two event types
+
+- **`runtime_error`** (always on). Unhandled exceptions in the generated app auto-push to Claude — he typically reads the stack trace and fixes the bug via `patch_preview`.
+- **`user_trigger`** (opt-in, via `Neo.Trigger(prompt)` in the generated code). The payload is a complete natural-language instruction; Claude executes it as if the user had typed it.
+
+### Example
+
+You say:
+
+> *"Build an app with a combobox of vacation destinations and a 'Research' button. When I click the button, research the selected country and write the result into a TextBlock named `resultText`."*
+
+Claude generates the UI **and** the trigger call:
+
+```csharp
+using Neo.App;
+
+private void OnResearchClick(object sender, RoutedEventArgs e)
+{
+    var country = CountryCombo.SelectedItem?.ToString() ?? "(unknown)";
+    Neo.Trigger(
+        $"Research vacation destination {country}: best time to visit, " +
+        $"top 3 sights, typical prices. Write the result with set_property " +
+        $"into the TextBlock named 'resultText'.");
+}
+```
+
+You click the button. `Neo.Trigger(...)` sends the prompt over the channel. Claude starts a new turn, does the research, calls `set_property` on `resultText`. The answer appears in the same window — no user input between the click and the result.
+
+### How to run it
+
+Channels aren't on Claude Code's approved allowlist yet. Start Claude Code with the development flag:
+
+```bash
+claude --dangerously-load-development-channels server:neo-preview
+```
+
+The `server:neo-preview` part matches the server's name in your `.claude/settings.json`. Then just describe an app **and** the event behaviour you want ("when I click X, do Y", "after 10 seconds, do Z") — Claude will include `Neo.Trigger(...)` calls automatically.
+
+### Full details
+
+Timer-based triggers, cost and latency considerations, prompt-injection risks, and why this pattern works only in the MCP variant (not desktop host or Web App): [[Channels]].
 
 ## Related pages
 
