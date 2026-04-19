@@ -16,7 +16,7 @@ on:
   workflow_dispatch: # allow manual re-sync from the Actions tab
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   sync:
