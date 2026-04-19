@@ -28,5 +28,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
     <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
+    <ProjectReference Include="..\Neo.App.Api\Neo.App.Api.csproj" />
   </ItemGroup>
 </Project>
