@@ -1,0 +1,58 @@
+name: Sync docs/wiki to GitHub Wiki
+
+# Mirrors docs/wiki/ (source of truth) to the GitHub Wiki repo.
+# Trigger: any push on main that touches docs/wiki/, or manual dispatch.
+# Result: everyone sees the same content whether they open /wiki/Foo or /tree/main/docs/wiki/Foo.md
+#
+# Note: the GitHub Wiki must be enabled in repo settings for this to work.
+#       If it ever gets disabled, this workflow will fail loudly — that is intended.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/wiki/**'
+      - '.github/workflows/sync-wiki.yml'
+  workflow_dispatch: # allow manual re-sync from the Actions tab
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main repo (for docs/wiki/)
+        uses: actions/checkout@v4
+        with:
+          path: main-repo
+
+      - name: Check out wiki repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki-repo
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mirror docs/wiki/ -> wiki repo
+        run: |
+          # Wipe old wiki pages but keep .git so we push a single commit on top
+          find wiki-repo -maxdepth 1 -name '*.md' -delete
+
+          # Copy current source of truth
+          cp main-repo/docs/wiki/*.md wiki-repo/
+
+      - name: Commit & push if changed
+        working-directory: wiki-repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes — wiki is already in sync."
+            exit 0
+          fi
+
+          git add -A
+          git commit -m "Sync wiki from docs/wiki/ @ ${{ github.sha }}"
+          git push

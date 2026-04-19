@@ -1,5 +1,7 @@
 # N.E.O. — Native Executable Orchestrator
 
+> **Editing note.** These pages are the single source of truth under [`docs/wiki/`](https://github.com/hf75/N.E.O/tree/main/docs/wiki) in the main repo. The GitHub Wiki you may be reading right now is an automatic mirror — edits made here (via the Wiki UI) will be overwritten on the next push. Open a PR on the main repo instead.
+
 **AI-powered tool builder** — describe what you want in natural language, and N.E.O. generates, compiles, and runs it in real time.
 
 N.E.O. comes in three flavours that share the same core: a **desktop host** (WPF or Avalonia), an **MCP server** driven by Claude Code / Cowork, and a **web app** running inside your browser.
