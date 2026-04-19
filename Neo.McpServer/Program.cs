@@ -63,21 +63,35 @@ builder.Services
             "   Use neo-preview tools (set_property, inject_data, read_data, patch_preview, etc.) to act on it,\n" +
             "   or call other MCP tools (web search, file ops, etc.) if the instruction requires it.\n\n" +
 
+            "=== Neo.App.Api — COMPLETE API REFERENCE ===\n" +
+            "The Neo.App.Api assembly is auto-referenced by every generated app. Do NOT search the codebase\n" +
+            "or grep for this API — the signatures below are complete and authoritative.\n\n" +
+
+            "Namespace: Neo.App\n" +
+            "Static class: Neo\n" +
+            "Methods:\n" +
+            "  static void Neo.Trigger(string prompt)\n" +
+            "      Push a complete natural-language instruction to Claude. Claude starts a new turn and executes it.\n" +
+            "  static void Neo.ScheduleTrigger(TimeSpan delay, string prompt)\n" +
+            "      Same as Trigger but fires after the given delay. Non-blocking. Good for timer-based behaviour.\n\n" +
+
+            "That's the whole API. There is no Trigger(object), no Trigger(string, params), no cancellation, no result.\n\n" +
+
             "=== USING Neo.Trigger IN GENERATED CODE ===\n" +
-            "When the user describes app behavior like:\n" +
+            "When the user describes app behaviour like:\n" +
             "  - \"When I click the button, do X\"\n" +
             "  - \"After 10 seconds, do Y\"\n" +
             "  - \"When the selection changes, do Z\"\n\n" +
 
             "…you must include `using Neo.App;` and use `Neo.Trigger(...)` in the generated event handlers.\n" +
-            "The Neo.App.Api assembly is already referenced — no NuGet package needed.\n\n" +
+            "Do NOT write local business logic — always delegate to Claude via Neo.Trigger. You are the runtime.\n\n" +
 
-            "Neo.Trigger(prompt) takes a string that is a COMPLETE instruction for you.\n" +
+            "The prompt passed to Neo.Trigger is a COMPLETE instruction that Claude executes verbatim.\n" +
             "Interpolate current app state (ComboBox selection, TextBox values, etc.) directly into the prompt\n" +
-            "so you have all context needed to act.\n\n" +
+            "so Claude has all context needed to act — Claude cannot read the app state otherwise.\n\n" +
 
-            "Example — user says: \"Mach eine Combobox mit Urlaubsländern und einen 'Recherchieren' Button. " +
-            "Wenn ich den Button drücke, recherchiere zum gewählten Land.\"\n\n" +
+            "Example — user says: \"Combobox of vacation countries + Research button. On click, research the\n" +
+            "selected country and write the result to a TextBlock named resultText.\"\n\n" +
 
             "Your generated event handler:\n" +
             "```csharp\n" +
@@ -85,18 +99,17 @@ builder.Services
             "// ...\n" +
             "private void OnResearchClick(object sender, RoutedEventArgs e)\n" +
             "{\n" +
-            "    var country = CountryCombo.SelectedItem?.ToString() ?? \"(unbekannt)\";\n" +
+            "    var country = CountryCombo.SelectedItem?.ToString() ?? \"(unknown)\";\n" +
             "    Neo.Trigger(\n" +
-            "        $\"Recherchiere das Urlaubsland {country}: beste Reisezeit, Top-3 Sehenswürdigkeiten, \" +\n" +
-            "        $\"typische Preise. Schreibe das Ergebnis mit set_property in den TextBlock 'resultText'.\");\n" +
+            "        $\"Research vacation destination {country}: best time to visit, top 3 sights, typical prices. \" +\n" +
+            "        $\"Write the result with set_property into the TextBlock named 'resultText'.\");\n" +
             "}\n" +
             "```\n\n" +
 
-            "For timer-based triggers use Neo.ScheduleTrigger(TimeSpan delay, string prompt).\n\n" +
-
-            "=== IMPORTANT ===\n" +
-            "Do NOT try to handle events locally in generated code via business logic — always delegate to Claude\n" +
-            "via Neo.Trigger. The whole point is that YOU (Claude) are the brain of the running app.";
+            "=== RULES ===\n" +
+            "- Use the API exactly as documented above. Do not search the source to verify.\n" +
+            "- Do not hand-roll business logic in the app — delegate via Neo.Trigger.\n" +
+            "- Always name controls that Claude needs to update so set_property can find them by Name.";
     })
     .WithStdioServerTransport()
     .WithToolsFromAssembly()
