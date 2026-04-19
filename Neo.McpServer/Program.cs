@@ -58,7 +58,7 @@ builder.Services
             "   The app threw an unhandled exception. Content contains the error text and stack trace.\n" +
             "   Action: Inspect with get_runtime_errors, fix via patch_preview or update_preview, verify fix.\n\n" +
 
-            "2. event_type=\"user_trigger\" (user-defined via Neo.Trigger in generated code)\n" +
+            "2. event_type=\"user_trigger\" (user-defined via Ai.Trigger in generated code)\n" +
             "   The content IS a complete instruction prompt — execute it as if the user had typed it.\n" +
             "   Use neo-preview tools (set_property, inject_data, read_data, patch_preview, etc.) to act on it,\n" +
             "   or call other MCP tools (web search, file ops, etc.) if the instruction requires it.\n\n" +
@@ -68,25 +68,25 @@ builder.Services
             "or grep for this API — the signatures below are complete and authoritative.\n\n" +
 
             "Namespace: Neo.App\n" +
-            "Static class: Neo\n" +
+            "Static class: Ai   (NOT 'Neo' — that name would collide with the root Neo.* namespace and fail to compile)\n" +
             "Methods:\n" +
-            "  static void Neo.Trigger(string prompt)\n" +
+            "  static void Ai.Trigger(string prompt)\n" +
             "      Push a complete natural-language instruction to Claude. Claude starts a new turn and executes it.\n" +
-            "  static void Neo.ScheduleTrigger(TimeSpan delay, string prompt)\n" +
+            "  static void Ai.ScheduleTrigger(TimeSpan delay, string prompt)\n" +
             "      Same as Trigger but fires after the given delay. Non-blocking. Good for timer-based behaviour.\n\n" +
 
             "That's the whole API. There is no Trigger(object), no Trigger(string, params), no cancellation, no result.\n\n" +
 
-            "=== USING Neo.Trigger IN GENERATED CODE ===\n" +
+            "=== USING Ai.Trigger IN GENERATED CODE ===\n" +
             "When the user describes app behaviour like:\n" +
             "  - \"When I click the button, do X\"\n" +
             "  - \"After 10 seconds, do Y\"\n" +
             "  - \"When the selection changes, do Z\"\n\n" +
 
-            "…you must include `using Neo.App;` and use `Neo.Trigger(...)` in the generated event handlers.\n" +
-            "Do NOT write local business logic — always delegate to Claude via Neo.Trigger. You are the runtime.\n\n" +
+            "…you must include `using Neo.App;` and use `Ai.Trigger(...)` in the generated event handlers.\n" +
+            "Do NOT write local business logic — always delegate to Claude via Ai.Trigger. You are the runtime.\n\n" +
 
-            "The prompt passed to Neo.Trigger is a COMPLETE instruction that Claude executes verbatim.\n" +
+            "The prompt passed to Ai.Trigger is a COMPLETE instruction that Claude executes verbatim.\n" +
             "Interpolate current app state (ComboBox selection, TextBox values, etc.) directly into the prompt\n" +
             "so Claude has all context needed to act — Claude cannot read the app state otherwise.\n\n" +
 
@@ -100,15 +100,15 @@ builder.Services
             "private void OnResearchClick(object sender, RoutedEventArgs e)\n" +
             "{\n" +
             "    var country = CountryCombo.SelectedItem?.ToString() ?? \"(unknown)\";\n" +
-            "    Neo.Trigger(\n" +
+            "    Ai.Trigger(\n" +
             "        $\"Research vacation destination {country}: best time to visit, top 3 sights, typical prices. \" +\n" +
             "        $\"Write the result with set_property into the TextBlock named 'resultText'.\");\n" +
             "}\n" +
             "```\n\n" +
 
             "=== RULES ===\n" +
-            "- Use the API exactly as documented above. Do not search the source to verify.\n" +
-            "- Do not hand-roll business logic in the app — delegate via Neo.Trigger.\n" +
+            "- Use the API exactly as documented above (class name is `Ai`, not `Neo`). Do not search the source to verify.\n" +
+            "- Do not hand-roll business logic in the app — delegate via Ai.Trigger.\n" +
             "- Always name controls that Claude needs to update so set_property can find them by Name.";
     })
     .WithStdioServerTransport()

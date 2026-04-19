@@ -7,9 +7,9 @@ Neo's MCP server supports [Claude Code Channels](https://code.claude.com/docs/en
 ## Two event types
 
 - **`runtime_error`** (system, always active) — Unhandled exceptions in the generated app are automatically pushed so Claude can react (usually: fix the bug and hot-reload).
-- **`user_trigger`** (user-defined via `Neo.Trigger(prompt)`) — The generated code decides when to push. The payload is a complete natural-language instruction; Claude executes it as if the user had typed it.
+- **`user_trigger`** (user-defined via `Ai.Trigger(prompt)`) — The generated code decides when to push. The payload is a complete natural-language instruction; Claude executes it as if the user had typed it.
 
-## The `Neo.Trigger` API
+## The `Ai.Trigger` API
 
 The `Neo.App.Api` assembly is auto-referenced by every generated app. From inside a generated handler:
 
@@ -19,16 +19,16 @@ using Neo.App;
 private void OnResearchClick(object sender, RoutedEventArgs e)
 {
     var country = CountryCombo.SelectedItem?.ToString() ?? "(unknown)";
-    Neo.Trigger(
+    Ai.Trigger(
         $"Research vacation destination {country}: best time to visit, " +
         $"top 3 sights, typical prices. Write the result with set_property " +
         $"into the TextBlock named 'resultText'.");
 }
 ```
 
-Click the button → `Neo.Trigger(...)` sends the prompt via MCP channel → Claude starts a new turn → executes the research using its tools → writes the result back into the running app via `set_property`. **No user input between the click and the answer.**
+Click the button → `Ai.Trigger(...)` sends the prompt via MCP channel → Claude starts a new turn → executes the research using its tools → writes the result back into the running app via `set_property`. **No user input between the click and the answer.**
 
-`Neo.ScheduleTrigger(TimeSpan delay, string prompt)` does the same thing after a delay — handy for timer-based behaviours.
+`Ai.ScheduleTrigger(TimeSpan delay, string prompt)` does the same thing after a delay — handy for timer-based behaviours.
 
 ## Example end-to-end
 
@@ -36,7 +36,7 @@ You say (in Claude Code):
 
 > *"Build an app with a combobox of vacation destinations and a 'Research' button. When I click the button, research the selected country and write the result into a TextBlock named 'resultText'."*
 
-Claude calls `compile_and_preview` with code that includes the `Neo.Trigger` call above. The window appears. You click the button. Claude gets a `user_trigger` event, executes the research, calls `set_property` on `resultText`, and the text appears in the same window — still alive, still responsive.
+Claude calls `compile_and_preview` with code that includes the `Ai.Trigger` call above. The window appears. You click the button. Claude gets a `user_trigger` event, executes the research, calls `set_property` on `resultText`, and the text appears in the same window — still alive, still responsive.
 
 ## What this enables
 
@@ -63,13 +63,13 @@ claude --dangerously-load-development-channels server:neo-preview
 
 The `server:neo-preview` part matches the MCP server's `name` in your Claude config. If you registered the MCP server under a different name, change it accordingly.
 
-Once running, describe an app **and** the event behaviour you want ("when I click X, do Y"). Claude will include `Neo.Trigger(...)` calls automatically.
+Once running, describe an app **and** the event behaviour you want ("when I click X, do Y"). Claude will include `Ai.Trigger(...)` calls automatically.
 
 ## Protocol references
 
 - [Claude Code channels reference](https://code.claude.com/docs/en/channels-reference) — protocol details and limitations
 - [[MCP Server]] — the surface that implements the MCP-side of the channel
-- `Neo.App.Api` source in this repo — the `Neo.Trigger` and `Neo.ScheduleTrigger` implementations
+- `Neo.App.Api` source in this repo — the `Ai.Trigger` and `Ai.ScheduleTrigger` implementations
 
 ---
 

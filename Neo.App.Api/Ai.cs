@@ -9,8 +9,14 @@ namespace Neo.App;
 ///
 /// The host process (Neo.PluginWindow) wires up the emitter at startup via
 /// <see cref="SetEmitter"/>. Generated code should NOT call SetEmitter.
+///
+/// <para>
+/// Named <c>Ai</c> (not <c>Neo</c>) to avoid a namespace-vs-type collision: the root
+/// <c>Neo</c> namespace exists in the compilation context (from Neo.Shared, Neo.IPC, etc.),
+/// so a class called <c>Neo</c> would create ambiguity at call sites like <c>Neo.Trigger(...)</c>.
+/// </para>
 /// </summary>
-public static class Neo
+public static class Ai
 {
     private static Action<string>? _emitter;
 
@@ -31,9 +37,9 @@ public static class Neo
     ///   private void OnResearchClick(object sender, RoutedEventArgs e)
     ///   {
     ///       var country = CountryCombo.SelectedItem?.ToString() ?? "unknown";
-    ///       Neo.Trigger(
-    ///           $"Recherchiere zum Urlaubsland {country}. " +
-    ///           $"Schreibe die beste Reisezeit mit set_property in den TextBlock 'resultText'.");
+    ///       Ai.Trigger(
+    ///           $"Research vacation destination {country}. " +
+    ///           $"Write the best travel season with set_property into the TextBlock named 'resultText'.");
     ///   }
     /// </code>
     /// </summary>
@@ -48,12 +54,12 @@ public static class Neo
     }
 
     /// <summary>
-    /// Schedule a trigger after a delay. Returns a handle (ignored for now).
+    /// Schedule a trigger after a delay. Non-blocking.
     ///
     /// Example:
     /// <code>
-    ///   Neo.ScheduleTrigger(TimeSpan.FromSeconds(10),
-    ///       "10 Sekunden sind um. Aktualisiere den Status-Label auf 'Timeout'.");
+    ///   Ai.ScheduleTrigger(TimeSpan.FromSeconds(10),
+    ///       "Ten seconds are up. Update the status label to 'Timeout'.");
     /// </code>
     /// </summary>
     public static void ScheduleTrigger(TimeSpan delay, string prompt)

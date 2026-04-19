@@ -512,7 +512,7 @@ This turns Neo into something qualitatively different from a normal previewer. G
 ### Two event types
 
 - **`runtime_error`** (always on). Unhandled exceptions in the generated app auto-push to Claude — he typically reads the stack trace and fixes the bug via `patch_preview`.
-- **`user_trigger`** (opt-in, via `Neo.Trigger(prompt)` in the generated code). The payload is a complete natural-language instruction; Claude executes it as if the user had typed it.
+- **`user_trigger`** (opt-in, via `Ai.Trigger(prompt)` in the generated code). The payload is a complete natural-language instruction; Claude executes it as if the user had typed it.
 
 ### Example
 
@@ -528,14 +528,14 @@ using Neo.App;
 private void OnResearchClick(object sender, RoutedEventArgs e)
 {
     var country = CountryCombo.SelectedItem?.ToString() ?? "(unknown)";
-    Neo.Trigger(
+    Ai.Trigger(
         $"Research vacation destination {country}: best time to visit, " +
         $"top 3 sights, typical prices. Write the result with set_property " +
         $"into the TextBlock named 'resultText'.");
 }
 ```
 
-You click the button. `Neo.Trigger(...)` sends the prompt over the channel. Claude starts a new turn, does the research, calls `set_property` on `resultText`. The answer appears in the same window — no user input between the click and the result.
+You click the button. `Ai.Trigger(...)` sends the prompt over the channel. Claude starts a new turn, does the research, calls `set_property` on `resultText`. The answer appears in the same window — no user input between the click and the result.
 
 ### How to run it
 
@@ -545,7 +545,7 @@ Channels aren't on Claude Code's approved allowlist yet. Start Claude Code with 
 claude --dangerously-load-development-channels server:neo-preview
 ```
 
-The `server:neo-preview` part matches the server's name in your `.claude/settings.json`. Then just describe an app **and** the event behaviour you want ("when I click X, do Y", "after 10 seconds, do Z") — Claude will include `Neo.Trigger(...)` calls automatically.
+The `server:neo-preview` part matches the server's name in your `.claude/settings.json`. Then just describe an app **and** the event behaviour you want ("when I click X, do Y", "after 10 seconds, do Z") — Claude will include `Ai.Trigger(...)` calls automatically.
 
 ### Full details
 

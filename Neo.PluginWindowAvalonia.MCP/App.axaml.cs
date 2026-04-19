@@ -147,7 +147,7 @@ namespace Neo.PluginWindowAvalonia.MCP
                 ));
 
                 // Wire the Neo.Trigger API so generated app code can push prompts to Claude
-                Neo.App.Neo.SetEmitter(prompt =>
+                Neo.App.Ai.SetEmitter(prompt =>
                 {
                     _ = SendAppEventAsync("user_trigger", "Neo.Trigger", prompt);
                 });

@@ -70,7 +70,7 @@ Neo.App                       WPF host (Windows). ~68 .cs files.
 Neo.App.Avalonia              Avalonia host (Win/Linux/macOS). Shares Core by source-linking.
 Neo.App.Core                  Shared business logic for WPF + Avalonia.
 Neo.App.Core.Tests            201 tests.
-Neo.App.Api                   Public surface generated apps see (Neo.Trigger, …).
+Neo.App.Api                   Public surface generated apps see (Ai.Trigger, …).
 
 Neo.App.WebApp/               Container directory (sub-solution neo-webapp-like).
   Neo.App.WebApp/             Shared Avalonia library for WASM.
@@ -148,7 +148,7 @@ Every agent response flows through `StructuredResponseParser`. The AI is instruc
 
 ### Channels (MCP only)
 
-The generated app links against `Neo.App.Api` and calls `Neo.Trigger(prompt)` — the trigger text travels out via the pipe → MCP server → Claude Code channel → a new Claude turn. See [[Channels]].
+The generated app links against `Neo.App.Api` and calls `Ai.Trigger(prompt)` — the trigger text travels out via the pipe → MCP server → Claude Code channel → a new Claude turn. See [[Channels]].
 
 ## Where to start contributing
 

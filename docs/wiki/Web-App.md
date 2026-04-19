@@ -132,7 +132,7 @@ The dropdown in the header lists every provider the backend could see. Entries w
 | Forbidden-API analyzer | Yes — blocks `File`, `Process`, `P/Invoke`, `unsafe`, `System.Windows.*` |
 | Export as standalone `.exe` | Not yet — planned |
 | Visual designer | Not yet — possibly WPF-only forever |
-| Channel back-reporting (`Neo.Trigger`) | Not yet — MCP-only |
+| Channel back-reporting (`Ai.Trigger`) | Not yet — MCP-only |
 
 ## Bundle size
 
