@@ -68,6 +68,18 @@ namespace Neo.IPC
 
         /// <summary>Unsolicited event from child: user interaction or state change.</summary>
         public const string AppEvent = "AppEvent";
+
+        // ── Live-MCP (Phase 1) ──────────────────────────────────────────────
+        // App publishes its capability surface, host invokes methods / reads state,
+        // app emits property changes for Watchable observables.
+        public const string AppManifest = "AppManifest";
+        public const string InvokeMethod = "InvokeMethod";
+        public const string MethodResult = "MethodResult";
+        public const string ReadObservable = "ReadObservable";
+        public const string ReadObservableResult = "ReadObservableResult";
+        public const string SubscribeObservable = "SubscribeObservable";
+        public const string UnsubscribeObservable = "UnsubscribeObservable";
+        public const string ObservableValue = "ObservableValue";
     }
 
     public record StartWebBridgeRequest(string HtmlContent, int Port = 0);
@@ -146,10 +158,98 @@ namespace Neo.IPC
 
     /// <summary>Unsolicited event from child: button click, text change, selection, etc.</summary>
     public record AppEventMessage(
-        string EventType,        // "button_click", "text_changed", "selection_changed", "runtime_error"
+        string EventType,        // "button_click", "text_changed", "selection_changed", "runtime_error", "user_trigger"
         string Target,           // Control name or type, e.g. "submitBtn", "TextBox:0"
-        string? Value = null,    // Optional: new text, selected item, error message
-        string? Details = null   // Optional: stack trace or extra context
+        string? Value = null,    // Optional: new text, selected item, error message, prompt text
+        string? Details = null,  // Optional: stack trace or extra context
+        // Live-MCP loop-protection counter. Stamped by the app from its AsyncLocal call context
+        // when Ai.Trigger is fired from inside an InvokeMethod call; 0 when fired from a fresh
+        // user-driven path (real button click, timer). Server seeds its per-app CallChain via
+        // Math.Max so cross-app chains keep their hop budget.
+        int Hops = 0
+    );
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Live-MCP (Phase 1) — manifest, method invocation, observable read/subscribe.
+    // Phase 0 closed 2026-04-29 with full GO. See LIVE_MCP_PHASE0_FINDINGS.md.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>One callable method exposed via [McpCallable].</summary>
+    public record McpCallableEntry(
+        string Name,                       // Method name
+        string Description,                // From [McpCallable("…")]
+        List<McpParamEntry> Parameters,    // Positional params
+        string ReturnTypeName,             // .NET FullName, "void" if no return
+        bool OffUiThread = false,          // Mirrors attribute option
+        int TimeoutSeconds = 30
+    );
+
+    public record McpParamEntry(
+        string Name,
+        string TypeName                    // .NET FullName, e.g. "System.String", "System.Int32"
+    );
+
+    /// <summary>One observable property exposed via [McpObservable].</summary>
+    public record McpObservableEntry(
+        string Name,
+        string Description,
+        string TypeName,
+        bool Watchable = false             // True ⇒ exposed as MCP resource for resources/subscribe
+    );
+
+    /// <summary>One triggerable control reference exposed via [McpTriggerable].</summary>
+    public record McpTriggerableEntry(
+        string Name,                       // Property name on the host control
+        string Description,
+        string ControlName,                // Avalonia x:Name on the actual control, if findable
+        string ControlType                 // e.g. "Button", "ToggleButton"
+    );
+
+    /// <summary>App → Host: the full capability manifest, built once at plugin-load via reflection.</summary>
+    public record AppManifestMessage(
+        string AppId,                      // PreviewSessionManager-assigned session id
+        string ClassFullName,              // Full type name of the loaded UserControl
+        List<McpCallableEntry> Callables,
+        List<McpObservableEntry> Observables,
+        List<McpTriggerableEntry> Triggerables
+    );
+
+    /// <summary>Host → App: invoke a [McpCallable] method.</summary>
+    public record InvokeMethodMessage(
+        string Method,                     // Method name from the manifest
+        string ArgsJson,                   // JSON array of positional args, deserialized app-side per ParamEntry types
+        int Hops                           // Server-stamped loop-protection counter; app threads into AsyncLocal during dispatch
+    );
+
+    /// <summary>App → Host: result of an InvokeMethod call.</summary>
+    public record MethodResultMessage(
+        bool Success,
+        string? ResultJson = null,         // JSON-serialized return value, null on Success=false or void method
+        string? Error = null,              // Human-readable error message
+        string? ErrorCode = null           // Machine-readable code: "method_not_found", "invocation_failed", "timeout", "loop_limit_exceeded"
+    );
+
+    /// <summary>Host → App: read the current value of an [McpObservable] property.</summary>
+    public record ReadObservableMessage(string Name);
+
+    /// <summary>App → Host: response to ReadObservable.</summary>
+    public record ReadObservableResultMessage(
+        bool Success,
+        string? ValueJson = null,
+        string? Error = null
+    );
+
+    /// <summary>Host → App: start watching a [McpObservable(Watchable=true)] property; app pushes ObservableValue on change.</summary>
+    public record SubscribeObservableMessage(string Name);
+
+    /// <summary>Host → App: stop watching.</summary>
+    public record UnsubscribeObservableMessage(string Name);
+
+    /// <summary>App → Host: pushed when a watched property changes (or on initial subscribe).</summary>
+    public record ObservableValueMessage(
+        string Name,
+        string ValueJson,
+        int Hops = 0                       // Telemetry only; observables don't drive Claude turns
     );
 
     public record HelloMessage(string Role, int ProcessId, long? Hwnd = null);
