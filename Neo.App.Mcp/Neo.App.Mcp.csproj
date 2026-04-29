@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(NeoTargetFramework)</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Neo.App.Mcp</AssemblyName>
+    <RootNamespace>Neo.App.Mcp</RootNamespace>
+    <Description>Embeddable MCP-server runtime for Frozen-Mode N.E.O. apps. Reads [McpCallable]/[McpObservable]/[McpTriggerable] attributes off the loaded UserControl and exposes them as MCP tools and resources over stdio JSON-RPC. No IPC, no Neo.McpServer host needed — the app is its own MCP server.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" Version="1.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Avalonia" Version="11.3.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Neo.App.Api\Neo.App.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neo.App.Mcp.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(NeoTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>FrozenTodoApp</RootNamespace>
+    <AssemblyName>frozen-todo-app</AssemblyName>
+    <Description>Phase 4 demo: a self-contained Avalonia TODO app that doubles as a stdio MCP server when launched with --mcp. Demonstrates Frozen-Mode end-to-end.</Description>
+
+    <!-- For Phase 4B AOT/single-file experiments. Default off so dev rebuild is fast. -->
+    <PublishSingleFile Condition="'$(NeoMcpFrozen)' == 'true'">true</PublishSingleFile>
+    <SelfContained Condition="'$(NeoMcpFrozen)' == 'true'">true</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Neo.App.Api\Neo.App.Api.csproj" />
+    <ProjectReference Include="..\..\..\Neo.App.Mcp\Neo.App.Mcp.csproj" />
+  </ItemGroup>
+
+</Project>
