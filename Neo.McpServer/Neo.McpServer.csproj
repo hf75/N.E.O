@@ -19,6 +19,15 @@
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Core\Neo.Agents.Core.csproj" />
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
     <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
+
+    <!--
+      Phase 4B: pull Neo.App.Mcp + its closure (ModelContextProtocol, Hosting, DI, Logging,
+      Avalonia.Base) into McpServer's bin so export_app(mcpMode=true) can ship the runtime kit
+      alongside the user's compiled DynamicUserControl. The McpServer itself never loads
+      Neo.App.Mcp at runtime — the project reference exists purely so the closure DLLs are
+      available for the export pipeline.
+    -->
+    <ProjectReference Include="..\Neo.App.Mcp\Neo.App.Mcp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

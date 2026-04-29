@@ -336,7 +336,10 @@ public sealed class PreviewTools
     [McpServerTool(Name = "export_app")]
     [Description("Exports the generated app as a standalone executable. " +
         "The exported app runs independently — no N.E.O., no MCP server, no .NET SDK needed (only the .NET runtime). " +
-        "All dependencies (Avalonia, NuGet packages) are included in the export directory.")]
+        "All dependencies (Avalonia, NuGet packages) are included in the export directory. " +
+        "Set mcpMode=true (Phase 4 Frozen-Mode) to ALSO embed an MCP stdio server in the exported EXE: " +
+        "the app then exposes its [McpCallable] / [McpObservable(Watchable=true)] members as MCP tools / resources " +
+        "when launched with --mcp, so any Claude session can `claude mcp add app-name path/to/exe -- --mcp` and use it.")]
     public static async Task<string> ExportApp(
         CompilationPipeline compilation,
         [Description("Complete C# source code files (same as compile_and_preview).")] string[] sourceCode,
@@ -346,7 +349,11 @@ public sealed class PreviewTools
             "A subfolder with the app name will be created.")] string exportPath,
         [Description("Target platform: 'windows', 'linux', or 'osx'. Defaults to 'windows'.")] string platform = "windows",
         [Description("NuGet packages as JSON object string, e.g. '{\"Humanizer\": \"default\"}'. " +
-            "Omit if no extra packages needed.")] string? nugetPackages = null)
+            "Omit if no extra packages needed.")] string? nugetPackages = null,
+        [Description("Phase 4 Frozen-Mode: when true, the exported EXE also serves as a stdio MCP server " +
+            "via Neo.App.Mcp. The CLI exposes three modes: '<exe>' (GUI only, identical to mcpMode=false), " +
+            "'<exe> --mcp' (GUI + stdio MCP for Claude to drive the app), '<exe> --mcp-help' (dump the " +
+            "manifest to stderr and exit). Adds ~5 MB of runtime DLLs to the export. Defaults to false.")] bool mcpMode = false)
     {
         try
         {
@@ -358,12 +365,13 @@ public sealed class PreviewTools
             if (!Path.IsPathRooted(exportPath))
                 return $"EXPORT FAILED: exportPath must be an absolute path. Got: '{exportPath}'. Use e.g. 'C:/tmp'.";
 
-            Console.Error.WriteLine($"[export_app] Exporting '{appName}' to {exportPath} for {platform}...");
+            var modeLabel = mcpMode ? "frozen-mode" : "GUI-only";
+            Console.Error.WriteLine($"[export_app] Exporting '{appName}' ({modeLabel}) to {exportPath} for {platform}...");
 
             var packages = ParseNuGetPackages(nugetPackages);
 
             var result = await compilation.ExportAsync(
-                sourceCode, appName, exportPath, platform, packages);
+                sourceCode, appName, exportPath, platform, packages, mcpMode);
 
             if (!result.Success)
             {
@@ -378,11 +386,19 @@ public sealed class PreviewTools
 
             Console.Error.WriteLine($"[export_app] Exported to {result.ExportDirectory}");
 
+            var mcpHints = mcpMode
+                ? $"\n\nFrozen-Mode usage:\n" +
+                  $"  {result.ExePath}                  → GUI only\n" +
+                  $"  {result.ExePath} --mcp            → GUI + stdio MCP server (registerable via `claude mcp add`)\n" +
+                  $"  {result.ExePath} --mcp-help       → dump manifest to stderr and exit (smoke test)\n" +
+                  $"\nTo register with Claude on another machine: `claude mcp add {appName.ToLowerInvariant()} \"{result.ExePath}\" -- --mcp`."
+                : "\n\nThe user can run this app directly — no N.E.O. or MCP server needed.";
+
             return $"SUCCESS: App exported as standalone executable.\n" +
                    $"Executable: {result.ExePath}\n" +
                    $"Directory: {result.ExportDirectory}\n" +
-                   $"Files: {fileCount}, Size: {dirSize / 1024.0 / 1024.0:F1} MB\n\n" +
-                   $"The user can run this app directly — no N.E.O. or MCP server needed.";
+                   $"Files: {fileCount}, Size: {dirSize / 1024.0 / 1024.0:F1} MB" +
+                   mcpHints;
         }
         catch (Exception ex)
         {
