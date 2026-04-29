@@ -20,9 +20,13 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     // ── Live-MCP loop protection (Phase 1) ──
     private readonly LoopProtection _loopProtection;
 
-    public PreviewSessionManager(LoopProtection loopProtection)
+    // ── Live-MCP dynamic tool registry (Phase 2) ──
+    private readonly LiveMcpToolRegistry _liveMcpToolRegistry;
+
+    public PreviewSessionManager(LoopProtection loopProtection, LiveMcpToolRegistry liveMcpToolRegistry)
     {
         _loopProtection = loopProtection;
+        _liveMcpToolRegistry = liveMcpToolRegistry;
     }
 
     // ── Channel support: push events to Claude Code ──
@@ -297,6 +301,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
             await session.DisposeAsync();
             session.AddLog($"Preview window '{windowId}' closed.");
             _loopProtection.ResetApp(windowId);
+            _liveMcpToolRegistry.UnregisterApp(windowId);
         }
     }
 
@@ -700,18 +705,35 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                             }
                             break;
 
-                        // ── Live-MCP (Phase 1) ─────────────────────────────────
+                        // ── Live-MCP (Phase 1+2) ───────────────────────────────
                         case IpcTypes.AppManifest:
                             {
                                 var manifest = Json.FromJson<AppManifestMessage>(env.PayloadJson);
                                 if (manifest != null)
                                 {
                                     // The app emits AppId="" — server stamps its windowId here.
-                                    s.LiveMcpManifest = manifest with { AppId = s.WindowId };
+                                    var stamped = manifest with { AppId = s.WindowId };
+                                    s.LiveMcpManifest = stamped;
                                     s.AddLog($"[LIVE-MCP] manifest stored for app '{s.WindowId}': " +
                                              $"{manifest.Callables.Count} callables, " +
                                              $"{manifest.Observables.Count} observables, " +
                                              $"{manifest.Triggerables.Count} triggerables.");
+
+                                    // Phase 2: register one MCP tool per [McpCallable] method.
+                                    // Hot-reload semantics live in the registry (signature-hash dedup),
+                                    // so this is safe to call on every AppManifest frame including
+                                    // updates from update_preview / patch_preview.
+                                    try
+                                    {
+                                        _liveMcpToolRegistry.RegisterApp(s.WindowId, stamped, this);
+                                        var registered = _liveMcpToolRegistry.GetRegisteredToolNamesForApp(s.WindowId);
+                                        s.AddLog($"[LIVE-MCP] dynamic tools registered for app '{s.WindowId}' " +
+                                                 $"({registered.Count}): {string.Join(", ", registered)}");
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        s.AddLog($"[LIVE-MCP] tool registration failed for app '{s.WindowId}': {ex.Message}");
+                                    }
                                 }
                                 break;
                             }

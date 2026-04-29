@@ -44,12 +44,13 @@ public class LoopProtectionTests
     [Fact]
     public void OnInvokeMethod_AfterDecayWindow_ResetsChain()
     {
-        // Tiny decay so the inactivity-reset branch fires without real-time waits.
-        var lp = new LoopProtection(decay: TimeSpan.FromMilliseconds(50));
+        // 30 ms decay vs 300 ms wait gives a 10× safety margin so Windows clock-resolution
+        // jitter (15.6 ms typical) and CI scheduling lag don't make this flaky.
+        var lp = new LoopProtection(decay: TimeSpan.FromMilliseconds(30));
         lp.OnInvokeMethod("app-decay").Should().Be(1);
         lp.OnInvokeMethod("app-decay").Should().Be(2);
 
-        Thread.Sleep(120);
+        Thread.Sleep(300);
 
         // Chain is older than decay → counter resets, this call counts as fresh hops=1.
         lp.OnInvokeMethod("app-decay").Should().Be(1);

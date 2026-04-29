@@ -30,6 +30,12 @@ builder.Services.AddSingleton<PreviewSessionManager>();
 builder.Services.AddSingleton<CompilationPipeline>();
 builder.Services.AddSingleton<SkillsRegistry>();
 
+// Phase 2: dynamic per-method tools augment the always-on tool set. The registry's
+// collection is what fires Changed → notifications/tools/list_changed. We instantiate
+// it here so the same instance can be assigned to both DI and McpServerOptions.ToolCollection.
+var liveMcpToolRegistry = new LiveMcpToolRegistry();
+builder.Services.AddSingleton(liveMcpToolRegistry);
+
 builder.Services
     .AddMcpServer(options =>
     {
@@ -45,6 +51,14 @@ builder.Services
         {
             ["claude/channel"] = new JsonObject()
         };
+
+        // ── Live-MCP Phase 2: dynamic tool collection ──
+        // Tools.ListChanged=true tells the client we will push notifications/tools/list_changed
+        // when our tool set mutates (per-app tool registration on app load/unload/hot-reload).
+        // The registry's collection augments the static tool set discovered by WithToolsFromAssembly.
+        options.Capabilities.Tools ??= new ToolsCapability();
+        options.Capabilities.Tools.ListChanged = true;
+        options.ToolCollection = liveMcpToolRegistry.ToolCollection;
 
         options.ServerInstructions =
             "This server generates and previews live desktop Avalonia apps.\n\n" +
