@@ -52,6 +52,11 @@ namespace Neo.PluginWindowAvalonia.MCP
         // Web Bridge
         private WebBridgeServer? _webBridge;
 
+        // Live-MCP (Phase 1): manifest + dispatcher for this loaded UserControl.
+        // Built once per LoadControl; cleared on UnloadControl.
+        private AppManifestMessage? _liveMcpManifest;
+        private LiveMcp.LiveMcpDispatcher? _liveMcpDispatcher;
+
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
@@ -146,11 +151,21 @@ namespace Neo.PluginWindowAvalonia.MCP
                     Json.ToJson(new HelloMessage("Child", Environment.ProcessId, Hwnd: handle == IntPtr.Zero ? 0 : handle.ToInt64()))
                 ));
 
-                // Wire the Neo.Trigger API so generated app code can push prompts to Claude
+                // Wire the Neo.Trigger API so generated app code can push prompts to Claude.
+                // The hop count is read from LiveMcpCallContext (AsyncLocal) so triggers
+                // emitted from inside an InvokeMethod call carry the correct loop counter.
                 Neo.App.Ai.SetEmitter(prompt =>
                 {
-                    _ = SendAppEventAsync("user_trigger", "Neo.Trigger", prompt);
+                    _ = SendAppEventAsync("user_trigger", "Neo.Trigger", prompt,
+                        hops: LiveMcp.LiveMcpCallContext.CurrentHops);
                 });
+
+                // Live-MCP dispatcher resolves methods/observables against the currently
+                // loaded UserControl; both reads are done at call time so it stays correct
+                // across LoadControl / UnloadControl.
+                _liveMcpDispatcher = new LiveMcp.LiveMcpDispatcher(
+                    getUserControl: () => MainWin.GetLoadedUserControl(),
+                    getManifest: () => _liveMcpManifest);
 
                 // Framed-Listen-Loop starten
                 _ = Task.Run(() => FramedListenLoopAsync(_ipcCts.Token));
@@ -313,6 +328,10 @@ namespace Neo.PluginWindowAvalonia.MCP
                                 IpcTypes.Ack, env.CorrelationId,
                                 Json.ToJson(new AckMessage("Loaded (bytes/in-memory)"))
                             ));
+
+                            // Emit the Live-MCP manifest so the host can route invoke_method etc.
+                            // Fire-and-forget — failures are logged but never block the load.
+                            _ = SendLiveMcpManifestAsync();
                         }
                         catch (Exception ex)
                         {
@@ -465,6 +484,7 @@ namespace Neo.PluginWindowAvalonia.MCP
                         {
                             MainWin.UnloadUserControlPlugin();
                         });
+                        _liveMcpManifest = null;
 
                         await SafeSendAsync(new IpcEnvelope(
                             IpcTypes.Ack, env.CorrelationId,
@@ -694,6 +714,48 @@ namespace Neo.PluginWindowAvalonia.MCP
                         break;
                     }
 
+                // ── Live-MCP (Phase 1) ────────────────────────────────────────
+                case IpcTypes.InvokeMethod:
+                    {
+                        var req = Json.FromJson<InvokeMethodMessage>(env.PayloadJson);
+                        MethodResultMessage result;
+                        if (req == null || _liveMcpDispatcher == null)
+                            result = new MethodResultMessage(false, null, "Dispatcher not ready or invalid request.", "invocation_failed");
+                        else
+                            result = await _liveMcpDispatcher.InvokeAsync(req);
+
+                        await SafeSendAsync(new IpcEnvelope(
+                            IpcTypes.MethodResult, env.CorrelationId,
+                            Json.ToJson(result)));
+                        break;
+                    }
+
+                case IpcTypes.ReadObservable:
+                    {
+                        var req = Json.FromJson<ReadObservableMessage>(env.PayloadJson);
+                        ReadObservableResultMessage result;
+                        if (req == null || _liveMcpDispatcher == null)
+                            result = new ReadObservableResultMessage(false, null, "Dispatcher not ready or invalid request.");
+                        else
+                            result = await _liveMcpDispatcher.ReadObservableAsync(req.Name);
+
+                        await SafeSendAsync(new IpcEnvelope(
+                            IpcTypes.ReadObservableResult, env.CorrelationId,
+                            Json.ToJson(result)));
+                        break;
+                    }
+
+                case IpcTypes.SubscribeObservable:
+                case IpcTypes.UnsubscribeObservable:
+                    {
+                        // Phase 2 (watch_observable). Acknowledge so the host doesn't time out
+                        // but no behaviour yet — observable change notifications are not wired.
+                        await SafeSendAsync(new IpcEnvelope(
+                            IpcTypes.Ack, env.CorrelationId,
+                            Json.ToJson(new AckMessage($"{env.Type} accepted (Phase 2 — no-op)."))));
+                        break;
+                    }
+
                 default:
                     await SafeSendAsync(new IpcEnvelope(
                         IpcTypes.Ack, env.CorrelationId,
@@ -736,11 +798,41 @@ namespace Neo.PluginWindowAvalonia.MCP
         }
 
         /// <summary>Send a user-interaction event to the MCP server for channel push to Claude.</summary>
-        private Task SendAppEventAsync(string eventType, string target, string? value = null, string? details = null)
+        private Task SendAppEventAsync(string eventType, string target, string? value = null, string? details = null, int hops = 0)
         {
             if (_client == null) return Task.CompletedTask;
-            var evt = new AppEventMessage(eventType, target, value, details);
+            var evt = new AppEventMessage(eventType, target, value, details, hops);
             return SafeSendAsync(new IpcEnvelope(IpcTypes.AppEvent, "", Json.ToJson(evt)));
+        }
+
+        /// <summary>
+        /// Build the Live-MCP manifest for the currently loaded UserControl and push it
+        /// to the host server. Called from the LoadControl handler after a successful load.
+        /// </summary>
+        private async Task SendLiveMcpManifestAsync()
+        {
+            try
+            {
+                var ctrl = await Dispatcher.UIThread.InvokeAsync(() => MainWin.GetLoadedUserControl());
+                if (ctrl is not Avalonia.Controls.Control control)
+                {
+                    _liveMcpManifest = null;
+                    return;
+                }
+
+                // AppId is filled in by the server (it knows its windowId); we send empty here.
+                var manifest = LiveMcp.LiveMcpManifestBuilder.Build(appId: "", control);
+                _liveMcpManifest = manifest;
+                await SafeSendAsync(new IpcEnvelope(IpcTypes.AppManifest, "", Json.ToJson(manifest)));
+                await SendLogAsync(LogLevel.Info,
+                    $"Live-MCP manifest emitted: {manifest.Callables.Count} callables, " +
+                    $"{manifest.Observables.Count} observables, {manifest.Triggerables.Count} triggerables.",
+                    "LiveMcp");
+            }
+            catch (Exception ex)
+            {
+                await SendLogAsync(LogLevel.Warn, $"Live-MCP manifest emission failed: {ex.Message}", "LiveMcp");
+            }
         }
 
         private Task SendErrorAsync(string context, Exception? ex)

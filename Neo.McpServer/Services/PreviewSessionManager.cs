@@ -17,6 +17,14 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     private readonly ConcurrentDictionary<string, WindowSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
     private int _sessionCounter;
 
+    // ── Live-MCP loop protection (Phase 1) ──
+    private readonly LoopProtection _loopProtection;
+
+    public PreviewSessionManager(LoopProtection loopProtection)
+    {
+        _loopProtection = loopProtection;
+    }
+
     // ── Channel support: push events to Claude Code ──
     private McpServerInstance? _channelServer;
 
@@ -95,6 +103,10 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         public readonly List<string> RuntimeErrors = new();
         public readonly ConcurrentDictionary<string, TaskCompletionSource<IpcEnvelope>> PendingRequests = new();
         public string? LastWebBridgeHtml { get; set; }
+
+        // Live-MCP (Phase 1): the most recent manifest the app emitted after LoadControl.
+        // Cleared on UnloadControl / process exit.
+        public AppManifestMessage? LiveMcpManifest { get; set; }
 
         public bool IsRunning => ChildProcess is { HasExited: false } && PipeStream is { IsConnected: true };
 
@@ -284,6 +296,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         {
             await session.DisposeAsync();
             session.AddLog($"Preview window '{windowId}' closed.");
+            _loopProtection.ResetApp(windowId);
         }
     }
 
@@ -448,6 +461,88 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     }
 
     // ========================================
+    // Live-MCP (Phase 1) — public API for the MCP tool layer
+    // ========================================
+
+    /// <summary>
+    /// Resolved app id for the given (optional) windowId. Falls back to the default.
+    /// Used as the keying scheme for LoopProtection and tool naming.
+    /// </summary>
+    public string ResolveAppId(string? windowId) => windowId ?? DefaultWindowId;
+
+    /// <summary>List the appIds of all currently-running sessions.</summary>
+    public IReadOnlyList<string> GetRunningAppIds()
+        => _sessions.Where(kv => kv.Value.IsRunning).Select(kv => kv.Key).ToList();
+
+    /// <summary>Returns the cached Live-MCP manifest for an app, or null if no app is loaded.</summary>
+    public AppManifestMessage? GetManifest(string? windowId)
+    {
+        var s = GetRunningSession(windowId);
+        return s?.LiveMcpManifest;
+    }
+
+    /// <summary>
+    /// Invoke an [McpCallable] method on the running app. Loop-protection is enforced
+    /// here — throws <see cref="LoopLimitExceededException"/> if the call would exceed
+    /// the configured depth.
+    /// </summary>
+    public async Task<MethodResultMessage> InvokeAppMethodAsync(
+        string? windowId, string method, string argsJson, int? overrideTimeoutSeconds = null,
+        CancellationToken ct = default)
+    {
+        var appId = ResolveAppId(windowId);
+        int hops;
+        try { hops = _loopProtection.OnInvokeMethod(appId); }
+        catch (LoopLimitExceededException ex)
+        {
+            Console.Error.WriteLine($"[live-mcp] loop_limit_exceeded app={ex.AppId} hops={ex.Hops} max={ex.MaxDepth} method={method}");
+            return new MethodResultMessage(false, null, ex.Message, "loop_limit_exceeded");
+        }
+
+        // Pick timeout: prefer explicit override, else manifest entry, else default.
+        var manifest = GetManifest(windowId);
+        var entry = manifest?.Callables.FirstOrDefault(c => c.Name == method);
+        var timeoutSeconds = overrideTimeoutSeconds
+            ?? entry?.TimeoutSeconds
+            ?? 30;
+
+        var frame = new InvokeMethodMessage(method, argsJson ?? "[]", hops);
+        var env = await SendRequestAsync(windowId, IpcTypes.InvokeMethod, Json.ToJson(frame), timeoutSeconds + 2, ct);
+        if (env == null)
+            return new MethodResultMessage(false, null, "No response (timeout or app disconnected).", "timeout");
+
+        if (env.Type == IpcTypes.Error)
+        {
+            var errMsg = Json.FromJson<ErrorMessage>(env.PayloadJson);
+            return new MethodResultMessage(false, null, errMsg?.Message ?? "App returned error.", "invocation_failed");
+        }
+
+        var result = Json.FromJson<MethodResultMessage>(env.PayloadJson);
+        return result ?? new MethodResultMessage(false, null, "Malformed MethodResult payload.", "invocation_failed");
+    }
+
+    /// <summary>
+    /// Read the current value of an [McpObservable] property on the running app.
+    /// </summary>
+    public async Task<ReadObservableResultMessage> ReadAppObservableAsync(
+        string? windowId, string observableName, CancellationToken ct = default)
+    {
+        var frame = new ReadObservableMessage(observableName);
+        var env = await SendRequestAsync(windowId, IpcTypes.ReadObservable, Json.ToJson(frame), 15, ct);
+        if (env == null)
+            return new ReadObservableResultMessage(false, null, "No response (timeout or app disconnected).");
+
+        if (env.Type == IpcTypes.Error)
+        {
+            var errMsg = Json.FromJson<ErrorMessage>(env.PayloadJson);
+            return new ReadObservableResultMessage(false, null, errMsg?.Message ?? "App returned error.");
+        }
+
+        var result = Json.FromJson<ReadObservableResultMessage>(env.PayloadJson);
+        return result ?? new ReadObservableResultMessage(false, null, "Malformed ReadObservableResult payload.");
+    }
+
+    // ========================================
     // Generic request-response helper
     // ========================================
 
@@ -594,10 +689,38 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                             if (appEvt != null)
                             {
                                 s.AddLog($"[APP EVENT] {appEvt.EventType}: {appEvt.Target}" +
-                                         (appEvt.Value != null ? $" = {appEvt.Value}" : ""));
+                                         (appEvt.Value != null ? $" = {appEvt.Value}" : "") +
+                                         (appEvt.Hops > 0 ? $" hops={appEvt.Hops}" : ""));
+                                // Seed loop-protection: if the app's call context carried a hop count
+                                // (Ai.Trigger fired from inside an InvokeMethod), Math.Max into the
+                                // chain so Claude's next invoke_method increments from that floor.
+                                _loopProtection.OnAppEvent(s.WindowId, appEvt.Hops);
                                 // Push to Claude via channel notification
                                 _ = PushChannelEventAsync(s.WindowId, appEvt);
                             }
+                            break;
+
+                        // ── Live-MCP (Phase 1) ─────────────────────────────────
+                        case IpcTypes.AppManifest:
+                            {
+                                var manifest = Json.FromJson<AppManifestMessage>(env.PayloadJson);
+                                if (manifest != null)
+                                {
+                                    // The app emits AppId="" — server stamps its windowId here.
+                                    s.LiveMcpManifest = manifest with { AppId = s.WindowId };
+                                    s.AddLog($"[LIVE-MCP] manifest stored for app '{s.WindowId}': " +
+                                             $"{manifest.Callables.Count} callables, " +
+                                             $"{manifest.Observables.Count} observables, " +
+                                             $"{manifest.Triggerables.Count} triggerables.");
+                                }
+                                break;
+                            }
+
+                        case IpcTypes.MethodResult:
+                        case IpcTypes.ReadObservableResult:
+                            if (!string.IsNullOrEmpty(env.CorrelationId) &&
+                                s.PendingRequests.TryRemove(env.CorrelationId, out var liveMcpTcs))
+                                liveMcpTcs.TrySetResult(env);
                             break;
 
                         case IpcTypes.Heartbeat:

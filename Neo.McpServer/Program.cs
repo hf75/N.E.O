@@ -25,6 +25,7 @@ builder.Logging.ClearProviders();
 builder.Logging.SetMinimumLevel(LogLevel.Warning);
 builder.Logging.AddConsole(opts => opts.LogToStandardErrorThreshold = LogLevel.Trace);
 
+builder.Services.AddSingleton<LoopProtection>();
 builder.Services.AddSingleton<PreviewSessionManager>();
 builder.Services.AddSingleton<CompilationPipeline>();
 builder.Services.AddSingleton<SkillsRegistry>();
