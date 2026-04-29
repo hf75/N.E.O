@@ -110,7 +110,64 @@ builder.Services
             "=== RULES ===\n" +
             "- Use the API exactly as documented above (class name is `Ai`, not `Neo`). Do not search the source to verify.\n" +
             "- Do not hand-roll business logic in the app — delegate via Ai.Trigger.\n" +
-            "- Always name controls that Claude needs to update so set_property can find them by Name.";
+            "- Always name controls that Claude needs to update so set_property can find them by Name.\n\n" +
+
+            "=== Live-MCP — exposing app capabilities to Claude (Phase 1) ===\n" +
+            "When the user describes app behaviour where *Claude* drives the app — \"so I can ask you to add a TODO\",\n" +
+            "\"so you can refresh the data\", \"so the assistant can read the count\" — annotate methods/properties so\n" +
+            "Claude can call them via the meta-tools `invoke_method`, `read_observable`, and `inspect_app_api`.\n\n" +
+
+            "Three opt-in attributes from `Neo.App` (auto-referenced):\n\n" +
+
+            "  [McpCallable(\"description\")]                — on PUBLIC methods Claude should call.\n" +
+            "    Optional: OffUiThread = true (heavy work), TimeoutSeconds = 60 (default 30).\n" +
+            "  [McpObservable(\"description\")]              — on PUBLIC readable PROPERTIES Claude should read.\n" +
+            "    Optional: Watchable = true (Phase 2 — subscribe to changes).\n" +
+            "  [McpTriggerable(\"description\")]             — on PUBLIC properties returning a Control (Button etc.)\n" +
+            "    Phase 3 will use these for simulate_input.\n\n" +
+
+            "Without these attributes a method/property is invisible to Claude — opt-in by design.\n" +
+            "Description quality matters: it is what Claude sees when picking which tool to call. State the\n" +
+            "USER-VISIBLE EFFECT, not the implementation. Bad: \"Updates _items list.\" Good: \"Adds a TODO item to the list.\"\n\n" +
+
+            "Example — user says: \"Build a TODO app where I can ask the assistant to add and complete items.\"\n\n" +
+            "```csharp\n" +
+            "using Neo.App;\n" +
+            "using System.Collections.ObjectModel;\n" +
+            "\n" +
+            "public partial class DynamicUserControl : UserControl\n" +
+            "{\n" +
+            "    public ObservableCollection<TodoItem> Items { get; } = new();\n" +
+            "\n" +
+            "    [McpObservable(\"Total number of TODO items currently in the list.\")]\n" +
+            "    public int ItemCount => Items.Count;\n" +
+            "\n" +
+            "    [McpObservable(\"Number of completed TODO items.\")]\n" +
+            "    public int CompletedCount => Items.Count(i => i.IsDone);\n" +
+            "\n" +
+            "    [McpCallable(\"Adds a new TODO item to the list with the given title.\")]\n" +
+            "    public void AddItem(string title) => Items.Add(new TodoItem(title));\n" +
+            "\n" +
+            "    [McpCallable(\"Marks the TODO item at the given index as completed.\")]\n" +
+            "    public void CompleteItem(int index)\n" +
+            "    {\n" +
+            "        if (index >= 0 && index < Items.Count) Items[index].IsDone = true;\n" +
+            "    }\n" +
+            "}\n" +
+            "```\n\n" +
+
+            "Now Claude (or a future user) can drive the app:\n" +
+            "  inspect_app_api()              → lists AddItem, CompleteItem, ItemCount, CompletedCount\n" +
+            "  invoke_method(\"AddItem\",\"[\\\"Buy milk\\\"]\")\n" +
+            "  read_observable(\"ItemCount\")    → \"1\"\n\n" +
+
+            "When deciding whether to attribute something:\n" +
+            "- Method that mutates user-visible state and the user might describe in natural language → [McpCallable]\n" +
+            "- Property that summarises state Claude might want to verify → [McpObservable]\n" +
+            "- Internal helper, plumbing, or anything the user wouldn't ask Claude to do → leave un-annotated\n\n" +
+
+            "Live-MCP and Channels compose: a method invoked via `invoke_method` can itself call `Ai.Trigger`\n" +
+            "to push a follow-up. Loop protection caps such chains at 5 hops by default.";
     })
     .WithStdioServerTransport()
     .WithToolsFromAssembly()
