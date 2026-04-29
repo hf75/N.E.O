@@ -23,10 +23,17 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     // ── Live-MCP dynamic tool registry (Phase 2) ──
     private readonly LiveMcpToolRegistry _liveMcpToolRegistry;
 
-    public PreviewSessionManager(LoopProtection loopProtection, LiveMcpToolRegistry liveMcpToolRegistry)
+    // ── Live-MCP resource registry for watch_observable (Phase 2B) ──
+    private readonly LiveMcpResourceRegistry _liveMcpResourceRegistry;
+
+    public PreviewSessionManager(
+        LoopProtection loopProtection,
+        LiveMcpToolRegistry liveMcpToolRegistry,
+        LiveMcpResourceRegistry liveMcpResourceRegistry)
     {
         _loopProtection = loopProtection;
         _liveMcpToolRegistry = liveMcpToolRegistry;
+        _liveMcpResourceRegistry = liveMcpResourceRegistry;
     }
 
     // ── Channel support: push events to Claude Code ──
@@ -302,6 +309,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
             session.AddLog($"Preview window '{windowId}' closed.");
             _loopProtection.ResetApp(windowId);
             _liveMcpToolRegistry.UnregisterApp(windowId);
+            _liveMcpResourceRegistry.UnregisterApp(windowId);
         }
     }
 
@@ -527,6 +535,30 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Phase 2B: tell the app to start emitting <see cref="ObservableValueMessage"/> frames
+    /// for the named property. Idempotent app-side. Called from the resources/subscribe handler
+    /// in Program.cs and from the manifest re-registration path on hot-reload.
+    /// </summary>
+    public async Task SendSubscribeObservableAsync(string windowId, string observableName, CancellationToken ct)
+    {
+        var s = GetRunningSession(windowId);
+        if (s == null) return;
+        var frame = new SubscribeObservableMessage(observableName);
+        await SafeSendControlAsync(s, new IpcEnvelope(
+            IpcTypes.SubscribeObservable, Guid.NewGuid().ToString("N"), Json.ToJson(frame)));
+    }
+
+    /// <summary>Phase 2B: counterpart to <see cref="SendSubscribeObservableAsync"/>.</summary>
+    public async Task SendUnsubscribeObservableAsync(string windowId, string observableName, CancellationToken ct)
+    {
+        var s = GetRunningSession(windowId);
+        if (s == null) return;
+        var frame = new UnsubscribeObservableMessage(observableName);
+        await SafeSendControlAsync(s, new IpcEnvelope(
+            IpcTypes.UnsubscribeObservable, Guid.NewGuid().ToString("N"), Json.ToJson(frame)));
+    }
+
+    /// <summary>
     /// Read the current value of an [McpObservable] property on the running app.
     /// </summary>
     public async Task<ReadObservableResultMessage> ReadAppObservableAsync(
@@ -734,6 +766,39 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                                     {
                                         s.AddLog($"[LIVE-MCP] tool registration failed for app '{s.WindowId}': {ex.Message}");
                                     }
+
+                                    // Phase 2B: register one MCP resource per Watchable observable.
+                                    // Returns names that need a re-issued Subscribe IPC because Claude
+                                    // had subscribed before the hot-reload and the new control instance
+                                    // has fresh INPC state.
+                                    try
+                                    {
+                                        var resub = _liveMcpResourceRegistry.RegisterApp(s.WindowId, stamped);
+                                        var uris = _liveMcpResourceRegistry.GetRegisteredUrisForApp(s.WindowId);
+                                        s.AddLog($"[LIVE-MCP] watchable resources registered for app '{s.WindowId}' " +
+                                                 $"({uris.Count}): {string.Join(", ", uris)}");
+                                        foreach (var name in resub)
+                                        {
+                                            await SendSubscribeObservableAsync(s.WindowId, name, default);
+                                            s.AddLog($"[LIVE-MCP] re-subscribed observable '{name}' after hot-reload.");
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        s.AddLog($"[LIVE-MCP] resource registration failed for app '{s.WindowId}': {ex.Message}");
+                                    }
+                                }
+                                break;
+                            }
+
+                        case IpcTypes.ObservableValue:
+                            {
+                                var msg = Json.FromJson<ObservableValueMessage>(env.PayloadJson);
+                                if (msg != null)
+                                {
+                                    _liveMcpResourceRegistry.OnObservableValue(s.WindowId, msg.Name, msg.ValueJson);
+                                    // Hops on observable frames are telemetry only — observables don't
+                                    // drive Claude turns, so they do NOT seed loop protection.
                                 }
                                 break;
                             }

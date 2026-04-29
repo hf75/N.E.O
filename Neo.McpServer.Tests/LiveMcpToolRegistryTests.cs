@@ -190,5 +190,5 @@ public class LiveMcpToolRegistryTests
     /// instance with no live sessions is good enough for all the registry-level tests above.
     /// </summary>
     private static PreviewSessionManager StubPreviewSessionManager() =>
-        new(new LoopProtection(), new LiveMcpToolRegistry());
+        new(new LoopProtection(), new LiveMcpToolRegistry(), new LiveMcpResourceRegistry());
 }

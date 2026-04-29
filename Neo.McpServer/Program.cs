@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Text.Json.Nodes;
 using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
 using McpServerInstance = ModelContextProtocol.Server.McpServer;
 using Neo.McpServer.Services;
 using Neo.McpServer.Tools;
@@ -36,6 +37,11 @@ builder.Services.AddSingleton<SkillsRegistry>();
 var liveMcpToolRegistry = new LiveMcpToolRegistry();
 builder.Services.AddSingleton(liveMcpToolRegistry);
 
+// Phase 2B: dynamic resources for [McpObservable(Watchable=true)] properties. Fires
+// notifications/resources/updated on app-side change events; coalesces 200 ms.
+var liveMcpResourceRegistry = new LiveMcpResourceRegistry();
+builder.Services.AddSingleton(liveMcpResourceRegistry);
+
 builder.Services
     .AddMcpServer(options =>
     {
@@ -59,6 +65,41 @@ builder.Services
         options.Capabilities.Tools ??= new ToolsCapability();
         options.Capabilities.Tools.ListChanged = true;
         options.ToolCollection = liveMcpToolRegistry.ToolCollection;
+
+        // ── Live-MCP Phase 2B: dynamic resources + resource subscriptions ──
+        // Subscribe=true: clients can resources/subscribe and we will push
+        // notifications/resources/updated when the underlying observable changes
+        // (app pushes ObservableValue IPC, registry coalesces).
+        options.Capabilities.Resources ??= new ResourcesCapability();
+        options.Capabilities.Resources.Subscribe = true;
+        options.Capabilities.Resources.ListChanged = true;
+        options.ResourceCollection = liveMcpResourceRegistry.ResourceCollection;
+
+        options.Handlers ??= new McpServerHandlers();
+        options.Handlers.SubscribeToResourcesHandler = async (ctx, ct) =>
+        {
+            var uri = ctx.Params?.Uri ?? "";
+            var match = liveMcpResourceRegistry.Subscribe(uri);
+            if (match is { } m)
+            {
+                var preview = ctx.Server.Services?.GetService(typeof(PreviewSessionManager)) as PreviewSessionManager;
+                if (preview != null)
+                    await preview.SendSubscribeObservableAsync(m.AppId, m.Name, ct);
+            }
+            return new EmptyResult();
+        };
+        options.Handlers.UnsubscribeFromResourcesHandler = async (ctx, ct) =>
+        {
+            var uri = ctx.Params?.Uri ?? "";
+            var match = liveMcpResourceRegistry.Unsubscribe(uri);
+            if (match is { } m)
+            {
+                var preview = ctx.Server.Services?.GetService(typeof(PreviewSessionManager)) as PreviewSessionManager;
+                if (preview != null)
+                    await preview.SendUnsubscribeObservableAsync(m.AppId, m.Name, ct);
+            }
+            return new EmptyResult();
+        };
 
         options.ServerInstructions =
             "This server generates and previews live desktop Avalonia apps.\n\n" +
@@ -196,6 +237,7 @@ AvaloniaPrompt.Skills = app.Services.GetRequiredService<SkillsRegistry>();
 var previewManager = app.Services.GetRequiredService<PreviewSessionManager>();
 var mcpServer = app.Services.GetRequiredService<McpServerInstance>();
 previewManager.SetChannelServer(mcpServer);
+liveMcpResourceRegistry.SetServer(mcpServer);
 Console.Error.WriteLine("[Neo.McpServer] Channel capability registered — app events will push to Claude.");
 
 var skillsPath = Environment.GetEnvironmentVariable("NEO_SKILLS_PATH");

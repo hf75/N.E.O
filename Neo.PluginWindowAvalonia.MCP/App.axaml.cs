@@ -56,6 +56,7 @@ namespace Neo.PluginWindowAvalonia.MCP
         // Built once per LoadControl; cleared on UnloadControl.
         private AppManifestMessage? _liveMcpManifest;
         private LiveMcp.LiveMcpDispatcher? _liveMcpDispatcher;
+        private LiveMcp.LiveMcpObservableSubscriptions? _liveMcpObservableSubs;
 
         public override void Initialize()
         {
@@ -166,6 +167,17 @@ namespace Neo.PluginWindowAvalonia.MCP
                 _liveMcpDispatcher = new LiveMcp.LiveMcpDispatcher(
                     getUserControl: () => MainWin.GetLoadedUserControl(),
                     getManifest: () => _liveMcpManifest);
+
+                // Phase 2B watch_observable: hooks INPC on the loaded UserControl, emits
+                // ObservableValue IPC frames on every PropertyChanged for subscribed names.
+                _liveMcpObservableSubs = new LiveMcp.LiveMcpObservableSubscriptions(
+                    getControl: () => MainWin.GetLoadedUserControl(),
+                    emit: (name, valueJson) => SafeSendAsync(new IpcEnvelope(
+                        IpcTypes.ObservableValue, "",
+                        Json.ToJson(new ObservableValueMessage(
+                            Name: name,
+                            ValueJson: valueJson,
+                            Hops: LiveMcp.LiveMcpCallContext.CurrentHops)))));
 
                 // Framed-Listen-Loop starten
                 _ = Task.Run(() => FramedListenLoopAsync(_ipcCts.Token));
@@ -485,6 +497,7 @@ namespace Neo.PluginWindowAvalonia.MCP
                             MainWin.UnloadUserControlPlugin();
                         });
                         _liveMcpManifest = null;
+                        _liveMcpObservableSubs?.ClearForControlUnload();
 
                         await SafeSendAsync(new IpcEnvelope(
                             IpcTypes.Ack, env.CorrelationId,
@@ -746,13 +759,24 @@ namespace Neo.PluginWindowAvalonia.MCP
                     }
 
                 case IpcTypes.SubscribeObservable:
-                case IpcTypes.UnsubscribeObservable:
                     {
-                        // Phase 2 (watch_observable). Acknowledge so the host doesn't time out
-                        // but no behaviour yet — observable change notifications are not wired.
+                        var req = Json.FromJson<SubscribeObservableMessage>(env.PayloadJson);
+                        if (req != null && _liveMcpObservableSubs != null)
+                            await _liveMcpObservableSubs.SubscribeAsync(req.Name);
                         await SafeSendAsync(new IpcEnvelope(
                             IpcTypes.Ack, env.CorrelationId,
-                            Json.ToJson(new AckMessage($"{env.Type} accepted (Phase 2 — no-op)."))));
+                            Json.ToJson(new AckMessage("SubscribeObservable accepted."))));
+                        break;
+                    }
+
+                case IpcTypes.UnsubscribeObservable:
+                    {
+                        var req = Json.FromJson<UnsubscribeObservableMessage>(env.PayloadJson);
+                        if (req != null && _liveMcpObservableSubs != null)
+                            await _liveMcpObservableSubs.UnsubscribeAsync(req.Name);
+                        await SafeSendAsync(new IpcEnvelope(
+                            IpcTypes.Ack, env.CorrelationId,
+                            Json.ToJson(new AckMessage("UnsubscribeObservable accepted."))));
                         break;
                     }
 
