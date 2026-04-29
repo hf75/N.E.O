@@ -37,7 +37,10 @@ internal sealed class LiveMcpDispatcher
 
     public async Task<MethodResultMessage> InvokeAsync(InvokeMethodMessage frame)
     {
-        var control = _getUserControl();
+        // _getUserControl reads Avalonia properties (dynamicContent.Content) and
+        // therefore requires UI-thread affinity. We are called from the IPC pipe
+        // thread, so marshal the read.
+        var control = await Dispatcher.UIThread.InvokeAsync(_getUserControl);
         var manifest = _getManifest();
         if (control == null || manifest == null)
             return Fail("invocation_failed", "No UserControl is currently loaded.");
@@ -95,7 +98,7 @@ internal sealed class LiveMcpDispatcher
 
     public async Task<ReadObservableResultMessage> ReadObservableAsync(string name)
     {
-        var control = _getUserControl();
+        var control = await Dispatcher.UIThread.InvokeAsync(_getUserControl);
         var manifest = _getManifest();
         if (control == null || manifest == null)
             return new ReadObservableResultMessage(Success: false, Error: "No UserControl is currently loaded.");

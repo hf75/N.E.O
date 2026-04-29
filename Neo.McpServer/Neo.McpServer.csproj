@@ -21,4 +21,8 @@
     <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neo.McpServer.Tests" />
+  </ItemGroup>
+
 </Project>

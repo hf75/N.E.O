@@ -23,12 +23,18 @@ public sealed class LoopProtection
     private readonly int _maxDepth;
     private readonly TimeSpan _decay;
 
-    public LoopProtection()
+    public LoopProtection() : this(decay: null) { }
+
+    /// <summary>
+    /// Test seam: lets tests inject a short decay window so the time-based reset path can be exercised
+    /// without real-time waits. Production code uses the parameterless constructor (30 s decay).
+    /// </summary>
+    internal LoopProtection(TimeSpan? decay)
     {
         _maxDepth = int.TryParse(Environment.GetEnvironmentVariable("NEO_LIVEMCP_MAX_DEPTH"), out var m) && m > 0
             ? m
             : 5;
-        _decay = TimeSpan.FromSeconds(30);
+        _decay = decay ?? TimeSpan.FromSeconds(30);
     }
 
     public int MaxDepth => _maxDepth;
