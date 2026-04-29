@@ -80,6 +80,13 @@ namespace Neo.IPC
         public const string SubscribeObservable = "SubscribeObservable";
         public const string UnsubscribeObservable = "UnsubscribeObservable";
         public const string ObservableValue = "ObservableValue";
+
+        // ── Live-MCP (Phase 3) ──────────────────────────────────────────────
+        // Drive UI events and synthesize input on a running app.
+        public const string RaiseEvent = "RaiseEvent";
+        public const string RaiseEventResult = "RaiseEventResult";
+        public const string SimulateInput = "SimulateInput";
+        public const string SimulateInputResult = "SimulateInputResult";
     }
 
     public record StartWebBridgeRequest(string HtmlContent, int Port = 0);
@@ -250,6 +257,49 @@ namespace Neo.IPC
         string Name,
         string ValueJson,
         int Hops = 0                       // Telemetry only; observables don't drive Claude turns
+    );
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Live-MCP (Phase 3) — UI-driving frames. Both follow the same shape:
+    // Host → App with a target descriptor, App → Host with success/error.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Host → App: raise a RoutedEvent on a named control. Bubbles/tunnels per Avalonia semantics.</summary>
+    public record RaiseEventMessage(
+        string ControlName,                // x:Name lookup target ("submitButton") or Type[:Index] ("Button:0")
+        string EventName,                  // RoutedEvent field name with or without trailing "Event" ("Click", "ClickEvent")
+        string ArgsJson = "{}"             // Reserved — currently always "{}"; future will carry MouseEventArgs etc.
+    );
+
+    /// <summary>App → Host: result of a RaiseEvent call.</summary>
+    public record RaiseEventResultMessage(
+        bool Success,
+        string? Error = null,
+        string? ErrorCode = null           // "control_not_found", "event_not_found", "invocation_failed"
+    );
+
+    /// <summary>
+    /// Host → App: synthesize an interaction on a control. Kinds for v1:
+    /// <list type="bullet">
+    ///   <item><c>click</c> — Button.OnClick / RaiseEvent(ClickEvent). Params: none.</item>
+    ///   <item><c>focus</c> — Control.Focus(). Params: none.</item>
+    ///   <item><c>set_text</c> — set Text/Content property. Params: <c>{"text":"…"}</c>.</item>
+    ///   <item><c>key_press</c> — RaiseEvent(KeyDownEvent + KeyUpEvent). Params: <c>{"key":"Enter"}</c> (Avalonia.Input.Key name).</item>
+    ///   <item><c>type_text</c> — RaiseEvent(TextInputEvent) per character. Params: <c>{"text":"hello"}</c>.</item>
+    /// </list>
+    /// Real Avalonia-input-pipeline simulation (mouse coords, hover, focus chain) is reserved for a follow-up.
+    /// </summary>
+    public record SimulateInputMessage(
+        string ControlName,
+        string Kind,                       // "click" | "focus" | "set_text" | "key_press" | "type_text"
+        string ParamsJson = "{}"           // Per-kind shape; see Kind doc.
+    );
+
+    /// <summary>App → Host: result of a SimulateInput call.</summary>
+    public record SimulateInputResultMessage(
+        bool Success,
+        string? Error = null,
+        string? ErrorCode = null           // "control_not_found", "kind_not_supported", "invocation_failed"
     );
 
     public record HelloMessage(string Role, int ProcessId, long? Hwnd = null);

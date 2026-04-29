@@ -22,19 +22,22 @@ public sealed class LoopProtection
     private readonly ConcurrentDictionary<string, CallChain> _chains = new(StringComparer.OrdinalIgnoreCase);
     private readonly int _maxDepth;
     private readonly TimeSpan _decay;
+    private readonly Func<DateTime> _clock;
 
-    public LoopProtection() : this(decay: null) { }
+    public LoopProtection() : this(decay: null, clock: null) { }
 
     /// <summary>
-    /// Test seam: lets tests inject a short decay window so the time-based reset path can be exercised
-    /// without real-time waits. Production code uses the parameterless constructor (30 s decay).
+    /// Test seams: lets tests inject a short decay window AND a controllable clock so the
+    /// time-based reset path is deterministic regardless of xunit parallel-runner load.
+    /// Production code uses the parameterless constructor (30 s decay, real wall clock).
     /// </summary>
-    internal LoopProtection(TimeSpan? decay)
+    internal LoopProtection(TimeSpan? decay = null, Func<DateTime>? clock = null)
     {
         _maxDepth = int.TryParse(Environment.GetEnvironmentVariable("NEO_LIVEMCP_MAX_DEPTH"), out var m) && m > 0
             ? m
             : 5;
         _decay = decay ?? TimeSpan.FromSeconds(30);
+        _clock = clock ?? (() => DateTime.UtcNow);
     }
 
     public int MaxDepth => _maxDepth;
@@ -48,11 +51,12 @@ public sealed class LoopProtection
     public int OnInvokeMethod(string appId)
     {
         var chain = _chains.GetOrAdd(appId, _ => new CallChain());
+        var now = _clock();
         lock (chain)
         {
-            if (DateTime.UtcNow - chain.LastActivityUtc > _decay) chain.Hops = 0;
+            if (now - chain.LastActivityUtc > _decay) chain.Hops = 0;
             chain.Hops++;
-            chain.LastActivityUtc = DateTime.UtcNow;
+            chain.LastActivityUtc = now;
             if (chain.Hops > _maxDepth)
                 throw new LoopLimitExceededException(appId, chain.Hops, _maxDepth);
             return chain.Hops;
@@ -68,10 +72,11 @@ public sealed class LoopProtection
     {
         if (hopsFromApp < 0) hopsFromApp = 0;
         var chain = _chains.GetOrAdd(appId, _ => new CallChain());
+        var now = _clock();
         lock (chain)
         {
             chain.Hops = Math.Max(chain.Hops, hopsFromApp);
-            chain.LastActivityUtc = DateTime.UtcNow;
+            chain.LastActivityUtc = now;
         }
     }
 

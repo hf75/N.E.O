@@ -559,6 +559,54 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Phase 3: raise an Avalonia <see cref="Avalonia.Interactivity.RoutedEvent"/> on a named control
+    /// in the running app. Routes through the bubbling/tunneling pipeline so user handlers run
+    /// exactly as if the interaction were real.
+    /// </summary>
+    public async Task<RaiseEventResultMessage> RaiseEventAsync(
+        string? windowId, string controlName, string eventName, string argsJson = "{}",
+        CancellationToken ct = default)
+    {
+        var frame = new RaiseEventMessage(controlName, eventName, argsJson);
+        var env = await SendRequestAsync(windowId, IpcTypes.RaiseEvent, Json.ToJson(frame), 10, ct);
+        if (env == null)
+            return new RaiseEventResultMessage(false, "No response (timeout or app disconnected).", "timeout");
+
+        if (env.Type == IpcTypes.Error)
+        {
+            var errMsg = Json.FromJson<ErrorMessage>(env.PayloadJson);
+            return new RaiseEventResultMessage(false, errMsg?.Message ?? "App returned error.", "invocation_failed");
+        }
+
+        var result = Json.FromJson<RaiseEventResultMessage>(env.PayloadJson);
+        return result ?? new RaiseEventResultMessage(false, "Malformed RaiseEventResult payload.", "invocation_failed");
+    }
+
+    /// <summary>
+    /// Phase 3: synthesize a UI interaction (click, focus, key press, text input) on a named
+    /// control. See <see cref="SimulateInputMessage"/> for the supported kinds and per-kind
+    /// parameter shapes.
+    /// </summary>
+    public async Task<SimulateInputResultMessage> SimulateInputAsync(
+        string? windowId, string controlName, string kind, string paramsJson = "{}",
+        CancellationToken ct = default)
+    {
+        var frame = new SimulateInputMessage(controlName, kind, paramsJson);
+        var env = await SendRequestAsync(windowId, IpcTypes.SimulateInput, Json.ToJson(frame), 10, ct);
+        if (env == null)
+            return new SimulateInputResultMessage(false, "No response (timeout or app disconnected).", "timeout");
+
+        if (env.Type == IpcTypes.Error)
+        {
+            var errMsg = Json.FromJson<ErrorMessage>(env.PayloadJson);
+            return new SimulateInputResultMessage(false, errMsg?.Message ?? "App returned error.", "invocation_failed");
+        }
+
+        var result = Json.FromJson<SimulateInputResultMessage>(env.PayloadJson);
+        return result ?? new SimulateInputResultMessage(false, "Malformed SimulateInputResult payload.", "invocation_failed");
+    }
+
+    /// <summary>
     /// Read the current value of an [McpObservable] property on the running app.
     /// </summary>
     public async Task<ReadObservableResultMessage> ReadAppObservableAsync(
@@ -805,6 +853,8 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
                         case IpcTypes.MethodResult:
                         case IpcTypes.ReadObservableResult:
+                        case IpcTypes.RaiseEventResult:
+                        case IpcTypes.SimulateInputResult:
                             if (!string.IsNullOrEmpty(env.CorrelationId) &&
                                 s.PendingRequests.TryRemove(env.CorrelationId, out var liveMcpTcs))
                                 liveMcpTcs.TrySetResult(env);

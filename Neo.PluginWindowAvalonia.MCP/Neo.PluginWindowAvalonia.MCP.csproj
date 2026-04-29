@@ -37,4 +37,8 @@
     <ProjectReference Include="..\Neo.App.Core\Neo.App.Core.csproj" />
     <ProjectReference Include="..\Neo.App.Api\Neo.App.Api.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neo.PluginWindowAvalonia.MCP.Tests" />
+  </ItemGroup>
 </Project>

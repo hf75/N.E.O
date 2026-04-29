@@ -44,13 +44,17 @@ public class LoopProtectionTests
     [Fact]
     public void OnInvokeMethod_AfterDecayWindow_ResetsChain()
     {
-        // 30 ms decay vs 300 ms wait gives a 10× safety margin so Windows clock-resolution
-        // jitter (15.6 ms typical) and CI scheduling lag don't make this flaky.
-        var lp = new LoopProtection(decay: TimeSpan.FromMilliseconds(30));
+        // Virtual clock: deterministic regardless of xunit parallel-runner load. The earlier
+        // wall-clock variant flaked under contention because Thread.Sleep + DateTime.UtcNow
+        // could land in awkward orderings.
+        var now = new DateTime(2026, 4, 29, 12, 0, 0, DateTimeKind.Utc);
+        var lp = new LoopProtection(decay: TimeSpan.FromSeconds(1), clock: () => now);
+
         lp.OnInvokeMethod("app-decay").Should().Be(1);
         lp.OnInvokeMethod("app-decay").Should().Be(2);
 
-        Thread.Sleep(300);
+        // Advance the clock past the decay window — virtual time, no real Sleep needed.
+        now = now.AddSeconds(2);
 
         // Chain is older than decay → counter resets, this call counts as fresh hops=1.
         lp.OnInvokeMethod("app-decay").Should().Be(1);

@@ -57,6 +57,7 @@ namespace Neo.PluginWindowAvalonia.MCP
         private AppManifestMessage? _liveMcpManifest;
         private LiveMcp.LiveMcpDispatcher? _liveMcpDispatcher;
         private LiveMcp.LiveMcpObservableSubscriptions? _liveMcpObservableSubs;
+        private LiveMcp.LiveMcpInputDispatcher? _liveMcpInputDispatcher;
 
         public override void Initialize()
         {
@@ -178,6 +179,11 @@ namespace Neo.PluginWindowAvalonia.MCP
                             Name: name,
                             ValueJson: valueJson,
                             Hops: LiveMcp.LiveMcpCallContext.CurrentHops)))));
+
+                // Phase 3 raise_event / simulate_input: drives Avalonia events and synthesizes
+                // input on named controls in the loaded UserControl.
+                _liveMcpInputDispatcher = new LiveMcp.LiveMcpInputDispatcher(
+                    getUserControl: () => MainWin.GetLoadedUserControl());
 
                 // Framed-Listen-Loop starten
                 _ = Task.Run(() => FramedListenLoopAsync(_ipcCts.Token));
@@ -777,6 +783,34 @@ namespace Neo.PluginWindowAvalonia.MCP
                         await SafeSendAsync(new IpcEnvelope(
                             IpcTypes.Ack, env.CorrelationId,
                             Json.ToJson(new AckMessage("UnsubscribeObservable accepted."))));
+                        break;
+                    }
+
+                case IpcTypes.RaiseEvent:
+                    {
+                        var req = Json.FromJson<RaiseEventMessage>(env.PayloadJson);
+                        RaiseEventResultMessage result;
+                        if (req == null || _liveMcpInputDispatcher == null)
+                            result = new RaiseEventResultMessage(false, "Dispatcher not ready or invalid request.", "invocation_failed");
+                        else
+                            result = await _liveMcpInputDispatcher.RaiseEventAsync(req);
+                        await SafeSendAsync(new IpcEnvelope(
+                            IpcTypes.RaiseEventResult, env.CorrelationId,
+                            Json.ToJson(result)));
+                        break;
+                    }
+
+                case IpcTypes.SimulateInput:
+                    {
+                        var req = Json.FromJson<SimulateInputMessage>(env.PayloadJson);
+                        SimulateInputResultMessage result;
+                        if (req == null || _liveMcpInputDispatcher == null)
+                            result = new SimulateInputResultMessage(false, "Dispatcher not ready or invalid request.", "invocation_failed");
+                        else
+                            result = await _liveMcpInputDispatcher.SimulateInputAsync(req);
+                        await SafeSendAsync(new IpcEnvelope(
+                            IpcTypes.SimulateInputResult, env.CorrelationId,
+                            Json.ToJson(result)));
                         break;
                     }
 
