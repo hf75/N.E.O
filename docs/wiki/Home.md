@@ -30,6 +30,8 @@ N.E.O. comes in three flavours that share the same core: a **desktop host** (WPF
 - [[Features Overview]] — All features at a glance
 - [[Designer Mode]] — Click-to-edit UI
 - [[Export and Import]] — Save, share, and export as `.exe`
+- [[Live-MCP]] — Every generated app is an MCP server (Claude calls into it, reads state, subscribes)
+- [[Frozen-Mode]] — Export a Live-MCP app as a standalone MCP-server executable
 - [[Channels]] — Generated apps that push prompts back into Claude
 
 ### Reference

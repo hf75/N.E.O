@@ -80,7 +80,8 @@ Open <http://localhost:5099>. Full guide: [docs/wiki/Web-App.md](docs/wiki/Web-A
 - **Session save/load** as `.neo` files — same format across desktop, MCP, and Web App.
 - **Built-in AI capabilities**: image generation (Gemini), image analysis (Gemini), speech-to-text (Whisper), text-to-speech (OpenAI TTS).
 - **Optional Python** integration via embedded Python 3.11 (desktop only).
-- **[Channel back-reporting](docs/wiki/Channels.md)** — generated apps can push prompts back into Claude Code to drive business logic without pre-coding.
+- **[Live-MCP](docs/wiki/Live-MCP.md)** — every generated app is itself an MCP server. Annotate methods with `[McpCallable]` and properties with `[McpObservable]` and Claude Code can call them directly, read state, subscribe to changes. Works in two modes: live inside N.E.O. (Dev-Mode) or as a standalone exported `.exe` (Frozen-Mode) that anyone can register with `claude mcp add`.
+- **[Channel back-reporting](docs/wiki/Channels.md)** — generated apps can push prompts back into Claude Code to drive business logic without pre-coding. Combined with Live-MCP, this closes the loop: Claude drives the app, the app drives Claude.
 - **[Excel MCP](docs/wiki/Excel-MCP.md)** — a second MCP server that gives Claude read/write access to the active Excel workbook via an in-process COM add-in.
 
 ## Architecture at a glance
@@ -114,8 +115,10 @@ Everything lives in [docs/wiki/](docs/wiki/Home.md). Start with [Home](docs/wiki
 - [Getting Started](docs/wiki/Getting-Started.md) — install, first prompt (desktop host path)
 - [Web App](docs/wiki/Web-App.md) — the browser variant
 - [MCP Server](docs/wiki/MCP-Server.md) — Claude-driven workflow (25 tools)
+- [Live-MCP](docs/wiki/Live-MCP.md) — generated apps as MCP servers (call into them, read state, subscribe)
+- [Frozen-Mode](docs/wiki/Frozen-Mode.md) — exporting Live-MCP apps as standalone executables
 - [Excel MCP](docs/wiki/Excel-MCP.md) — live Excel integration
-- [Channels](docs/wiki/Channels.md) — generated apps that push prompts back
+- [Channels](docs/wiki/Channels.md) — generated apps that push prompts back to Claude
 - [Architecture](docs/wiki/Architecture.md) — how the projects fit together
 - [Features Overview](docs/wiki/Features-Overview.md) · [Designer Mode](docs/wiki/Designer-Mode.md) · [Export and Import](docs/wiki/Export-and-Import.md) · [Settings](docs/wiki/Settings-and-Configuration.md) · [Shortcuts](docs/wiki/Keyboard-Shortcuts.md) · [Troubleshooting](docs/wiki/Troubleshooting.md)
 

@@ -6,7 +6,9 @@ N.E.O. includes an MCP (Model Context Protocol) server that lets **Claude Cowork
 
 You type a prompt in Claude Cowork — *"Build me a calculator with dark theme"* — and a real, native desktop window appears on your desktop. Changes are hot-reloaded in place.
 
-With **[channel back-reporting](#channel-back-reporting-bidirectional-claude--app)** (Claude Code only, research preview) the generated app can also push events back to Claude — button clicks, timers, runtime errors — so Claude reacts without waiting for a user prompt. Jump to that section for details, or keep reading for the one-way basics.
+Two extensions on top of the basics:
+- **[[Live-MCP]]** — every generated app is itself an MCP server. Annotate methods with `[McpCallable]`, properties with `[McpObservable]`, and Claude can call them directly, read state, and subscribe to changes.
+- **[Channel back-reporting](#channel-back-reporting-bidirectional-claude--app)** (research preview) — the generated app can push prompts back to Claude via `Ai.Trigger`, so Claude reacts without waiting for user input. Jump to that section, or keep reading for the one-way basics.
 
 Supports two UI frameworks:
 - **Avalonia** (default) — cross-platform (Windows, Linux, macOS)
