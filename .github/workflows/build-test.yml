@@ -40,5 +40,7 @@ jobs:
       - name: Build
         run: dotnet build neo.sln --configuration Release --no-restore --nologo
 
+      # Category=UiSmoke (Neo.PluginWindow.SmokeTests) launches the real plugin window
+      # executables and opens windows; those run locally with a plain `dotnet test`.
       - name: Test
-        run: dotnet test neo.sln --configuration Release --no-build --nologo
+        run: dotnet test neo.sln --configuration Release --no-build --nologo --filter "Category!=UiSmoke"

@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Process-level smoke tests for the four plugin window executables. Each test plays the host
+    side of the pipe protocol against the real exe: start, Hello, stream a freshly compiled
+    plugin DLL, load, unload, reload.
+
+    These open real (short-lived) windows, so they carry the trait Category=UiSmoke and CI
+    filters them out. Run them locally with plain `dotnet test`.
+
+    Windows-targeted because it has to build the WPF heads; UseWPF puts the WPF assemblies on
+    the trusted-platform list, which the test uses as compile references for the WPF plugin.
+  -->
+  <PropertyGroup>
+    <TargetFramework>$(NeoTargetFrameworkWindows)</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- UseWPF drops System.IO from the implicit usings. -->
+    <Using Include="System.IO" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="8.0.1" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
+
+    <!-- Build-order only: the tests launch these executables from their own bin folders. -->
+    <ProjectReference Include="..\Neo.PluginWindowAvalonia\Neo.PluginWindowAvalonia.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\Neo.PluginWindowAvalonia.MCP\Neo.PluginWindowAvalonia.MCP.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\Neo.PluginWindowWPF\Neo.PluginWindowWPF.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\Neo.PluginWindowWPF.MCP\Neo.PluginWindowWPF.MCP.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+</Project>
