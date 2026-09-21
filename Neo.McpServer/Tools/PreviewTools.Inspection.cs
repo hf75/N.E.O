@@ -16,7 +16,9 @@ public sealed partial class PreviewTools
     [McpServerTool(Name = "capture_screenshot")]
     [Description("Captures a screenshot of the running preview window and returns it as a PNG image. " +
         "Use this to SEE what the generated app looks like and suggest visual improvements. " +
-        "The preview must be running (call compile_and_preview first).")]
+        "The preview must be running (call compile_and_preview first). " +
+        "The image is rendered by Avalonia/WPF itself, so the content of an embedded native web view " +
+        "(NativeWebView, WebView2) shows up as an empty area — check those through the app's own state instead.")]
     public static async Task<IEnumerable<ContentBlock>> CaptureScreenshot(
         PreviewSessionManager preview,
         [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +

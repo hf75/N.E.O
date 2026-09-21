@@ -65,7 +65,7 @@ public static class AvaloniaGuidance
         "It renders with the platform browser: WebView2 on Windows, WKWebView on macOS, WebKitGTK or WPE on Linux.",
         "Usage: 'var web = new NativeWebView { Source = new Uri(\"https://example.com\") };', web.Navigate(uri), web.NavigateToString(html), 'await web.InvokeScript(js)' (returns the script result as a string), GoBack(), GoForward(), Refresh(), Stop(), CanGoBack, CanGoForward.",
         "Events: NavigationStarted (e.Cancel), NavigationCompleted (e.IsSuccess), NewWindowRequested (e.Handled), WebMessageReceived (e.Body). JavaScript sends a string to C# with invokeCSharpAction(text), which raises WebMessageReceived.",
-        "Give the web view its own area of the layout and do not place other controls on top of it.",
+        "Give the web view its own area of the layout and do not place other controls on top of it: the page is drawn by the platform browser, not by Avalonia (which is also why a rendered screenshot of the app shows that area empty).",
     ];
 
     private const string ApiHeader = " API — most examples you know were written for Avalonia 11. These APIs changed; always use the new form: ";
