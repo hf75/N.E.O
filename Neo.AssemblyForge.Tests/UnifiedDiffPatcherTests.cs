@@ -1,12 +1,18 @@
 using FluentAssertions;
-using Neo.App;
+using Neo.AssemblyForge;
 using Xunit;
 
-namespace Neo.App.Core.Tests;
+namespace Neo.AssemblyForge.Tests;
 
 public class UnifiedDiffPatcherTests
 {
     #region Helpers
+
+    // The desktop host and the MCP tools always patch the single virtual file './currentcode.cs'.
+    private const string CurrentCodeFile = "./currentcode.cs";
+
+    private static UnifiedDiffPatcher.ApplyResult ApplyToCurrentCode(string originalText, string patchText)
+        => UnifiedDiffPatcher.TryApply(originalText, patchText, CurrentCodeFile);
 
     private static string MakePatch(string hunkBody, string file = "./currentcode.cs")
     {
@@ -29,7 +35,7 @@ public class UnifiedDiffPatcherTests
         var patch = MakePatch(
             "@@ -1,3 +1,4 @@\n line1\n line2\n+line2.5\n line3");
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patch);
+        var result = ApplyToCurrentCode(original, patch);
 
         result.Success.Should().BeTrue();
         result.PatchedText.Should().Contain("line2.5");
@@ -44,7 +50,7 @@ public class UnifiedDiffPatcherTests
         var patch = MakePatch(
             "@@ -1,3 +1,2 @@\n line1\n-line2\n line3");
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patch);
+        var result = ApplyToCurrentCode(original, patch);
 
         result.Success.Should().BeTrue();
         result.PatchedText.Should().NotContain("line2");
@@ -61,7 +67,7 @@ public class UnifiedDiffPatcherTests
         var patch = MakePatch(
             "@@ -1,3 +1,3 @@\n line1\n-line2\n+lineModified\n line3");
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patch);
+        var result = ApplyToCurrentCode(original, patch);
 
         result.Success.Should().BeTrue();
         result.PatchedText.Should().Contain("lineModified");
@@ -81,7 +87,7 @@ public class UnifiedDiffPatcherTests
             "@@ -1,3 +1,3 @@\n line1\n-line2\n+lineA\n line3\n" +
             "@@ -18,3 +18,3 @@\n line18\n-line19\n+lineB\n line20");
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patch);
+        var result = ApplyToCurrentCode(original, patch);
 
         result.Success.Should().BeTrue();
         result.PatchedText.Should().Contain("lineA");
@@ -99,7 +105,7 @@ public class UnifiedDiffPatcherTests
         var patch = MakePatch(
             "@@ -1,3 +1,3 @@\n line1\n-line2\n+lineChanged\n line3");
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patch);
+        var result = ApplyToCurrentCode(original, patch);
 
         result.Success.Should().BeTrue();
         result.PatchedText.Should().Contain("lineChanged");
@@ -113,7 +119,7 @@ public class UnifiedDiffPatcherTests
     [InlineData(null)]
     public void TryApplyToCurrentCode_EmptyOrWhitespacePatch_ReturnsError(string? patch)
     {
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode("some code", patch!);
+        var result = ApplyToCurrentCode("some code", patch!);
 
         result.Success.Should().BeFalse();
         result.ErrorMessage.Should().Contain("empty");
@@ -128,7 +134,7 @@ public class UnifiedDiffPatcherTests
         var patch = MakePatch(
             "@@ -1,0 +1,1 @@\n+new line");
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(null!, patch);
+        var result = ApplyToCurrentCode(null!, patch);
 
         // The patcher should not throw; it should process with empty original.
         result.Should().NotBeNull();
@@ -144,7 +150,7 @@ public class UnifiedDiffPatcherTests
             "@@ -1,3 +1,3 @@\n line1\n-line2\n+lineFixed\n line3");
         var fencedPatch = "```diff\n" + rawPatch + "\n```";
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, fencedPatch);
+        var result = ApplyToCurrentCode(original, fencedPatch);
 
         result.Success.Should().BeTrue();
         result.PatchedText.Should().Contain("lineFixed");
@@ -160,7 +166,7 @@ public class UnifiedDiffPatcherTests
             "@@ -1,2 +1,2 @@\n line1\n-line2\n+changed",
             file: "other_file.cs");
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patch);
+        var result = ApplyToCurrentCode(original, patch);
 
         result.Success.Should().BeFalse();
     }
@@ -175,7 +181,7 @@ public class UnifiedDiffPatcherTests
             "@@ -1,3 +1,3 @@\n alpha\n-beta\n+BETA\n gamma",
             file: "./currentcode.cs");
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patch);
+        var result = ApplyToCurrentCode(original, patch);
 
         result.Success.Should().BeTrue();
         result.PatchedText.Should().Contain("BETA");
@@ -189,7 +195,7 @@ public class UnifiedDiffPatcherTests
         var original = "old code";
         var replacement = "using System;\npublic class DynamicUserControl { }";
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, replacement);
+        var result = ApplyToCurrentCode(original, replacement);
 
         result.Success.Should().BeTrue();
         result.PatchedText.Should().Contain("DynamicUserControl");
@@ -203,7 +209,7 @@ public class UnifiedDiffPatcherTests
         var original = "old code";
         var patch = "*** Add File: ./currentcode.cs\n+using System;\n+class DynamicUserControl { }";
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patch);
+        var result = ApplyToCurrentCode(original, patch);
 
         result.Success.Should().BeTrue();
         result.PatchedText.Should().Contain("using System;");
@@ -220,7 +226,7 @@ public class UnifiedDiffPatcherTests
         var patch = MakePatch(
             "@@ -1,3 +1,3 @@\n line1\n-line2\n+lineNew\n line3");
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patch);
+        var result = ApplyToCurrentCode(original, patch);
 
         result.Success.Should().BeTrue();
         result.PatchedText.Should().Contain("lineNew");
@@ -235,7 +241,7 @@ public class UnifiedDiffPatcherTests
         var patch = MakePatch(
             "@@ -1,3 +1,3 @@\n line1\n-line2\n+lineChanged\n line3");
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patch);
+        var result = ApplyToCurrentCode(original, patch);
 
         result.Success.Should().BeTrue();
         result.PatchedText.Should().Contain("\r\n");
@@ -252,7 +258,7 @@ public class UnifiedDiffPatcherTests
         var patch = MakePatch(
             "@@ -1,3 +1,3 @@\n xxx\n-yyy\n+zzz\n ccc");
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patch);
+        var result = ApplyToCurrentCode(original, patch);
 
         result.Success.Should().BeFalse();
         result.ErrorMessage.Should().NotBeNullOrEmpty();
@@ -267,7 +273,7 @@ public class UnifiedDiffPatcherTests
         // This looks like a diff, not standalone code, even though it mentions DynamicUserControl.
         var patchText = "diff --git a/other.cs b/other.cs\n--- a/other.cs\n+++ b/other.cs\n@@ -1,1 +1,1 @@\n-old\n+class DynamicUserControl {}";
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patchText);
+        var result = ApplyToCurrentCode(original, patchText);
 
         // It has hunks but for the wrong file, so no hunks for currentcode.cs.
         result.Success.Should().BeFalse();
@@ -281,7 +287,7 @@ public class UnifiedDiffPatcherTests
         var original = "old code";
         var patch = "*** Add File: ./other.cs\n+using System;\n+class Other { }";
 
-        var result = UnifiedDiffPatcher.TryApplyToCurrentCode(original, patch);
+        var result = ApplyToCurrentCode(original, patch);
 
         result.Success.Should().BeFalse();
     }

@@ -1,4 +1,5 @@
 using Avalonia.Threading;
+using Neo.AssemblyForge;
 
 namespace Neo.App
 {

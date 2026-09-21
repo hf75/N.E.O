@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Neo.AssemblyForge;
 using Neo.App;
 using Xunit;
 

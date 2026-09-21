@@ -33,9 +33,9 @@ Neo has one brain and three bodies:
 
 **Shared core (`Neo.App.Core`, ~37 source files)**
 
-- `AppController` — central orchestrator, 2 000+ LOC, state machine around the prompt → compile → load loop. Used by Neo.App (WPF) and Neo.App.Avalonia via source-linking.
-- `StructuredResponse` — the JSON shape the AI returns (`code`, `patch`, `explanation`, `chat`, `nuget`, `powershell`, `consoleApp`). Every surface parses this the same way.
-- `UnifiedDiffPatcher` — fuzzy-hunk patch application. Only used by desktop and MCP; the Web App does full-code round-trips for now.
+- `AppController` — central orchestrator, 2 000+ LOC, state machine around the prompt → compile → load loop. Used by Neo.App (WPF) and Neo.App.Avalonia through a project reference; the hosts plug in via `IMainView`, `IChildProcessService` and `IPlatformServices`. Every prompt runs through the AssemblyForge session — there is no second code path.
+- `AISystemMessages` — picks the desktop-host profile of the system prompt and appends plugin-agent docs. The prompt text itself lives once, in `Neo.AssemblyForge.Core/AssemblyForgeSystemMessages.cs`.
+- `StructuredResponse`, `StructuredResponseParser`, `UnifiedDiffPatcher`, `UnifiedDiffGenerator` — shared by every surface and therefore in `Neo.AssemblyForge.Core` (no Win32 or NuGet dependencies, so the WASM build can use them too): the JSON shape the AI returns (`code`, `patch`, `explanation`, `chat`, `nuget`, `powershell`, `consoleApp`) and the fuzzy-hunk patch workflow.
 - `NuGetPackageService` — wrapper over `NuGet.Protocol` 7.0.0 with transitive resolution. Used by Neo.App, Neo.McpServer, and Neo.Backend.
 - `CompilationService` — wraps Roslyn behind the `CSharpCompileAgent` / `CSharpDllCompileAgent`.
 
@@ -69,7 +69,7 @@ Flat layout at the repo root — 27 projects across three solutions.
 Neo.App                       WPF host (Windows). ~68 .cs files.
 Neo.App.Avalonia              Avalonia host (Win/Linux/macOS). Shares Core by source-linking.
 Neo.App.Core                  Shared business logic for WPF + Avalonia.
-Neo.App.Core.Tests            201 tests.
+Neo.App.Core.Tests            157 tests.
 Neo.App.Api                   Public surface generated apps see (Ai.Trigger, …).
 
 Neo.App.WebApp/               Container directory (sub-solution neo-webapp-like).
@@ -97,7 +97,7 @@ Neo.PluginWindowWPF           Thin exe head: embedded WPF child of the WPF deskt
 Neo.PluginWindowWPF.MCP       Thin exe head: WPF child of Neo.McpServer. Adds Smart Edit (Ctrl+K).
 
 Neo.AssemblyForge             Prompt→DLL pipeline (NuGetPackageService, CompilationService). Used by Core, MCP, Backend.
-Neo.AssemblyForge.Tests       160 tests.
+Neo.AssemblyForge.Tests       194 tests (incl. the diff patcher/generator suites).
 Neo.IPC                       Named-pipe framed protocol.
 Neo.Shared                    PipeClient, PeUtils, and the bytes-only plugin loader (SandboxPluginLoadContext).
 
@@ -141,7 +141,7 @@ In Mono WASM the ALC wrapper object itself lingers after `Unload` (the weak refe
 
 ### Structured response
 
-Every agent response flows through `StructuredResponseParser`. The AI is instructed to respond with a single JSON object; the parser accepts plain JSON, JSON inside a ```json fence, or JSON embedded in prose. See `Neo.App.Core/StructuredResponse.cs` (and the Web App's own copy at `Neo.App.WebApp/Services/Ai/StructuredResponse.cs`).
+Every agent response flows through `StructuredResponseParser`. The AI is instructed to respond with a single JSON object; the parser accepts plain JSON, JSON inside a ```json fence, or JSON embedded in prose. See `Neo.AssemblyForge.Core/StructuredResponse.cs` and `StructuredResponseParser.cs` — one implementation for desktop, MCP and Web App.
 
 ### Named-pipe framed protocol (desktop + MCP)
 

@@ -1,3 +1,5 @@
+using Neo.AssemblyForge;
+
 namespace Neo.App
 {
     public interface IAppLogger

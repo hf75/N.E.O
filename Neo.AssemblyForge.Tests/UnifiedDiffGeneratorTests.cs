@@ -1,11 +1,20 @@
 using FluentAssertions;
-using Neo.App;
+using Neo.AssemblyForge;
 using Xunit;
 
-namespace Neo.App.Core.Tests;
+namespace Neo.AssemblyForge.Tests;
 
 public class UnifiedDiffGeneratorTests
 {
+    // The desktop host and the MCP tools always diff the single virtual file './currentcode.cs'.
+    private const string CurrentCodeFile = "./currentcode.cs";
+
+    private static string CreatePatchForCurrentCode(string oldText, string newText, int contextLines = 3)
+        => UnifiedDiffGenerator.CreatePatch(CurrentCodeFile, oldText, newText, contextLines);
+
+    private static UnifiedDiffPatcher.ApplyResult ApplyToCurrentCode(string originalText, string patchText)
+        => UnifiedDiffPatcher.TryApply(originalText, patchText, CurrentCodeFile);
+
     // ── No changes → "No changes." ──────────────────────────────────
 
     [Fact]
@@ -13,7 +22,7 @@ public class UnifiedDiffGeneratorTests
     {
         var text = "line1\nline2\nline3";
 
-        var result = UnifiedDiffGenerator.CreatePatchForCurrentCode(text, text);
+        var result = CreatePatchForCurrentCode(text, text);
 
         result.Should().Be("No changes.");
     }
@@ -26,7 +35,7 @@ public class UnifiedDiffGeneratorTests
         var oldText = "line1\nline2";
         var newText = "line1\nline2\nline3";
 
-        var result = UnifiedDiffGenerator.CreatePatchForCurrentCode(oldText, newText);
+        var result = CreatePatchForCurrentCode(oldText, newText);
 
         result.Should().Contain("+line3");
         result.Should().Contain("@@");
@@ -40,7 +49,7 @@ public class UnifiedDiffGeneratorTests
         var oldText = "line1\nline2\nline3";
         var newText = "line1\nline3";
 
-        var result = UnifiedDiffGenerator.CreatePatchForCurrentCode(oldText, newText);
+        var result = CreatePatchForCurrentCode(oldText, newText);
 
         result.Should().Contain("-line2");
     }
@@ -53,7 +62,7 @@ public class UnifiedDiffGeneratorTests
         var oldText = "line1\noldline\nline3";
         var newText = "line1\nnewline\nline3";
 
-        var result = UnifiedDiffGenerator.CreatePatchForCurrentCode(oldText, newText);
+        var result = CreatePatchForCurrentCode(oldText, newText);
 
         result.Should().Contain("-oldline");
         result.Should().Contain("+newline");
@@ -72,7 +81,7 @@ public class UnifiedDiffGeneratorTests
         lines[28] = "changed29"; // near the bottom
         var newText = string.Join("\n", lines);
 
-        var result = UnifiedDiffGenerator.CreatePatchForCurrentCode(oldText, newText, contextLines: 2);
+        var result = CreatePatchForCurrentCode(oldText, newText, contextLines: 2);
 
         // Two separate @@ hunks expected because they are more than 2*contextLines apart.
         var hunkCount = result.Split("@@").Length - 1; // each hunk has an @@ pair
@@ -85,7 +94,7 @@ public class UnifiedDiffGeneratorTests
     [Fact]
     public void CreatePatchForCurrentCode_EmptyOldNonEmptyNew_GeneratesFullAddition()
     {
-        var result = UnifiedDiffGenerator.CreatePatchForCurrentCode("", "line1\nline2");
+        var result = CreatePatchForCurrentCode("", "line1\nline2");
 
         result.Should().Contain("+line1");
         result.Should().Contain("+line2");
@@ -96,7 +105,7 @@ public class UnifiedDiffGeneratorTests
     [Fact]
     public void CreatePatchForCurrentCode_NonEmptyOldEmptyNew_GeneratesFullDeletion()
     {
-        var result = UnifiedDiffGenerator.CreatePatchForCurrentCode("line1\nline2", "");
+        var result = CreatePatchForCurrentCode("line1\nline2", "");
 
         result.Should().Contain("-line1");
         result.Should().Contain("-line2");
@@ -113,7 +122,7 @@ public class UnifiedDiffGeneratorTests
         var oldText = "a\nb\nc\nd\ne";
         var newText = "a\nb\nX\nd\ne";
 
-        var result = UnifiedDiffGenerator.CreatePatchForCurrentCode(oldText, newText, contextLines);
+        var result = CreatePatchForCurrentCode(oldText, newText, contextLines);
 
         result.Should().Contain("-c");
         result.Should().Contain("+X");
@@ -134,7 +143,7 @@ public class UnifiedDiffGeneratorTests
     [Fact]
     public void CreatePatchForCurrentCode_NullOldText_TreatedAsEmpty()
     {
-        var result = UnifiedDiffGenerator.CreatePatchForCurrentCode(null!, "hello");
+        var result = CreatePatchForCurrentCode(null!, "hello");
 
         result.Should().Contain("+hello");
     }
@@ -142,7 +151,7 @@ public class UnifiedDiffGeneratorTests
     [Fact]
     public void CreatePatchForCurrentCode_NullNewText_TreatedAsEmpty()
     {
-        var result = UnifiedDiffGenerator.CreatePatchForCurrentCode("hello", null!);
+        var result = CreatePatchForCurrentCode("hello", null!);
 
         result.Should().Contain("-hello");
     }
@@ -150,7 +159,7 @@ public class UnifiedDiffGeneratorTests
     [Fact]
     public void CreatePatchForCurrentCode_BothNull_NoChanges()
     {
-        var result = UnifiedDiffGenerator.CreatePatchForCurrentCode(null!, null!);
+        var result = CreatePatchForCurrentCode(null!, null!);
 
         result.Should().Be("No changes.");
     }
@@ -163,11 +172,11 @@ public class UnifiedDiffGeneratorTests
         var oldText = "using System;\nclass Foo\n{\n    void Bar() { }\n}";
         var newText = "using System;\nclass Foo\n{\n    void Bar() { Console.WriteLine(); }\n    void Baz() { }\n}";
 
-        var patch = UnifiedDiffGenerator.CreatePatchForCurrentCode(oldText, newText);
+        var patch = CreatePatchForCurrentCode(oldText, newText);
 
         patch.Should().NotBe("No changes.");
 
-        var applyResult = UnifiedDiffPatcher.TryApplyToCurrentCode(oldText, patch);
+        var applyResult = ApplyToCurrentCode(oldText, patch);
 
         applyResult.Success.Should().BeTrue();
         applyResult.PatchedText.Should().Be(newText);
@@ -178,7 +187,7 @@ public class UnifiedDiffGeneratorTests
     [Fact]
     public void CreatePatchForCurrentCode_OutputContainsCurrentCodePath()
     {
-        var result = UnifiedDiffGenerator.CreatePatchForCurrentCode("a", "b");
+        var result = CreatePatchForCurrentCode("a", "b");
 
         result.Should().Contain("currentcode.cs");
     }

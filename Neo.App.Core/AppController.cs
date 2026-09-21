@@ -1305,305 +1305,24 @@ namespace Neo.App
                 return;
             }
 
-            // NEW: Use the extracted prompt→DLL engine when available.
-            try { RecreatePromptToDllSession(preserveState: true); } catch { /* non-critical; falls back to legacy path */ }
-            if (_promptToDllSession != null)
+            // Every prompt runs through the AssemblyForge prompt→DLL engine. The session is rebuilt
+            // per prompt so settings changes (model, framework, Python, ...) take effect immediately.
+            try
             {
-                await ExecuteGeneralPromptWithPromptToDllAsync(prompt, cancellationToken, showResultInChild);
-                return;
+                RecreatePromptToDllSession(preserveState: true);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ExecuteGeneralPrompt] RecreatePromptToDllSession failed: {ex}");
+                if (_promptToDllSession == null)
+                {
+                    Logger.LogMessage($"The code generation engine could not be initialized: {ex.Message}", BubbleType.CompletionError);
+                    return;
+                }
+                // Otherwise keep going with the session from the previous prompt.
             }
 
-            bool success = false;
-            int numTries = Settings?.AiCodeGenerationAttempts ?? 5;
-            string originalPrompt = prompt;
-            string oldHistory = AppState.History;
-            StructuredResponse? structuredResponse = null;
-            string baseCodeForPatch = VirtualProjectFiles!.GetFileContent("./currentcode.cs") ?? AppState.LastCode ?? string.Empty;
-            string reviewBaseCode = baseCodeForPatch;
-
-            var allNuGetPackagesThisRun = new List<string>();
-            var allNuGetPackagesThisRunSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            prompt = BuildDiffFirstPrompt(prompt, baseCodeForPatch);
-
-            int currentAttempt = 0;
-            IncreaseAttemptCounter(ref currentAttempt);
-
-            string tmpHist = AppState.History;
-
-            while (!success && numTries > 0 && !cancellationToken.IsCancellationRequested)
-            {
-                // Version Conflicts detected. Clear Cache with nuget packs!
-                if (!string.IsNullOrEmpty(LastErrorMsg) && LastErrorMsg.Contains("CS0433"))
-                    FileHelper.ClearDirectory(NuGetPackageDirectory);
-
-                cancellationToken.ThrowIfCancellationRequested();
-                numTries--;
-
-                _view.SetWaitIndicatorStatus("Generating Pass: " + currentAttempt.ToString());
-
-                try
-                {
-                    if (!string.IsNullOrEmpty(LastErrorMsg))
-                        prompt += "\n\n" + LastErrorMsg;
-
-                    string? completion = null;
-                    string systemMessage = AISystemMessages.GetSystemMessage(Settings!.UseAvalonia, Settings.UseReactUi, Settings.UsePython, PluginAgents);
-
-                    await ExecuteAIQuery(prompt,
-                        systemMessage,
-                        tmpHist,
-                        JsonSchemata.JsonSchemaResponse,
-                        cancellationToken);
-
-                    completion = AiAgent.GetOutput<string>("Result");
-
-                    if (completion == null)
-                    {
-                        Logger.LogMessage("The request could not be processed. Aborting.", BubbleType.CompletionError);
-                        LastErrorMsg = "";
-                        return;
-                    }
-
-                    structuredResponse = JsonConvert.DeserializeObject<StructuredResponse>(completion) ?? new StructuredResponse();
-
-                    if (structuredResponse.Chat != null &&
-                        structuredResponse.Chat.Length > 0 && !string.IsNullOrWhiteSpace(structuredResponse.Chat))
-                    {
-                        Logger.LogMessage(originalPrompt, BubbleType.Prompt);
-
-                        Logger.LogMessageWithMarkdownFormating(structuredResponse.Chat, BubbleType.CompletionSuccess);
-                        Logger.LogHistory(structuredResponse.Chat);
-
-                        // Control is still loaded (we only hid the window), just show it again
-                        ChildProcessService?.ShowChild();
-                        ChildProcessService?.UpdatePosition();
-
-                        return;
-                    }
-
-                    // PowerShell / Console App → Single-Shot execution
-                    if (!string.IsNullOrWhiteSpace(structuredResponse.PowerShellScript) ||
-                        !string.IsNullOrWhiteSpace(structuredResponse.ConsoleAppCode))
-                    {
-                        Logger.LogMessage(originalPrompt, BubbleType.Prompt);
-                        await ExecuteSingleShotToolAsync(originalPrompt, structuredResponse, cancellationToken);
-                        return;
-                    }
-
-                    if (structuredResponse.NuGetPackages != null)
-                    {
-                        foreach (var p in structuredResponse.NuGetPackages)
-                        {
-                            if (string.IsNullOrWhiteSpace(p)) continue;
-                            var trimmed = p.Trim();
-                            if (allNuGetPackagesThisRunSet.Add(trimmed))
-                                allNuGetPackagesThisRun.Add(trimmed);
-                        }
-                    }
-
-                    string codeToTest = structuredResponse.Code;
-                    if (!string.IsNullOrWhiteSpace(structuredResponse.Patch))
-                    {
-                        var patchResult = UnifiedDiffPatcher.TryApplyToCurrentCode(baseCodeForPatch, structuredResponse.Patch);
-                        if (!patchResult.Success || string.IsNullOrWhiteSpace(patchResult.PatchedText))
-                            throw new Exception($"The generated patch could not be applied: {patchResult.ErrorMessage}");
-
-                        codeToTest = patchResult.PatchedText;
-                        structuredResponse.Code = codeToTest;
-                    }
-
-                    if (ContainsNamedUserControl(codeToTest, "DynamicUserControl") == false)
-                        throw new Exception("The generated UserControl is invalid...");
-
-                    bool shouldReview = !Settings!.AcceptAutomatic && showResultInChild;
-
-                    List<string>? nugetDllsBefore = null;
-                    Dictionary<string, string>? packageVersionsBefore = null;
-                    if (shouldReview)
-                    {
-                        nugetDllsBefore = AppState.NuGetDlls.ToList();
-                        packageVersionsBefore = new Dictionary<string, string>(AppState.PackageVersions, StringComparer.Ordinal);
-                    }
-
-                    var packs = ConvertPackageListToDictionary(structuredResponse!.NuGetPackages!);
-                    await LoadAndApplyNugetPackages(packs);
-
-                    if (showResultInChild)
-                    {
-                        var changesToTest = new Dictionary<string, string>
-                        {
-                            { "./currentcode.cs", codeToTest }
-                        };
-
-                        if (shouldReview)
-                        {
-                            string? compiledDllPath = await CompileToDllAsync(VirtualProjectFiles.GetSourceCodeAsStrings(changesToTest));
-                            if (string.IsNullOrWhiteSpace(compiledDllPath))
-                                throw new InvalidOperationException("Failed to compile the generated code.");
-
-                             string previewPatch = UnifiedDiffGenerator.CreatePatchForCurrentCode(reviewBaseCode, codeToTest);
-                             structuredResponse.Patch = previewPatch;
-                             structuredResponse.NuGetPackages = allNuGetPackagesThisRun;
-
-                             PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(previewPatch, allNuGetPackagesThisRun, structuredResponse.Explanation);
-
-                             if (decision != PatchReviewDecision.Apply)
-                             {
-                                 if (nugetDllsBefore != null) AppState.NuGetDlls = nugetDllsBefore;
-                                 if (packageVersionsBefore != null) AppState.PackageVersions = packageVersionsBefore;
-
-                                 if (decision == PatchReviewDecision.Regenerate)
-                                 {
-                                     string regenInstruction = "Please regenerate a safer revision. Return a valid unified diff patch targeting './currentcode.cs'.";
-
-                                     prompt = BuildDiffFirstPrompt(
-                                         userPrompt: originalPrompt + "\n\n" + regenInstruction,
-                                         currentCode: reviewBaseCode);
-
-                                     tmpHist = "";
-                                     LastErrorMsg = "";
-
-                                     IncreaseAttemptCounter(ref currentAttempt);
-                                     numTries = Math.Max(numTries, 1);
-                                     continue;
-                                 }
-
-                                 Logger.LogMessage("Changes rejected.", BubbleType.Info);
-                                 return;
-                             }
-
-                             if (!await DisplayCompiledDllAsync(compiledDllPath))
-                                 throw new InvalidOperationException("Failed to load the control in the child process.");
-                         }
-                        else
-                        {
-                        // Normaler Flow: Code kompilieren und sofort anzeigen.
-                        if (await CompileAndShowAsync(VirtualProjectFiles.GetSourceCodeAsStrings(changesToTest)) == false)
-                        {
-                            // Wenn das Anzeigen fehlschlägt, zählt der Versuch als fehlgeschlagen.
-                            // Wir werfen eine Exception, um in den catch-Block zu springen und einen neuen Versuch zu starten.
-                            throw new InvalidOperationException("Failed to compile and show the generated code.");
-                        }
-                        }
-                    }
-                    // Im Reparatur-Flow (showResultInChild == false) tun wir hier nichts.
-                    // Der Code wird erst später in HandleChildError kompiliert und angezeigt.
-                    // --- ENDE DER ÄNDERUNG ---
-
-                    success = true;
-                }
-                catch (Exception e) when (e is not OperationCanceledException)
-                {
-                    IncreaseAttemptCounter(ref currentAttempt);
-
-                    if( structuredResponse == null )
-                    {
-                        // Das wird beim nächsten Durchgang dann wohl auch nichts mehr!
-                        // Am besten abbrechen und die Token sparen!
-                        Logger.LogMessage("The AI service timed out. Operation aborted.", BubbleType.CompletionError);
-                        break;
-                    }
-
-                    string msg = $"Exception Message:\n{e.Message}\n\nInner Exception:\n{e.InnerException?.Message}\n\nStack Trace:\n{e.StackTrace}";
-                    LastErrorMsg = msg;
-
-                    tmpHist = "";
-
-                    if (!string.IsNullOrWhiteSpace(structuredResponse.Code))
-                        baseCodeForPatch = structuredResponse.Code;
-
-                    bool patchRelatedError =
-                        !string.IsNullOrWhiteSpace(structuredResponse.Patch) &&
-                        e.Message.Contains("patch", StringComparison.OrdinalIgnoreCase);
-
-                    string retryInstruction = patchRelatedError
-                        ? $"Your previous PATCH could not be applied ({e.Message}). Return a valid unified diff patch targeting './currentcode.cs' (must include at least one '@@' hunk). If you cannot, return CODE RESPONSE."
-                        : "Please fix the syntax errors in the current code. Keep changes minimal.";
-
-                    prompt = BuildDiffFirstPrompt(
-                        userPrompt: originalPrompt + "\n\n" + retryInstruction,
-                        currentCode: baseCodeForPatch);
-                    // LastErrorMsg wird oben in der Schleife drangehangen!
-
-                    _view.PromptText = originalPrompt;
-
-                    Logger.LogMessageWithMarkdownFormating(LogFormatHelper.StructuredResponseToText(structuredResponse!), BubbleType.CompletionError);
-                    Logger.LogMessage(msg, BubbleType.CompletionError);
-                }
-                catch(OperationCanceledException)
-                {
-                    Logger.LogMessage("Operation cancelled.", BubbleType.CompletionError);
-                    if (showResultInChild)
-                    {
-                        Logger.LogMessage("Restoring last good state.", BubbleType.CompletionError);
-                        await CompileAndShowAsync(VirtualProjectFiles.GetSourceCodeAsStrings());
-
-                        // Wir können auch wegen einem Timeout hier sein!
-                        // Dann springen wir am besten raus!
-                        if (!cancellationToken.IsCancellationRequested)
-                            break;
-                    }
-                }
-            }
-
-            if (success)
-            {
-                var newHistory = oldHistory;
-                newHistory += "\n\n" + originalPrompt;
-                Logger.LogMessage(originalPrompt, BubbleType.Prompt);
-
-                string? newLastCode = AppState.LastCode;
-                if (structuredResponse != null)
-                {
-                    var answerText = LogFormatHelper.StructuredResponseToText(structuredResponse);
-                    newHistory += answerText;
-                    Logger.LogMessageWithMarkdownFormating(answerText, BubbleType.Answer);
-                    newLastCode = structuredResponse.Code;
-                }
-
-                string historyTitle = $"Prompt: {Truncate(ToSingleLine(originalPrompt), 60)}";
-                string historyDescription = "Update";
-                if (structuredResponse != null)
-                {
-                    if (!string.IsNullOrWhiteSpace(structuredResponse.Explanation))
-                        historyDescription = Truncate(ToSingleLine(structuredResponse.Explanation), 240);
-                    else if (!string.IsNullOrWhiteSpace(structuredResponse.Patch))
-                        historyDescription = $"Patch ({structuredResponse.Patch.Split('\n').Length} lines)";
-                    else if (!string.IsNullOrWhiteSpace(structuredResponse.Code))
-                        historyDescription = $"Code ({structuredResponse.Code.Length} chars)";
-
-                    if (structuredResponse.NuGetPackages != null && structuredResponse.NuGetPackages.Count > 0)
-                        historyDescription = $"{historyDescription}\nNuGet: {string.Join(", ", structuredResponse.NuGetPackages)}";
-                }
-                ApplyState(s =>
-                {
-                    s.History = newHistory;
-                    // WICHTIG: Wir müssen den LastCode hier aktualisieren,
-                    // auch wenn wir ihn im Reparaturfall noch nicht angezeigt haben.
-                    s.LastCode = newLastCode ?? s.LastCode;
-                }, title: historyTitle, description: historyDescription, skipIfUnchanged: true);
-
-                VirtualProjectFiles.UpdateFileContent("./currentcode.cs", AppState.LastCode!);
-            }
-            else if (!cancellationToken.IsCancellationRequested)
-            {
-                // --- ZWEITE ÄNDERUNG ---
-                // Im Fehlerfall versuchen wir, den letzten guten Code wiederherzustellen,
-                // aber nur im normalen Flow.
-                if (showResultInChild)
-                {
-                    await CompileAndShowAsync(VirtualProjectFiles.GetSourceCodeAsStrings());
-                }
-                int maxAttempts = Settings?.AiCodeGenerationAttempts ?? 5;
-                Logger.LogMessage(
-                    $"Code generation failed after {currentAttempt} of {maxAttempts} attempts. " +
-                    "The AI was unable to produce valid code. You can try rephrasing your prompt or simplifying your request.",
-                    BubbleType.CompletionError);
-                // --- ENDE DER ÄNDERUNG ---
-            }
-
-            LastErrorMsg = "";
+            await ExecuteGeneralPromptWithPromptToDllAsync(prompt, cancellationToken, showResultInChild);
         }
 
         private async Task ExecuteGeneralPromptWithPromptToDllAsync(string prompt, CancellationToken cancellationToken, bool showResultInChild)
@@ -1653,19 +1372,8 @@ namespace Neo.App
             if (result.Status == AssemblyForgeStatus.PowerShellReady ||
                 result.Status == AssemblyForgeStatus.ConsoleAppReady)
             {
-                var sr = result.StructuredResponse!;
-                var localResponse = new StructuredResponse
-                {
-                    Code = sr.Code,
-                    Patch = sr.Patch,
-                    NuGetPackages = sr.NuGetPackages?.ToList() ?? new(),
-                    Explanation = sr.Explanation,
-                    Chat = sr.Chat,
-                    PowerShellScript = sr.PowerShellScript,
-                    ConsoleAppCode = sr.ConsoleAppCode,
-                };
                 Logger.LogMessage(originalPrompt, BubbleType.Prompt);
-                await ExecuteSingleShotToolAsync(originalPrompt, localResponse, cancellationToken);
+                await ExecuteSingleShotToolAsync(originalPrompt, result.StructuredResponse!, cancellationToken);
                 return;
             }
 
@@ -1726,23 +1434,6 @@ namespace Neo.App
                 throw new InvalidOperationException("Failed to load the control in the child process.");
 
             LastErrorMsg = string.Empty;
-        }
-
-        private static string BuildDiffFirstPrompt(string userPrompt, string currentCode)
-        {
-            userPrompt ??= string.Empty;
-            currentCode ??= string.Empty;
-
-            return "You are editing the existing C# file './currentcode.cs'.\n\n" +
-                   "PATCH REQUIREMENTS: The Patch field must include at least one hunk header line starting with '@@' (prefer numeric unified diff like '@@ -10,7 +10,8 @@').\n\n" +
-                   "CURRENT FILE CONTENT:\n" +
-                   "```csharp\n" +
-                   currentCode +
-                   "\n```\n\n" +
-                   "TASK:\n" +
-                   userPrompt +
-                   "\n\n" +
-                   "Prefer PATCH RESPONSE. If the patch would be extremely large or cannot be made to apply cleanly, use CODE RESPONSE instead.";
         }
 
         private static async Task<(string stdout, string stderr, int exitCode)> RunProcessAsync(string exePath, int timeoutSeconds, CancellationToken cancellationToken)
@@ -2026,11 +1717,6 @@ namespace Neo.App
                 default:
                     return null;
             }
-        }
-
-        public void IncreaseAttemptCounter(ref int currentAttempt)
-        {
-            currentAttempt += 1;
         }
 
         private void HandleDesignerSelectionReceived(DesignerSelectionMessage selection)
