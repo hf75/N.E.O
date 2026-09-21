@@ -24,8 +24,12 @@ namespace Neo.App
         /// </summary>
         string? HotReloadCapabilities { get; }
 
-        /// <summary>Asks the child to patch the running plugin in place. Null: no answer.</summary>
-        Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request);
+        /// <summary>
+        /// Asks the child to patch the running plugin in place. Null: no answer.
+        /// The files among <paramref name="dependencyFiles"/> the child has not received yet (a
+        /// NuGet package added with this change) are streamed to it first.
+        /// </summary>
+        Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request, IEnumerable<string> dependencyFiles);
 
         /// <summary>
         /// Captures a screenshot of the child window. Returns a platform-specific image object

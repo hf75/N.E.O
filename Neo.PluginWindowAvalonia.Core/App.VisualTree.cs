@@ -111,6 +111,16 @@ namespace Neo.PluginWindowAvalonia
                 props["ItemCount"] = cb.ItemCount.ToString();
                 if (cb.SelectedIndex >= 0) props["SelectedIndex"] = cb.SelectedIndex.ToString();
             }
+            else if (control is Avalonia.Controls.TreeViewItem tvi)
+            {
+                if (tvi.Header != null) props["Header"] = tvi.Header.ToString()!;
+                props["IsExpanded"] = tvi.IsExpanded.ToString();
+                props["IsSelected"] = tvi.IsSelected.ToString();
+            }
+            else if (control is Avalonia.Controls.Expander exp)
+            {
+                props["IsExpanded"] = exp.IsExpanded.ToString();
+            }
             else if (control is Avalonia.Controls.Slider sl)
             {
                 props["Value"] = sl.Value.ToString();

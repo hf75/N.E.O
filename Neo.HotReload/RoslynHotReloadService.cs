@@ -41,6 +41,9 @@ internal sealed class RoslynHotReloadService
     /// <summary>Which Roslyn the deltas come from — for logs and bug reports.</summary>
     public static string RoslynVersion => s_api.Value.Version;
 
+    /// <summary>Locates the engine now (reflection over Roslyn's internals) instead of in the first update.</summary>
+    public static void EnsureAvailable() => _ = s_api.Value;
+
     public Task StartSessionAsync(Solution solution, CancellationToken cancellationToken)
         => (Task)s_api.Value.StartSession.Invoke(_service, [solution, cancellationToken])!;
 

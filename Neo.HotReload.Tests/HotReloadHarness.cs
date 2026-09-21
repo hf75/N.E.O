@@ -17,7 +17,13 @@ internal sealed class HotReloadHarness : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "neo_hotreload_tests", Guid.NewGuid().ToString("N")[..10]);
 
+    // simple name → file: the dependencies the "host" has streamed to the "plugin window"
+    private readonly Dictionary<string, string> _dependencies = new(StringComparer.OrdinalIgnoreCase);
+
     public HotReloadSession Session { get; private set; } = null!;
+
+    /// <summary>What the last UI rebuild cleaned up (null: no rebuild yet).</summary>
+    public HotReloadRuntime.RebuildResult? LastRebuild { get; private set; }
     public string DllPath { get; private set; } = "";
     public string AssemblyName { get; private set; } = "";
     public Assembly Plugin { get; private set; } = null!;
@@ -39,8 +45,12 @@ internal sealed class HotReloadHarness : IDisposable
         harness.DllPath = dllPath;
         harness.AssemblyName = assemblyName;
 
-        // Like the plugin windows: from bytes, into a context that cannot be unloaded.
+        // Like the plugin windows: from bytes, into a context that cannot be unloaded, which
+        // resolves dependencies from what the host has sent so far.
         var context = new AssemblyLoadContext(assemblyName, isCollectible: false);
+        context.Resolving += (alc, name) => harness._dependencies.TryGetValue(name.Name ?? "", out var path)
+            ? alc.LoadFromStream(new MemoryStream(File.ReadAllBytes(path)))
+            : null;
         harness.Plugin = context.LoadFromStream(new MemoryStream(await File.ReadAllBytesAsync(dllPath)));
         harness.Root = Activator.CreateInstance(harness.Plugin.GetType("DynamicUserControl", throwOnError: true)!)!;
 
@@ -49,17 +59,24 @@ internal sealed class HotReloadHarness : IDisposable
     }
 
     /// <summary>The real compile agent with its defaults — which are hot-reloadable builds.</summary>
-    public static async Task CompileAsync(string source, string assemblyName, string dllPath)
+    public static Task CompileAsync(string source, string assemblyName, string dllPath, IEnumerable<string>? additionalDlls = null)
+        => CompileAsync([source], assemblyName, dllPath, additionalDlls);
+
+    /// <inheritdoc cref="CompileAsync(string,string,string,IEnumerable{string}?)"/>
+    public static async Task CompileAsync(IReadOnlyList<string> sources, string assemblyName, string dllPath, IEnumerable<string>? additionalDlls = null)
     {
         var agent = new CSharpDllCompileAgent();
         agent.SetOption("CoreDllPath", new List<string> { RuntimeEnvironment.GetRuntimeDirectory() });
-        agent.SetInput("Code", new List<string> { source });
+        agent.SetInput("Code", sources.ToList());
         agent.SetInput("AssemblyName", assemblyName);
         agent.SetInput("DllOutputPath", dllPath);
         agent.SetInput("NuGetDlls", new List<string>());
-        agent.SetInput("AdditionalDlls", new List<string>());
+        agent.SetInput("AdditionalDlls", additionalDlls?.ToList() ?? new List<string>());
         await agent.ExecuteAsync();
     }
+
+    /// <summary>What the hosts do before a request that brings a new package: hand its assembly to the plugin window.</summary>
+    public void ProvideDependency(string path) => _dependencies[Path.GetFileNameWithoutExtension(path)] = path;
 
     /// <summary>What a plugin window does with a request (without a UI toolkit).</summary>
     public HotReloadResultMessage ApplyLikeAPluginWindow(HotReloadRequest request)
@@ -67,7 +84,7 @@ internal sealed class HotReloadHarness : IDisposable
         request = Json.FromJson<HotReloadRequest>(Json.ToJson(request))!; // as over the pipe
         var applied = HotReloadRuntime.Apply(Plugin, Root, request);
         if (request.RebuildUi)
-            HotReloadRuntime.InvokeRebuild(Root, request.RebuildMethodName!);
+            LastRebuild = HotReloadRuntime.Rebuild(Root, request.RebuildMethodName!);
         return new HotReloadResultMessage(true, Details: applied.ToString());
     }
 
@@ -81,7 +98,7 @@ internal sealed class HotReloadHarness : IDisposable
         var request = Json.FromJson<HotReloadRequest>(Json.ToJson(update.Request!))!;
         var applied = HotReloadRuntime.Apply(Plugin, Root, request);
         if (request.RebuildUi)
-            HotReloadRuntime.InvokeRebuild(Root, request.RebuildMethodName!);
+            LastRebuild = HotReloadRuntime.Rebuild(Root, request.RebuildMethodName!);
         return (update, applied);
     }
 

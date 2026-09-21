@@ -797,12 +797,14 @@ namespace Neo.PluginWindowWPF
         private bool TryBuildBundleFromAssets(
             string? desiredMainAssemblyFileName,
             out byte[]? mainAssemblyBytes,
-            out Dictionary<string, byte[]> managedByFullName,
-            out Dictionary<string, byte[]> nativeByBasename)
+            out IDictionary<string, byte[]> managedByFullName,
+            out IDictionary<string, byte[]> nativeByBasename)
         {
             mainAssemblyBytes = null;
-            managedByFullName = new(_managedByFullName, StringComparer.OrdinalIgnoreCase);
-            nativeByBasename = new(_nativeByBasename, StringComparer.OrdinalIgnoreCase);
+            // The live collections, not copies: the loaded plugin must also find dependencies that
+            // arrive later — a hot reload that brings a new package streams them before the update.
+            managedByFullName = _managedByFullName;
+            nativeByBasename = _nativeByBasename;
 
             if (!string.IsNullOrWhiteSpace(desiredMainAssemblyFileName))
             {

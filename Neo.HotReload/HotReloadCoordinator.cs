@@ -12,24 +12,26 @@ public sealed record HotReloadAttempt(bool Applied, string Message);
 ///
 /// <code>
 /// // new code was compiled to newDllPath
-/// var attempt = await hotReload.TryAsync(newDllPath, request => child.HotReloadAsync(request));
+/// var attempt = await hotReload.TryAsync(newDllPath, request => child.HotReloadAsync(request, dependencyFiles));
 /// if (!attempt.Applied)
 /// {
 ///     …unload + load newDllPath as before…
-///     await hotReload.StartAsync(newDllPath, child.HotReloadCapabilities);
+///     _ = hotReload.StartAsync(newDllPath, child.HotReloadCapabilities);
 /// }
 /// </code>
 ///
 /// Hosts only pass DLL paths around: sources and references of a build are read from the
-/// <see cref="HotReloadBaselineFile"/> the compile agent writes next to the DLL. Nothing here
-/// throws — hot reload is an optimisation, and every failure ends in "reload it the old way".
+/// <see cref="HotReloadBaselineFile"/> the compile agent writes next to the DLL. The child needs
+/// every dependency of the new build before the update is applied — a new NuGet package is
+/// patched in like any other change — so <c>sendToChild</c> streams dependency files it has not
+/// sent yet. Nothing here throws: hot reload is an optimisation, and every failure ends in
+/// "reload it the old way".
 /// </summary>
 public sealed class HotReloadCoordinator : IDisposable
 {
     private readonly HotReloadOptions _options;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private HotReloadSession? _session;
-    private HashSet<string> _references = new(StringComparer.OrdinalIgnoreCase);
     private int _starting;
 
     public HotReloadCoordinator(HotReloadOptions? options = null) => _options = options ?? new HotReloadOptions();
@@ -41,12 +43,27 @@ public sealed class HotReloadCoordinator : IDisposable
     public bool IsActive => _session != null || Volatile.Read(ref _starting) > 0;
 
     /// <summary>
-    /// Call after <paramref name="loadedDllPath"/> was loaded into the plugin window.
+    /// Call right after <paramref name="loadedDllPath"/> was loaded into the plugin window. The
+    /// build is copied before this method first yields, so the host may compile over the path
+    /// immediately; the rest (Roslyn's session) may run in the background — fire and forget is
+    /// fine, <see cref="TryAsync"/> waits for it.
     /// </summary>
     /// <param name="childCapabilities">From the window's Hello message; null means that window cannot hot reload.</param>
     /// <returns>Null when hot reload is armed, otherwise why it is not.</returns>
     public async Task<string?> StartAsync(string loadedDllPath, string? childCapabilities, CancellationToken cancellationToken = default)
     {
+        HotReloadSnapshot? snapshot = null;
+        string? problem = null;
+        if (string.IsNullOrWhiteSpace(childCapabilities))
+            problem = "the plugin window was started without hot reload support";
+        else if (HotReloadBaseline.TryLoad(loadedDllPath) is not { } baseline)
+            problem = "the DLL was not built for hot reload";
+        else
+        {
+            try { snapshot = HotReloadSession.TakeSnapshot(baseline); }
+            catch (Exception ex) { problem = "hot reload could not be prepared: " + ex.Message; }
+        }
+
         Interlocked.Increment(ref _starting);
         try
         {
@@ -55,20 +72,17 @@ public sealed class HotReloadCoordinator : IDisposable
         catch
         {
             Interlocked.Decrement(ref _starting);
+            if (snapshot != null) HotReloadSession.TryDeleteDirectory(snapshot.Directory);
             throw;
         }
         try
         {
             ResetCore();
-            if (string.IsNullOrWhiteSpace(childCapabilities))
-                return "the plugin window was started without hot reload support";
+            if (snapshot == null) return problem;
 
-            var baseline = HotReloadBaseline.TryLoad(loadedDllPath);
-            if (baseline == null)
-                return "the DLL was not built for hot reload";
-
-            _session = await HotReloadSession.StartAsync(baseline, childCapabilities, _options, cancellationToken).ConfigureAwait(false);
-            _references = new HashSet<string>(baseline.ReferencePaths, StringComparer.OrdinalIgnoreCase);
+            // Roslyn's workspace and the first analysis are CPU work; not on the caller's (UI) thread.
+            _session = await Task.Run(() => HotReloadSession.StartAsync(snapshot, childCapabilities!, _options, cancellationToken),
+                cancellationToken).ConfigureAwait(false);
             return null;
         }
         catch (Exception ex)
@@ -86,7 +100,10 @@ public sealed class HotReloadCoordinator : IDisposable
     /// <summary>
     /// Tries to turn the running app into the build at <paramref name="newDllPath"/> without reloading it.
     /// </summary>
-    /// <param name="sendToChild">Sends the request to the plugin window and returns its answer (null: no answer).</param>
+    /// <param name="sendToChild">
+    /// Streams the dependency files the child has not received yet, then sends the request and
+    /// returns the child's answer (null: no answer).
+    /// </param>
     public async Task<HotReloadAttempt> TryAsync(string newDllPath,
         Func<HotReloadRequest, Task<HotReloadResultMessage?>> sendToChild, CancellationToken cancellationToken = default)
     {
@@ -97,12 +114,13 @@ public sealed class HotReloadCoordinator : IDisposable
                 return new HotReloadAttempt(false, "no hot reload session for the running app");
 
             var build = HotReloadBaselineFile.TryRead(newDllPath);
-            if (build == null)
+            if (build == null || build.SourcePaths.Count != build.SourceTexts.Count)
                 return Abandon("the new build carries no hot reload information");
-            if (!_references.SetEquals(build.ReferencePaths))
-                return Abandon("the referenced assemblies changed (a package was added or removed)");
 
-            var update = await _session.CreateUpdateAsync(build.SourceTexts, cancellationToken).ConfigureAwait(false);
+            var sources = build.SourcePaths.Zip(build.SourceTexts, (path, text) => new HotReloadSource(path, text)).ToList();
+            var session = _session;
+            var update = await Task.Run(() => session.CreateUpdateAsync(sources, build.ReferencePaths, cancellationToken),
+                cancellationToken).ConfigureAwait(false);
             switch (update.Status)
             {
                 case HotReloadStatus.NoChanges:
@@ -116,8 +134,10 @@ public sealed class HotReloadCoordinator : IDisposable
             if (answer is not { Success: true })
                 return Abandon("the plugin window could not apply the update" + (answer?.Error is { } error ? ": " + error : " (no answer)"));
 
+            var packages = update.AddedReferences.Count == 0 ? ""
+                : " New dependencies: " + string.Join(", ", update.AddedReferences.Select(Path.GetFileName)) + ".";
             return new HotReloadAttempt(true,
-                $"Hot reload (generation {_session.Generation}): the running app was patched in place, its state is preserved. {answer.Details}");
+                $"Hot reload (generation {_session.Generation}): the running app was patched in place, its state is preserved. {answer.Details}.{packages}");
         }
         catch (Exception ex)
         {

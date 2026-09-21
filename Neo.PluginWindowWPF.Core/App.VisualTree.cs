@@ -99,6 +99,16 @@ namespace Neo.PluginWindowWPF
                 props["ItemCount"] = cb.Items.Count.ToString();
                 if (cb.SelectedIndex >= 0) props["SelectedIndex"] = cb.SelectedIndex.ToString();
             }
+            else if (element is TreeViewItem tvi)
+            {
+                if (tvi.Header != null) props["Header"] = tvi.Header.ToString()!;
+                props["IsExpanded"] = tvi.IsExpanded.ToString();
+                props["IsSelected"] = tvi.IsSelected.ToString();
+            }
+            else if (element is Expander exp)
+            {
+                props["IsExpanded"] = exp.IsExpanded.ToString();
+            }
             else if (element is CheckBox chk)
             {
                 props["IsChecked"] = chk.IsChecked?.ToString() ?? "null";

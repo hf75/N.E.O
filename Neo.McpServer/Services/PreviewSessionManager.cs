@@ -34,6 +34,9 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         _loopProtection = loopProtection;
         _liveMcpToolRegistry = liveMcpToolRegistry;
         _liveMcpResourceRegistry = liveMcpResourceRegistry;
+
+        // Roslyn's workspace services take a moment to compose; do it now, not with the first app.
+        _ = Neo.HotReload.HotReloadSession.PrewarmAsync();
     }
 
     // ── Channel support: push events to Claude Code ──
@@ -126,6 +129,12 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
         /// <summary>How the last build got into the window ("Hot reload …" or why it was a full reload).</summary>
         public string? LastLoadMessage { get; set; }
+
+        /// <summary>
+        /// Dependencies this child process has received (it keeps them until it exits): a hot
+        /// reload that brings a new NuGet package streams only what is new.
+        /// </summary>
+        public HashSet<string> SentDependencies { get; } = new(StringComparer.Ordinal);
 
         public bool IsRunning => ChildProcess is { HasExited: false } && PipeStream is { IsConnected: true };
 
@@ -363,7 +372,10 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
             if (dependencyDlls != null)
                 foreach (var (name, bytes) in dependencyDlls)
+                {
                     await SendBlobAsync(s, name, bytes, ct);
+                    lock (s.SentDependencies) s.SentDependencies.Add(DependencyKey(name, bytes));
+                }
 
             await SendBlobAsync(s, mainDllName, mainDllBytes, ct);
 
@@ -398,13 +410,24 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     /// without reloading it — the instance and its state survive. False (with the reason) means:
     /// load the new build the usual way, then call <see cref="StartHotReloadSessionAsync"/>.
     /// </summary>
-    public async Task<Neo.HotReload.HotReloadAttempt> TryHotReloadAsync(string newDllPath, CancellationToken ct = default, string? windowId = null)
+    /// <param name="dependencyDlls">The build's dependencies; those the window has not received yet (a new NuGet package) are sent first.</param>
+    public async Task<Neo.HotReload.HotReloadAttempt> TryHotReloadAsync(string newDllPath, CancellationToken ct = default, string? windowId = null,
+        Dictionary<string, byte[]>? dependencyDlls = null)
     {
         var s = GetRunningSession(windowId);
         if (s == null) return new Neo.HotReload.HotReloadAttempt(false, "no preview window is running");
 
         var attempt = await s.HotReload.TryAsync(newDllPath, async request =>
         {
+            // A package added with this change: its assemblies have to be there before the
+            // patched code first touches them.
+            foreach (var (name, bytes) in dependencyDlls ?? [])
+            {
+                bool isNew;
+                lock (s.SentDependencies) isNew = s.SentDependencies.Add(DependencyKey(name, bytes));
+                if (isNew) await SendBlobAsync(s, name, bytes, ct);
+            }
+
             var r = await SendRequestAsync(windowId, IpcTypes.HotReload, Json.ToJson(request), 30, ct);
             return r?.Type == IpcTypes.HotReloadResult ? Json.FromJson<HotReloadResultMessage>(r.PayloadJson) : null;
         }, ct);
@@ -439,7 +462,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         s.LastLoadMessage = null;
         if (dllPath != null && s.HotReload.IsActive)
         {
-            var attempt = await TryHotReloadAsync(dllPath, ct, windowId);
+            var attempt = await TryHotReloadAsync(dllPath, ct, windowId, dependencyDlls);
             s.LastLoadMessage = attempt.Message;
             if (attempt.Applied) return true;
         }
@@ -455,6 +478,10 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     /// <summary>"Hot reload …" / "Hot reload not possible — …" for the last build sent to the window, if any.</summary>
     public string? GetLastLoadMessage(string? windowId = null)
         => GetRunningSession(windowId)?.LastLoadMessage;
+
+    // Same name, same content.
+    private static string DependencyKey(string name, byte[] bytes)
+        => name + "|" + bytes.Length + "|" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes), 0, 8);
 
     // ========================================
     // IPC Request-Response methods

@@ -116,28 +116,44 @@ namespace Neo.Shared
             return new ApplyResult(request.Deltas.Count, objects, fields, helpers);
         }
 
-        /// <summary>
-        /// Calls the app's UI build method again. Returns what it returned — apps written as
-        /// <c>Content = BuildUI();</c> hand the new root back instead of assigning it themselves.
-        /// </summary>
-        public static object? InvokeRebuild(object root, string methodName)
-            => InvokeRebuild(root, methodName, out _);
+        /// <param name="NewRoot">What the build method returned — apps written as <c>Content = BuildUI();</c> hand the new root back instead of assigning it themselves.</param>
+        /// <param name="StoppedTimers">Timers the build method replaced (see <see cref="Rebuild"/>).</param>
+        /// <param name="RemovedSubscriptions">Old event subscriptions the build method made again (see <see cref="EventSubscriptionSnapshot"/>).</param>
+        public sealed record RebuildResult(object? NewRoot, int StoppedTimers, int RemovedSubscriptions)
+        {
+            /// <summary>", 1 replaced timer(s) stopped, 2 duplicate event subscription(s) removed" — empty when there was nothing to clean up.</summary>
+            public string Cleanup
+                => (StoppedTimers > 0 ? $", {StoppedTimers} replaced timer(s) stopped" : "") +
+                   (RemovedSubscriptions > 0 ? $", {RemovedSubscriptions} duplicate event subscription(s) removed" : "");
+        }
 
-        /// <param name="stoppedTimers">
-        /// Timers the build method replaced. Apps often start a timer while building the UI and keep
-        /// it in a field; building again stores a new timer there, and the old one — still enabled,
-        /// still rooted by its dispatcher or thread pool — would keep ticking alongside it. A timer
-        /// field that holds a different object afterwards has its old timer stopped and disposed.
-        /// </param>
-        public static object? InvokeRebuild(object root, string methodName, out int stoppedTimers)
+        /// <summary>Calls the app's UI build method again and returns what it returned.</summary>
+        public static object? InvokeRebuild(object root, string methodName) => Rebuild(root, methodName).NewRoot;
+
+        /// <summary>
+        /// Calls the app's UI build method again and cleans up after it. Building twice leaves
+        /// behind what only building once gets right:
+        /// <list type="bullet">
+        ///   <item>Timers. Apps often start a timer while building the UI and keep it in a field;
+        ///         building again stores a new timer there, and the old one — still enabled, still
+        ///         rooted by its dispatcher or thread pool — would keep ticking alongside it. A timer
+        ///         field that holds a different object afterwards has its old timer stopped and disposed.</item>
+        ///   <item>Event subscriptions to objects that outlive the rebuild: the old one of each pair
+        ///         is removed (<see cref="EventSubscriptionSnapshot"/>).</item>
+        /// </list>
+        /// </summary>
+        /// <param name="routedEvents">The toolkit's routed-event handlers; null covers plain .NET events only.</param>
+        public static RebuildResult Rebuild(object root, string methodName, IRoutedEventHandlers? routedEvents = null)
         {
             var method = FindParameterless(root.GetType(), methodName)
                 ?? throw new MissingMethodException(root.GetType().FullName, methodName);
 
             var timersBefore = TimerFields(root).Select(f => (Field: f, Timer: f.GetValue(root))).Where(t => t.Timer != null).ToList();
+            var subscriptions = EventSubscriptionSnapshot.Capture(root, routedEvents);
+
             var result = method.Invoke(root, null);
 
-            stoppedTimers = 0;
+            int stoppedTimers = 0;
             foreach (var (field, oldTimer) in timersBefore)
             {
                 if (ReferenceEquals(field.GetValue(root), oldTimer)) continue;
@@ -149,7 +165,8 @@ namespace Neo.Shared
                 }
                 catch { /* a timer that cannot be stopped keeps running, as before */ }
             }
-            return result;
+
+            return new RebuildResult(result, stoppedTimers, subscriptions.RemoveReplaced());
         }
 
         private static IEnumerable<FieldInfo> TimerFields(object root)

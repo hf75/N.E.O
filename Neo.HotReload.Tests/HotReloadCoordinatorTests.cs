@@ -99,6 +99,55 @@ public class HotReloadCoordinatorTests
     }
 
     [Fact]
+    public async Task A_package_the_change_adds_is_patched_in_instead_of_restarting_the_app()
+    {
+        // A library that plays the new NuGet package.
+        var libraryDirectory = Path.Combine(Path.GetTempPath(), "neo_hotreload_tests", "lib_" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(libraryDirectory);
+        var libraryName = "HotReloadLibrary_" + Guid.NewGuid().ToString("N")[..8];
+        var libraryPath = Path.Combine(libraryDirectory, libraryName + ".dll");
+        await HotReloadHarness.CompileAsync(
+            "namespace Library { public static class Greeter { public static string Greet(string who) => \"Hello \" + who; } }",
+            libraryName, libraryPath);
+
+        using var app = await HotReloadHarness.StartAsync(V1);
+        using var coordinator = new HotReloadCoordinator();
+        (await coordinator.StartAsync(app.DllPath, HotReloadRuntime.Capabilities)).Should().BeNull();
+        app.Call("Click");
+
+        var v2 = V1.Replace("\"v1 clicks=\" + Clicks", "Library.Greeter.Greet(\"v2\") + \" clicks=\" + Clicks");
+        await HotReloadHarness.CompileAsync(v2, app.AssemblyName, app.DllPath, additionalDlls: [libraryPath]);
+
+        var attempt = await coordinator.TryAsync(app.DllPath, request =>
+        {
+            app.ProvideDependency(libraryPath); // the hosts stream new dependencies before the request
+            return Task.FromResult<HotReloadResultMessage?>(app.ApplyLikeAPluginWindow(request));
+        });
+
+        attempt.Applied.Should().BeTrue(attempt.Message);
+        attempt.Message.Should().Contain(libraryName + ".dll", "the log names the dependency that came with the update");
+        app.Call("Describe").Should().Be("Hello v2 clicks=1", "the patched code runs against the new library, the click survived");
+    }
+
+    [Fact]
+    public async Task A_type_in_a_new_source_file_is_patched_in_too()
+    {
+        using var app = await HotReloadHarness.StartAsync(V1);
+        using var coordinator = new HotReloadCoordinator();
+        (await coordinator.StartAsync(app.DllPath, HotReloadRuntime.Capabilities)).Should().BeNull();
+        app.Call("Click");
+
+        var v2 = V1.Replace("\"v1 clicks=\" + Clicks", "Formatter.Format(Clicks)");
+        const string newFile = "public static class Formatter { public static string Format(int clicks) => \"v2 clicks=\" + clicks; }";
+        await HotReloadHarness.CompileAsync([v2, newFile], app.AssemblyName, app.DllPath);
+
+        var attempt = await coordinator.TryAsync(app.DllPath, request => Task.FromResult<HotReloadResultMessage?>(app.ApplyLikeAPluginWindow(request)));
+
+        attempt.Applied.Should().BeTrue(attempt.Message);
+        app.Call("Describe").Should().Be("v2 clicks=1");
+    }
+
+    [Fact]
     public async Task Whatever_goes_wrong_ends_in_a_full_reload_never_in_an_exception()
     {
         using var app = await HotReloadHarness.StartAsync(V1);

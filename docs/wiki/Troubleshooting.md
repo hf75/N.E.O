@@ -43,7 +43,7 @@
 
 ## The app lost its state after a change
 
-Normally the next prompt patches the running app ([[Hot Reload]]). When that is not possible, the chat says `Hot reload not possible — <reason>` and the app is restarted the old way. Typical reasons: a change Roslyn cannot patch into running code (the message names the `ENC…` rule), a newly added NuGet package, a constructor that was rewritten, or UI code in an app without a re-runnable UI method (`BuildUi()`). Ask the AI to keep the UI in `BuildUi()` and the data in fields — the next changes will then keep the state.
+Normally the next prompt patches the running app ([[Hot Reload]]). When that is not possible, the chat says `Hot reload not possible — <reason>` and the app is restarted the old way. Typical reasons: a change Roslyn cannot patch into running code (the message names the `ENC…` rule), a NuGet package switched to another version (newly added packages are patched in), a constructor that was rewritten, or UI code in an app without a re-runnable UI method (`BuildUi()`). Ask the AI to keep the UI in `BuildUi()` and the data in fields — the next changes will then keep the state.
 
 ## Preview Panel is Empty
 

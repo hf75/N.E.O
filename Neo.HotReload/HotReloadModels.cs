@@ -69,6 +69,9 @@ public enum HotReloadStatus
 /// <param name="Reason">Human-readable, goes into the host's log and into the MCP tool result.</param>
 public sealed record HotReloadUpdate(HotReloadStatus Status, HotReloadRequest? Request, string? Reason)
 {
+    /// <summary>References the new version has and the running one had not (a new NuGet package).</summary>
+    public IReadOnlyList<string> AddedReferences { get; init; } = [];
+
     public static HotReloadUpdate NotPossible(string reason) => new(HotReloadStatus.NotPossible, null, reason);
 }
 

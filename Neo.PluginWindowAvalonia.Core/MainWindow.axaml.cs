@@ -151,13 +151,12 @@ namespace Neo.PluginWindowAvalonia
             if (request.RebuildUi && !string.IsNullOrEmpty(request.RebuildMethodName))
             {
                 // "void BuildUi()" assigns Content itself, "Content = BuildUI();" hands the new root back.
-                if (HotReloadRuntime.InvokeRebuild(control, request.RebuildMethodName, out var stoppedTimers) is Control newRoot &&
-                    !ReferenceEquals(newRoot, control))
+                var rebuild = HotReloadRuntime.Rebuild(control, request.RebuildMethodName, RoutedEventHandlers.Instance);
+                if (rebuild.NewRoot is Control newRoot && !ReferenceEquals(newRoot, control))
                     control.Content = newRoot;
 
                 int restored = uiState!.Restore(control);
-                ui = $", UI rebuilt ({restored} of {uiState.Count} UI value(s) carried over" +
-                     (stoppedTimers > 0 ? $", {stoppedTimers} replaced timer(s) stopped)" : ")");
+                ui = $", UI rebuilt ({restored} of {uiState.Count} UI value(s) carried over{rebuild.Cleanup})";
 
                 // Scroll extents and virtualized items settle with the next layout pass.
                 Dispatcher.UIThread.Post(() => { try { uiState.Restore(control); } catch { } }, DispatcherPriority.Loaded);

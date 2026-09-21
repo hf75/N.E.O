@@ -127,6 +127,8 @@ namespace Neo.App
             // Plugin windows inherit this process' environment. Edit-and-continue has to be switched on
             // before their runtime starts; for this process it changes nothing (it is already running).
             Environment.SetEnvironmentVariable(Neo.Shared.HotReloadRuntime.EnvironmentVariable, Neo.Shared.HotReloadRuntime.EnvironmentValue);
+            // Roslyn's workspace services take a moment to compose; do it now, not with the first app.
+            _ = Neo.HotReload.HotReloadSession.PrewarmAsync();
 
             _view = view;
             _platformServices = platformServices ?? throw new ArgumentNullException(nameof(platformServices));

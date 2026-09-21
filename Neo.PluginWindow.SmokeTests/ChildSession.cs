@@ -91,20 +91,24 @@ internal sealed class ChildSession : IAsyncDisposable
     /// <summary>Streams the plugin DLL as a blob and asks the child to load it.</summary>
     public async Task LoadAsync(string pluginDllPath)
     {
-        var bytes = await File.ReadAllBytesAsync(pluginDllPath);
         var name = Path.GetFileName(pluginDllPath);
+        await SendFileAsync(pluginDllPath);
+        await SendAsync(new IpcEnvelope(IpcTypes.LoadControl, Guid.NewGuid().ToString("N"),
+            Json.ToJson(new LoadControlRequest(name, "DynamicUserControl", new List<string>()))));
+    }
 
+    /// <summary>Streams a file as a blob, as the hosts do for the plugin and its dependencies.</summary>
+    public async Task SendFileAsync(string path)
+    {
+        var bytes = await File.ReadAllBytesAsync(path);
         using var ms = new MemoryStream(bytes, writable: false);
         await _sendLock.WaitAsync();
         try
         {
-            await _messenger.SendBlobAsync(Guid.NewGuid(), new BlobStartMeta(Name: name, Length: bytes.Length),
+            await _messenger.SendBlobAsync(Guid.NewGuid(), new BlobStartMeta(Name: Path.GetFileName(path), Length: bytes.Length),
                 read: async (buffer, token) => await ms.ReadAsync(buffer, token), ct: _cts.Token);
         }
         finally { _sendLock.Release(); }
-
-        await SendAsync(new IpcEnvelope(IpcTypes.LoadControl, Guid.NewGuid().ToString("N"),
-            Json.ToJson(new LoadControlRequest(name, "DynamicUserControl", new List<string>()))));
     }
 
     public Task UnloadAsync()
@@ -128,8 +132,13 @@ internal sealed class ChildSession : IAsyncDisposable
         }
     }
 
-    public async Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request)
+    public Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request) => HotReloadAsync(request, []);
+
+    /// <summary>Like the hosts: dependencies the child has not received yet go first, then the request.</summary>
+    public async Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request, IEnumerable<string> newDependencies)
     {
+        foreach (var file in newDependencies)
+            await SendFileAsync(file);
         var reply = await RequestAsync(IpcTypes.HotReload, Json.ToJson(request));
         return reply?.Type == IpcTypes.HotReloadResult ? Json.FromJson<HotReloadResultMessage>(reply.PayloadJson) : null;
     }

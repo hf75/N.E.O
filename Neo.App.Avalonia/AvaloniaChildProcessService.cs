@@ -36,6 +36,9 @@ namespace Neo.App
         private CrossplatformSettings _crossplatformSettings = new();
         private int _sessionCounter;
 
+        // What the current child process has received (it keeps every assembly until it exits).
+        private readonly SentFileLedger _sentFiles = new();
+
         public bool HasLoadedControl => _hasLoadedControl;
 
         public event Func<CrashReason, ErrorMessage, Task>? ChildProcessCrashed;
@@ -89,6 +92,7 @@ namespace Neo.App
             _pipeCts = new CancellationTokenSource();
             _sessionCounter++;
             _isShuttingDown = false;
+            _sentFiles.Clear(); // a new process that has received nothing yet
 
             var pipeName = $"neo_avalonia_{Environment.ProcessId}_{_sessionCounter}";
 
@@ -370,7 +374,10 @@ namespace Neo.App
 
                 // Stream all DLLs as blobs
                 foreach (var dll in allDlls)
+                {
                     await SendFileAsBlobAsync(dll, ct);
+                    _sentFiles.MarkSent(dll);
+                }
 
                 // Send LoadControl command
                 var req = new LoadControlRequest(
@@ -434,13 +441,23 @@ namespace Neo.App
 
         public string? HotReloadCapabilities { get; private set; }
 
-        public async Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request)
+        public async Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request, IEnumerable<string> dependencyFiles)
         {
+            if (_messenger == null || _pipeStream == null || !_pipeStream.IsConnected) return null;
+
             var correlationId = Guid.NewGuid().ToString("N");
             var pending = new TaskCompletionSource<HotReloadResultMessage?>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pendingHotReloads[correlationId] = pending;
             try
             {
+                // A package added with this change: its assemblies have to be there before the
+                // patched code first touches them.
+                foreach (var file in _sentFiles.Unsent(dependencyFiles))
+                {
+                    await SendFileAsBlobAsync(file, _pipeCts.Token);
+                    _sentFiles.MarkSent(file);
+                }
+
                 await SafeSendControlAsync(new IpcEnvelope(IpcTypes.HotReload, correlationId, Json.ToJson(request)));
                 var finished = await Task.WhenAny(pending.Task, Task.Delay(TimeSpan.FromSeconds(30)));
                 return finished == pending.Task ? await pending.Task : null;

@@ -212,6 +212,121 @@ public class HotReloadSessionTests
     }
 
     [Fact]
+    public async Task Subscriptions_the_ui_method_makes_again_fire_once_after_the_rebuild()
+    {
+        // BuildUi subscribes to things that outlive the rebuild: an object in a field, a collection,
+        // a static event. Building again subscribes again — without cleanup every handler would
+        // then run twice.
+        const string v1 = """
+            using System;
+            using System.Collections.ObjectModel;
+
+            public class Ticker
+            {
+                public event EventHandler? Tick;
+                public void Fire() => Tick?.Invoke(this, EventArgs.Empty);
+            }
+
+            public static class Bus
+            {
+                public static event Action? Changed;
+                public static void Raise() => Changed?.Invoke();
+            }
+
+            public class DynamicUserControl
+            {
+                private readonly Ticker _ticker = new();
+                private readonly ObservableCollection<string> _items = new();
+                public int Ticks, Changes, BusHits;
+                public string Title = "";
+
+                public DynamicUserControl() { BuildUi(); }
+
+                private void BuildUi()
+                {
+                    Title = "v1";
+                    _ticker.Tick += OnTick;
+                    _items.CollectionChanged += (s, e) => Changes++;
+                    Bus.Changed += () => BusHits++;
+                }
+
+                private void OnTick(object? sender, EventArgs e) => Ticks++;
+
+                public void Fire()
+                {
+                    _ticker.Fire();
+                    _items.Add("x");
+                    Bus.Raise();
+                }
+            }
+            """;
+
+        using var app = await HotReloadHarness.StartAsync(v1);
+        app.Call("Fire");
+
+        var (update, _) = await app.UpdateAsync(v1.Replace("Title = \"v1\";", "Title = \"v2\";"));
+
+        update.Status.Should().Be(HotReloadStatus.Ready, update.Reason);
+        update.Request!.RebuildUi.Should().BeTrue();
+        app.Get<string>("Title").Should().Be("v2");
+        app.LastRebuild!.RemovedSubscriptions.Should().Be(3, "one old subscription per event the rebuild subscribed to again");
+
+        app.Call("Fire");
+        app.Get<int>("Ticks").Should().Be(2);
+        app.Get<int>("Changes").Should().Be(2);
+        app.Get<int>("BusHits").Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Handlers_subscribed_outside_the_ui_method_are_left_alone()
+    {
+        // The constructor subscribes once, the UI method once more; after the rebuild both are
+        // still there — exactly what a fresh start would have.
+        const string v1 = """
+            using System;
+
+            public class Ticker
+            {
+                public event EventHandler? Tick;
+                public void Fire() => Tick?.Invoke(this, EventArgs.Empty);
+            }
+
+            public class DynamicUserControl
+            {
+                private readonly Ticker _ticker = new();
+                public int Ticks;
+                public string Title = "";
+
+                public DynamicUserControl()
+                {
+                    _ticker.Tick += OnTick;
+                    BuildUi();
+                }
+
+                private void BuildUi()
+                {
+                    Title = "v1";
+                    _ticker.Tick += OnTick;
+                }
+
+                private void OnTick(object? sender, EventArgs e) => Ticks++;
+
+                public void Fire() => _ticker.Fire();
+            }
+            """;
+
+        using var app = await HotReloadHarness.StartAsync(v1);
+        app.Call("Fire");
+        app.Get<int>("Ticks").Should().Be(2);
+
+        var (update, _) = await app.UpdateAsync(v1.Replace("Title = \"v1\";", "Title = \"v2\";"));
+        update.Status.Should().Be(HotReloadStatus.Ready, update.Reason);
+
+        app.Call("Fire");
+        app.Get<int>("Ticks").Should().Be(4, "two subscriptions before, two after");
+    }
+
+    [Fact]
     public async Task Generations_stack_up()
     {
         using var app = await HotReloadHarness.StartAsync(V1);

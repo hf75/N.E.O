@@ -166,7 +166,8 @@ namespace Neo.App
             if (!ChildProcessService.HasLoadedControl)
                 await _hotReload.ResetAsync();
             bool couldHotReload = _hotReload.IsActive;
-            var attempt = await _hotReload.TryAsync(compiledUserControlDllPath, ChildProcessService.HotReloadAsync);
+            var attempt = await _hotReload.TryAsync(compiledUserControlDllPath, request => ChildProcessService.HotReloadAsync(request,
+                (AppState.NuGetDlls ?? new List<string>()).Concat(AdditionalDlls).ToList()));
             if (attempt.Applied)
             {
                 Logger.LogMessage(attempt.Message, BubbleType.Info);
@@ -196,10 +197,9 @@ namespace Neo.App
             }
 
             // Arm hot reload for the next change. The build lies at a path the next compile
-            // overwrites, so the snapshot has to be taken now, before anyone compiles again.
-            var hotReloadProblem = await _hotReload.StartAsync(compiledUserControlDllPath, ChildProcessService.HotReloadCapabilities);
-            if (hotReloadProblem != null)
-                Debug.WriteLine("[HotReload] " + hotReloadProblem);
+            // overwrites: StartAsync copies it before it returns. Roslyn's session is prepared
+            // in the background — the app is shown right away, and the next change waits for it.
+            _ = ArmHotReloadAsync(compiledUserControlDllPath);
 
             await _view.HideFrostedSnapshotAsync();
             ChildProcessService.ShowChild();
@@ -207,6 +207,13 @@ namespace Neo.App
 
             LastErrorMsg = "";
             return true;
+        }
+
+        private async Task ArmHotReloadAsync(string loadedDllPath)
+        {
+            var problem = await _hotReload.StartAsync(loadedDllPath, ChildProcessService.HotReloadCapabilities);
+            if (problem != null)
+                Debug.WriteLine("[HotReload] " + problem);
         }
 
         private async Task<bool> CompileAndShowAsync(List<string> codes)

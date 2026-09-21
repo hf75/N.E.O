@@ -351,9 +351,11 @@ namespace Neo.PluginWindowAvalonia
                             ));
 
                             // Emit the Live-MCP manifest so the host can route invoke_method etc.
-                            // Fire-and-forget — failures are logged but never block the load.
+                            // Awaited (it never throws, failures are logged): frames are handled one
+                            // after the other, so an invoke_method that follows the load right away
+                            // finds the manifest instead of "no UserControl loaded".
                             if (PluginHost.Options.EnableMcpHostFeatures)
-                                _ = SendLiveMcpManifestAsync();
+                                await SendLiveMcpManifestAsync();
                         }
                         catch (Exception ex)
                         {
@@ -494,9 +496,10 @@ namespace Neo.PluginWindowAvalonia
                             result = new HotReloadResultMessage(true, Details: details);
                             await SendLogAsync(LogLevel.Info, "Hot reload applied: " + details, "Child");
 
-                            // Callables and observables may have changed with the code.
+                            // Callables and observables may have changed with the code. Before the
+                            // result goes out, so the host knows the new ones when it hears "applied".
                             if (PluginHost.Options.EnableMcpHostFeatures)
-                                _ = SendLiveMcpManifestAsync();
+                                await SendLiveMcpManifestAsync();
                         }
                         catch (Exception ex)
                         {
@@ -1014,12 +1017,14 @@ namespace Neo.PluginWindowAvalonia
         private bool TryBuildBundleFromAssets(
             string? desiredMainAssemblyFileName,
             out byte[]? mainAssemblyBytes,
-            out Dictionary<string, byte[]> managedByFullName,
-            out Dictionary<string, byte[]> nativeByBasename)
+            out IDictionary<string, byte[]> managedByFullName,
+            out IDictionary<string, byte[]> nativeByBasename)
         {
             mainAssemblyBytes = null;
-            managedByFullName = new(_managedByFullName, StringComparer.OrdinalIgnoreCase);
-            nativeByBasename = new(_nativeByBasename, StringComparer.OrdinalIgnoreCase);
+            // The live collections, not copies: the loaded plugin must also find dependencies that
+            // arrive later — a hot reload that brings a new package streams them before the update.
+            managedByFullName = _managedByFullName;
+            nativeByBasename = _nativeByBasename;
 
             if (!string.IsNullOrWhiteSpace(desiredMainAssemblyFileName))
             {

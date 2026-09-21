@@ -53,6 +53,9 @@ namespace Neo.App
         private bool _allowChildIsVisible = true;
         public bool HasLoadedControl { get; private set; }
 
+        // What the current child process has received (it keeps every assembly until it exits).
+        private readonly SentFileLedger _sentFiles = new();
+
         private static IntPtr _globalJob = IntPtr.Zero;
 
         private enum EndIntent { None = 0, Restarting = 1, AppExit = 2 }
@@ -109,6 +112,7 @@ namespace Neo.App
             _pipeSessionCounter++;
             _currentSessionId = _pipeSessionCounter;   // Session-ID für Watcher/Crash-Filter
             _endIntent = EndIntent.None;               // Neustart beginnt – ab jetzt „normaler“ Betrieb
+            _sentFiles.Clear();                        // neuer Prozess, der noch nichts empfangen hat
 
             string pipeName = $"appembed-{Environment.ProcessId}-{_pipeSessionCounter}";
 
@@ -377,11 +381,19 @@ namespace Neo.App
 
         public string? HotReloadCapabilities { get; private set; }
 
-        public async Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request)
+        public async Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request, IEnumerable<string> dependencyFiles)
         {
             if (_pipeServer == null || !_pipeServer.IsConnected) return null;
             try
             {
+                // A package added with this change: its assemblies have to be there before the
+                // patched code first touches them.
+                foreach (var file in _sentFiles.Unsent(BuildDllList("", dependencyFiles, null)))
+                {
+                    await SendFileAsBlobAsync(file, Path.GetFileName(file), _pipeCts.Token);
+                    _sentFiles.MarkSent(file);
+                }
+
                 var reply = await SendRequestAsync(IpcTypes.HotReload, request, TimeSpan.FromSeconds(30), _pipeCts.Token);
                 return reply.Type == IpcTypes.HotReloadResult
                     ? IPC.Json.FromJson<HotReloadResultMessage>(reply.PayloadJson)
@@ -971,6 +983,7 @@ namespace Neo.App
             {
                 var logical = ToLogicalName(file, commonRoot);
                 await SendFileAsBlobAsync(file, logical, ct);
+                _sentFiles.MarkSent(file);
             }
         }
 

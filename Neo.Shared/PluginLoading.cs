@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.Loader;
@@ -102,13 +103,43 @@ namespace Neo.Shared
             return controlType;
         }
 
+        // Dependencies of a plugin (NuGet packages) are the same bytes build after build. In a
+        // process that can hot reload, plugin contexts are never unloaded, so loading them again
+        // for every full reload would only pile up copies: each identical dependency is loaded
+        // once and shared by every later plugin context (a context may return an assembly that
+        // lives in another one). Keyed by identity and MVID, so a changed build is loaded anew.
+        private static readonly ConcurrentDictionary<string, Assembly> s_sharedDependencies = new(StringComparer.Ordinal);
+
         private Assembly? OnResolveManaged(AssemblyLoadContext alc, AssemblyName name)
         {
             var bytes = _managedResolver(name);
             if (bytes == null) return null;
 
+            var key = IsCollectible ? null : DependencyKey(bytes);
+            if (key != null && s_sharedDependencies.TryGetValue(key, out var shared))
+                return shared;
+
             using var ms = new MemoryStream(bytes, writable: false);
-            return LoadFromStream(ms);
+            var loaded = LoadFromStream(ms);
+            if (key != null)
+                s_sharedDependencies.TryAdd(key, loaded);
+            return loaded;
+        }
+
+        private static string? DependencyKey(byte[] bytes)
+        {
+            try
+            {
+                using var pe = new System.Reflection.PortableExecutable.PEReader(new MemoryStream(bytes, writable: false));
+                var metadata = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(pe);
+                var identity = metadata.GetAssemblyDefinition();
+                var mvid = metadata.GetGuid(metadata.GetModuleDefinition().Mvid);
+                return metadata.GetString(identity.Name) + "/" + identity.Version + "/" + mvid.ToString("N");
+            }
+            catch
+            {
+                return null; // not a readable assembly: load it privately as before
+            }
         }
 
         private IntPtr OnResolveUnmanaged(Assembly assembly, string unmanagedDllName)
@@ -123,6 +154,11 @@ namespace Neo.Shared
 
         public void Dispose()
         {
+            // A context that can never be unloaded may still own dependencies later plugins share
+            // (see s_sharedDependencies); those resolve their own references lazily through the
+            // context they live in, so its handlers have to stay.
+            if (!IsCollectible) return;
+
             Resolving -= OnResolveManaged;
             ResolvingUnmanagedDll -= OnResolveUnmanaged;
         }
