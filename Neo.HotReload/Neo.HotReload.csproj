@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(NeoTargetFramework)</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Neo.HotReload</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    Host-side half of hot reload: turns "the previous source" + "the new source" of a generated
+    app into edit-and-continue deltas that the plugin window applies to the running assembly.
+
+    The deltas come from Roslyn's own hot reload analysis — the engine behind dotnet-watch and
+    Visual Studio. It lives in the Features package and is internal (see RoslynHotReloadService),
+    so the version below is pinned on purpose: HotReloadSessionTests fail loudly when a Roslyn
+    update changes that API. Keep it equal to the Roslyn version the hosts end up with —
+    today that is 5.0.0, pulled in by Neo.Agents.CSharpDllCompile (Microsoft.CodeAnalysis).
+
+    Heavy (Roslyn workspaces): reference it from hosts only, never from the plugin windows.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
+    <!-- HotReloadBaselineFile: what the compile agent leaves next to a hot-reloadable DLL. -->
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpDllCompile\Neo.Agents.CSharpDllCompile.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neo.HotReload.Tests" />
+  </ItemGroup>
+
+</Project>

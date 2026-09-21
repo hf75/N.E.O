@@ -24,5 +24,6 @@
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.PowerShell\Neo.Agents.PowerShell.csproj" />
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
     <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
+    <ProjectReference Include="..\Neo.HotReload\Neo.HotReload.csproj" />
   </ItemGroup>
 </Project>

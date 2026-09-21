@@ -153,7 +153,8 @@ namespace Neo.PluginWindowAvalonia
                 await SafeSendAsync(new IpcEnvelope(
                     IpcTypes.Hello,
                     Guid.NewGuid().ToString("N"),
-                    Json.ToJson(new HelloMessage("Child", Environment.ProcessId, Hwnd: handle == IntPtr.Zero ? 0 : handle.ToInt64()))
+                    Json.ToJson(new HelloMessage("Child", Environment.ProcessId, Hwnd: handle == IntPtr.Zero ? 0 : handle.ToInt64(),
+                        HotReloadCapabilities: HotReloadRuntime.Capabilities))
                 ));
 
                 // Wire the Neo.Trigger API so generated app code can push prompts to Claude.
@@ -496,6 +497,30 @@ namespace Neo.PluginWindowAvalonia
                             IpcTypes.Ack, env.CorrelationId,
                             Json.ToJson(new AckMessage("Fullscreen toggled."))
                         ));
+                        break;
+                    }
+
+                case IpcTypes.HotReload:
+                    {
+                        HotReloadResultMessage result;
+                        try
+                        {
+                            var request = Json.FromJson<HotReloadRequest>(env.PayloadJson)!;
+                            var details = await Dispatcher.UIThread.InvokeAsync(() => MainWin.HandleHotReload(request));
+                            result = new HotReloadResultMessage(true, Details: details);
+                            await SendLogAsync(LogLevel.Info, "Hot reload applied: " + details, "Child");
+
+                            // Callables and observables may have changed with the code.
+                            if (PluginHost.Options.EnableMcpHostFeatures)
+                                _ = SendLiveMcpManifestAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            var cause = (ex as System.Reflection.TargetInvocationException)?.InnerException ?? ex;
+                            result = new HotReloadResultMessage(false, Error: $"{cause.GetType().Name}: {cause.Message}");
+                        }
+
+                        await SafeSendAsync(new IpcEnvelope(IpcTypes.HotReloadResult, env.CorrelationId, Json.ToJson(result)));
                         break;
                     }
 
@@ -936,6 +961,15 @@ namespace Neo.PluginWindowAvalonia
 
         private void Dispatcher_UnhandledException(object? sender, DispatcherUnhandledExceptionEventArgs e)
         {
+            // A delegate that still points at code a hot reload retired (a lambda the new version no
+            // longer has). That is a stale subscription, not a broken app: do not report a crash.
+            if (HotReloadRuntime.IsStaleCodeException(e.Exception))
+            {
+                Debug.WriteLine("[HotReload] Ignored call into retired code: " + e.Exception.Message);
+                e.Handled = true;
+                return;
+            }
+
             TrySendErrorSynchronous_BestEffort("DispatcherUnhandledException", e.Exception, false);
             e.Handled = true;
         }

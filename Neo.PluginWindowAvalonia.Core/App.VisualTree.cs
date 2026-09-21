@@ -81,6 +81,14 @@ namespace Neo.PluginWindowAvalonia
                 if (tb.Foreground != null) props["Foreground"] = tb.Foreground.ToString()!;
                 if (tb.FontWeight != default) props["FontWeight"] = tb.FontWeight.ToString();
             }
+            // Before Button: in Avalonia CheckBox, RadioButton and ToggleSwitch are Buttons too, and
+            // their checked state is what matters.
+            else if (control is Avalonia.Controls.Primitives.ToggleButton toggle)
+            {
+                props["IsChecked"] = toggle.IsChecked?.ToString() ?? "null";
+                if (toggle.Content != null) props["Content"] = toggle.Content.ToString()!;
+                props["IsEnabled"] = toggle.IsEnabled.ToString();
+            }
             else if (control is Avalonia.Controls.Button btn)
             {
                 if (btn.Content != null) props["Content"] = btn.Content.ToString()!;
@@ -102,11 +110,6 @@ namespace Neo.PluginWindowAvalonia
             {
                 props["ItemCount"] = cb.ItemCount.ToString();
                 if (cb.SelectedIndex >= 0) props["SelectedIndex"] = cb.SelectedIndex.ToString();
-            }
-            else if (control is Avalonia.Controls.CheckBox chk)
-            {
-                props["IsChecked"] = chk.IsChecked?.ToString() ?? "null";
-                if (chk.Content != null) props["Content"] = chk.Content.ToString()!;
             }
             else if (control is Avalonia.Controls.Slider sl)
             {

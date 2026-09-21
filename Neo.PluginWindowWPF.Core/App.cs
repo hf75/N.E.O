@@ -146,7 +146,8 @@ namespace Neo.PluginWindowWPF
             await SafeSendAsync(new IpcEnvelope(
                 IpcTypes.Hello,
                 Guid.NewGuid().ToString("N"),
-                Json.ToJson(new HelloMessage("Child", Environment.ProcessId, Hwnd: hwnd.ToInt64()))
+                Json.ToJson(new HelloMessage("Child", Environment.ProcessId, Hwnd: hwnd.ToInt64(),
+                    HotReloadCapabilities: HotReloadRuntime.Capabilities))
             ));
 
             // Framed Receive-Loop starten
@@ -422,6 +423,26 @@ namespace Neo.PluginWindowWPF
                             IpcTypes.Ack, env.CorrelationId,
                             Json.ToJson(new AckMessage("Fullscreen toggled."))
                         ));
+                        break;
+                    }
+
+                case IpcTypes.HotReload:
+                    {
+                        HotReloadResultMessage result;
+                        try
+                        {
+                            var request = Json.FromJson<HotReloadRequest>(env.PayloadJson)!;
+                            var details = await Dispatcher.InvokeAsync(() => MainWin.HandleHotReload(request));
+                            result = new HotReloadResultMessage(true, Details: details);
+                            await SendLogAsync(LogLevel.Info, "Hot reload applied: " + details, "Child");
+                        }
+                        catch (Exception ex)
+                        {
+                            var cause = (ex as System.Reflection.TargetInvocationException)?.InnerException ?? ex;
+                            result = new HotReloadResultMessage(false, Error: $"{cause.GetType().Name}: {cause.Message}");
+                        }
+
+                        await SafeSendAsync(new IpcEnvelope(IpcTypes.HotReloadResult, env.CorrelationId, Json.ToJson(result)));
                         break;
                     }
 
@@ -721,6 +742,15 @@ namespace Neo.PluginWindowWPF
 
         private void MainWindow_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
+            // A delegate that still points at code a hot reload retired (a lambda the new version no
+            // longer has). That is a stale subscription, not a broken app: do not report a crash.
+            if (HotReloadRuntime.IsStaleCodeException(e.Exception))
+            {
+                Debug.WriteLine("[HotReload] Ignored call into retired code: " + e.Exception.Message);
+                e.Handled = true;
+                return;
+            }
+
             TrySendErrorSynchronous_BestEffort("DispatcherUnhandledException", e.Exception, false);
             e.Handled = true;
         }

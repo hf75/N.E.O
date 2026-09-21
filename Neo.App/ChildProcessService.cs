@@ -190,6 +190,7 @@ namespace Neo.App
             if (helloEnv?.Type != IpcTypes.Hello) return;
 
             var hello = IPC.Json.FromJson<HelloMessage>(helloEnv.PayloadJson)!;
+            HotReloadCapabilities = hello.HotReloadCapabilities;
             _childHwnd = hello.Hwnd.HasValue
                 ? new IntPtr(hello.Hwnd.Value)
                 : FindTopLevelWindowForPid(_childProcess.Id);
@@ -389,6 +390,25 @@ namespace Neo.App
             catch (Exception ex)
             {
                 Debug.WriteLine($"[SetDesignerModeAsync] Failed: {ex.Message}");
+            }
+        }
+
+        public string? HotReloadCapabilities { get; private set; }
+
+        public async Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request)
+        {
+            if (_pipeServer == null || !_pipeServer.IsConnected) return null;
+            try
+            {
+                var reply = await SendRequestAsync(IpcTypes.HotReload, request, TimeSpan.FromSeconds(30), _pipeCts.Token);
+                return reply.Type == IpcTypes.HotReloadResult
+                    ? IPC.Json.FromJson<HotReloadResultMessage>(reply.PayloadJson)
+                    : null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HotReloadAsync] Failed: {ex.Message}");
+                return null;
             }
         }
 

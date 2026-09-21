@@ -74,6 +74,7 @@ public class McpServerProcessTests
         var promptText = prompt.GetProperty("messages")[0].GetProperty("content").GetProperty("text").GetString();
         promptText.Should().Contain("Avalonia " + AvaloniaGuidance.Version);
         promptText.Should().Contain("NativeWebView");
+        promptText.Should().Contain("Live updates (hot reload)", "the model has to write code that survives the next change");
 
         try
         {
@@ -95,7 +96,7 @@ public class McpServerProcessTests
     }
 
     // <repo>/Neo.McpServer.Tests/bin/<Configuration>/<tfm>/  →  <repo>/Neo.McpServer/bin/<Configuration>/<tfm>/
-    private static string ServerDll
+    internal static string ServerDll
     {
         get
         {

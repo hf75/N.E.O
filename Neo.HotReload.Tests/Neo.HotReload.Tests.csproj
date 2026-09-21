@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>$(NeoTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- The tests apply the deltas to assemblies they load themselves. The runtime only allows
+         that when DOTNET_MODIFIABLE_ASSEMBLIES=debug is set before it starts, so the test host
+         gets it from these run settings (dotnet test picks the file up on its own). -->
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)\hotreload.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Neo.HotReload\Neo.HotReload.csproj" />
+    <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
+    <!-- HotReloadGuidance: the conventions the prompts teach. -->
+    <ProjectReference Include="..\Neo.AssemblyForge.Core\Neo.AssemblyForge.Core.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpDllCompile\Neo.Agents.CSharpDllCompile.csproj" />
+  </ItemGroup>
+</Project>

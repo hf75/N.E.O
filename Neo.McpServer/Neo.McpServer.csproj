@@ -19,6 +19,7 @@
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Core\Neo.Agents.Core.csproj" />
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
     <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
+    <ProjectReference Include="..\Neo.HotReload\Neo.HotReload.csproj" />
 
     <!--
       Phase 4B: pull Neo.App.Mcp + its closure (ModelContextProtocol, Hosting, DI, Logging,

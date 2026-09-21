@@ -87,6 +87,12 @@ namespace Neo.IPC
         public const string RaiseEventResult = "RaiseEventResult";
         public const string SimulateInput = "SimulateInput";
         public const string SimulateInputResult = "SimulateInputResult";
+
+        // ── Hot reload ──────────────────────────────────────────────────────
+        // Patch the running plugin in place (MetadataUpdater.ApplyUpdate) instead of replacing it,
+        // so the app instance and everything it holds survives a code change.
+        public const string HotReload = "HotReload";
+        public const string HotReloadResult = "HotReloadResult";
     }
 
     public record StartWebBridgeRequest(string HtmlContent, int Port = 0);
@@ -302,7 +308,42 @@ namespace Neo.IPC
         string? ErrorCode = null           // "control_not_found", "kind_not_supported", "invocation_failed"
     );
 
-    public record HelloMessage(string Role, int ProcessId, long? Hwnd = null);
+    /// <param name="HotReloadCapabilities">
+    /// The runtime's edit-and-continue capabilities ("Baseline AddMethodToExistingType …") when the
+    /// child can patch a loaded plugin in place, otherwise null. Hosts need them to compute deltas.
+    /// </param>
+    public record HelloMessage(string Role, int ProcessId, long? Hwnd = null, string? HotReloadCapabilities = null);
+
+    /// <summary>One edit-and-continue generation: the three delta blobs, Base64.</summary>
+    public record HotReloadDeltaMessage(string MetadataDelta, string IlDelta, string PdbDelta);
+
+    /// <summary>
+    /// State the running objects cannot get from the deltas alone, because constructors and
+    /// initializers do not run again for objects that already exist. The host injects small helper
+    /// methods into the new code and tells the child which ones to call.
+    /// </summary>
+    /// <param name="TypeName">Metadata name of the type that declares the helper.</param>
+    /// <param name="MethodName">Helper method to invoke (instance helpers: once per live object of that type).</param>
+    /// <param name="FieldNames">
+    /// Instance field initializers: the helper returns one value per field, in this order (metadata
+    /// field names, so auto-properties appear as their backing field). Empty for helpers that do the work themselves.
+    /// </param>
+    /// <param name="IsStatic">True for helpers that re-evaluate static initializers.</param>
+    public record HotReloadStateStep(string TypeName, string MethodName, List<string> FieldNames, bool IsStatic);
+
+    /// <param name="Deltas">Generations to apply, in order.</param>
+    /// <param name="StateSteps">See <see cref="HotReloadStateStep"/>; run after the deltas, before the UI is rebuilt.</param>
+    /// <param name="RebuildUi">Call the app's UI build method again so changed UI code becomes visible.</param>
+    /// <param name="RebuildMethodName">Name of that method on the loaded control (parameterless).</param>
+    public record HotReloadRequest(
+        List<HotReloadDeltaMessage> Deltas,
+        List<HotReloadStateStep> StateSteps,
+        bool RebuildUi,
+        string? RebuildMethodName);
+
+    /// <param name="Success">False: nothing usable happened, the host must fall back to a full reload.</param>
+    /// <param name="Details">What the child did, for logs ("3 fields initialised, UI rebuilt, 5 values carried over").</param>
+    public record HotReloadResultMessage(bool Success, string? Error = null, string? Details = null);
 
     public record LoadControlRequest(
         string AssemblyPath,    // absolut/relativ zum Child-EXE-Verzeichnis

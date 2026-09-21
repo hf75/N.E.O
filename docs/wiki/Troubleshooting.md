@@ -41,6 +41,10 @@
 
 **Fix:** Install the [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (Windows 10) or the WebKitGTK packages of your distribution. The browser profile of preview windows lives in `%LOCALAPPDATA%\Neo\WebView2`; delete that folder to reset cookies and cache.
 
+## The app lost its state after a change
+
+Normally the next prompt patches the running app ([[Hot Reload]]). When that is not possible, the chat says `Hot reload not possible — <reason>` and the app is restarted the old way. Typical reasons: a change Roslyn cannot patch into running code (the message names the `ENC…` rule), a newly added NuGet package, a constructor that was rewritten, or UI code in an app without a re-runnable UI method (`BuildUi()`). Ask the AI to keep the UI in `BuildUi()` and the data in fields — the next changes will then keep the state.
+
 ## Preview Panel is Empty
 
 **Cause:** The child process may have crashed or failed to start.

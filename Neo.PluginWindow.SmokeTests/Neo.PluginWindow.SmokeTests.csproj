@@ -33,11 +33,13 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="8.0.1" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
+    <!-- The hosts' half of hot reload; brings Roslyn and the compile agent along. -->
+    <ProjectReference Include="..\Neo.HotReload\Neo.HotReload.csproj" />
+    <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
 
     <!-- Build-order only: the tests launch these executables from their own bin folders. -->
     <ProjectReference Include="..\Neo.PluginWindowAvalonia\Neo.PluginWindowAvalonia.csproj" ReferenceOutputAssembly="false" Private="false" />

@@ -119,6 +119,14 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         // Cleared on UnloadControl / process exit.
         public AppManifestMessage? LiveMcpManifest { get; set; }
 
+        // Hot reload: what the child's runtime can patch (from its Hello; null = cannot), and the
+        // session for the app that is currently loaded in this window.
+        public string? HotReloadCapabilities { get; set; }
+        public Neo.HotReload.HotReloadCoordinator HotReload { get; } = new();
+
+        /// <summary>How the last build got into the window ("Hot reload …" or why it was a full reload).</summary>
+        public string? LastLoadMessage { get; set; }
+
         public bool IsRunning => ChildProcess is { HasExited: false } && PipeStream is { IsConnected: true };
 
         public WindowSession(string windowId, string framework = "avalonia")
@@ -133,6 +141,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         public async ValueTask DisposeAsync()
         {
             IsShuttingDown = true;
+            try { HotReload.Dispose(); } catch { }
             try { PipeCts.Cancel(); } catch { }
 
             if (ListenLoopTask != null)
@@ -262,6 +271,8 @@ public sealed class PreviewSessionManager : IAsyncDisposable
             UseShellExecute = false,
             CreateNoWindow = false,
         };
+        // Edit-and-continue has to be switched on before the child's runtime starts.
+        Neo.Shared.HotReloadRuntime.ConfigureChildEnvironment(psi.Environment);
 
         try
         {
@@ -324,14 +335,28 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     // DLL Send / Update
     // ========================================
 
+    /// <summary>
+    /// Loads a build into the window as a fresh app — whatever ran there before is replaced
+    /// (compile_and_preview: "show this app"). For changes to the running app use <see cref="UpdateAsync"/>.
+    /// </summary>
+    /// <param name="dllPath">Where the build lies on disk; with it, hot reload is armed for the next change.</param>
     public async Task<bool> SendDllAsync(
         byte[] mainDllBytes, string mainDllName,
         Dictionary<string, byte[]>? dependencyDlls = null,
-        CancellationToken ct = default, string? windowId = null)
+        CancellationToken ct = default, string? windowId = null, string? dllPath = null)
     {
         var s = GetRunningSession(windowId);
         if (s == null) return false;
 
+        s.LastLoadMessage = null;
+        await s.HotReload.ResetAsync();
+        return await LoadFreshAsync(s, mainDllBytes, mainDllName, dependencyDlls, ct, windowId, dllPath);
+    }
+
+    private async Task<bool> LoadFreshAsync(WindowSession s,
+        byte[] mainDllBytes, string mainDllName, Dictionary<string, byte[]>? dependencyDlls,
+        CancellationToken ct, string? windowId, string? dllPath)
+    {
         try
         {
             lock (s.LogLock) s.RuntimeErrors.Clear();
@@ -350,6 +375,11 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                 IpcTypes.LoadControl, Guid.NewGuid().ToString("N"), Json.ToJson(req)));
 
             s.AddLog($"DLL loaded: {mainDllName} ({mainDllBytes.Length:N0} bytes).");
+
+            // In the background: the first session costs a second or two (Roslyn workspace), and the
+            // next update waits for it anyway.
+            if (dllPath != null)
+                _ = StartHotReloadSessionAsync(dllPath, CancellationToken.None, windowId);
             return true;
         }
         catch (Exception ex)
@@ -359,20 +389,72 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         }
     }
 
+    // ========================================
+    // Hot reload
+    // ========================================
+
+    /// <summary>
+    /// Tries to turn the app running in the window into the build at <paramref name="newDllPath"/>
+    /// without reloading it — the instance and its state survive. False (with the reason) means:
+    /// load the new build the usual way, then call <see cref="StartHotReloadSessionAsync"/>.
+    /// </summary>
+    public async Task<Neo.HotReload.HotReloadAttempt> TryHotReloadAsync(string newDllPath, CancellationToken ct = default, string? windowId = null)
+    {
+        var s = GetRunningSession(windowId);
+        if (s == null) return new Neo.HotReload.HotReloadAttempt(false, "no preview window is running");
+
+        var attempt = await s.HotReload.TryAsync(newDllPath, async request =>
+        {
+            var r = await SendRequestAsync(windowId, IpcTypes.HotReload, Json.ToJson(request), 30, ct);
+            return r?.Type == IpcTypes.HotReloadResult ? Json.FromJson<HotReloadResultMessage>(r.PayloadJson) : null;
+        }, ct);
+
+        s.AddLog(attempt.Message);
+        if (attempt.Applied) lock (s.LogLock) s.RuntimeErrors.Clear();
+        return attempt;
+    }
+
+    /// <summary>Call after <paramref name="loadedDllPath"/> was sent to the window: arms hot reload for the next change.</summary>
+    public async Task StartHotReloadSessionAsync(string loadedDllPath, CancellationToken ct = default, string? windowId = null)
+    {
+        var s = GetRunningSession(windowId);
+        if (s == null) return;
+        var problem = await s.HotReload.StartAsync(loadedDllPath, s.HotReloadCapabilities, ct);
+        s.AddLog(problem == null ? "Hot reload armed for the next code change." : "Hot reload unavailable: " + problem);
+    }
+
+    /// <summary>
+    /// Turns the app running in the window into the new build (update_preview, patch_preview): patched
+    /// in place when possible, so the instance and everything the user did with it survive; otherwise
+    /// unloaded and loaded fresh as before. <see cref="GetLastLoadMessage"/> says which of the two happened.
+    /// </summary>
     public async Task<bool> UpdateAsync(
         byte[] mainDllBytes, string mainDllName,
         Dictionary<string, byte[]>? dependencyDlls = null,
-        CancellationToken ct = default, string? windowId = null)
+        CancellationToken ct = default, string? windowId = null, string? dllPath = null)
     {
         var s = GetRunningSession(windowId);
         if (s == null) return false;
 
+        s.LastLoadMessage = null;
+        if (dllPath != null && s.HotReload.IsActive)
+        {
+            var attempt = await TryHotReloadAsync(dllPath, ct, windowId);
+            s.LastLoadMessage = attempt.Message;
+            if (attempt.Applied) return true;
+        }
+
+        await s.HotReload.ResetAsync();
         await SafeSendControlAsync(s, new IpcEnvelope(
             IpcTypes.UnloadControl, Guid.NewGuid().ToString("N"), "{}"));
         await Task.Delay(100, ct);
 
-        return await SendDllAsync(mainDllBytes, mainDllName, dependencyDlls, ct, windowId);
+        return await LoadFreshAsync(s, mainDllBytes, mainDllName, dependencyDlls, ct, windowId, dllPath);
     }
+
+    /// <summary>"Hot reload …" / "Hot reload not possible — …" for the last build sent to the window, if any.</summary>
+    public string? GetLastLoadMessage(string? windowId = null)
+        => GetRunningSession(windowId)?.LastLoadMessage;
 
     // ========================================
     // IPC Request-Response methods
@@ -725,6 +807,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                     switch (env.Type)
                     {
                         case IpcTypes.Hello:
+                            s.HotReloadCapabilities = Json.FromJson<HelloMessage>(env.PayloadJson)?.HotReloadCapabilities;
                             s.HelloReceived = true;
                             await SafeSendControlAsync(s, new IpcEnvelope(
                                 IpcTypes.Ack, env.CorrelationId,
@@ -758,6 +841,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
                         case IpcTypes.ScreenshotResult:
                         case IpcTypes.SetPropertyResult:
+                        case IpcTypes.HotReloadResult:
                         case IpcTypes.InspectVisualTreeResult:
                         case IpcTypes.InjectDataResult:
                         case IpcTypes.ReadDataResult:

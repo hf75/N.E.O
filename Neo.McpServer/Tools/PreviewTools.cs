@@ -78,7 +78,8 @@ public sealed partial class PreviewTools
                 result.DllBytes!,
                 "DynamicUserControl.dll",
                 deps,
-                windowId: windowId);
+                windowId: windowId,
+                dllPath: result.DllPath);
 
             if (!sent)
             {
@@ -87,7 +88,8 @@ public sealed partial class PreviewTools
             }
 
             return $"SUCCESS: App compiled and displayed in live preview window.\n" +
-                   $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}";
+                   $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}" +
+                   LoadNote(preview, windowId);
         }
         catch (Exception ex)
         {
@@ -102,7 +104,9 @@ public sealed partial class PreviewTools
     /// </summary>
     [McpServerTool(Name = "update_preview")]
     [Description("Updates the live preview window with modified C# code. " +
-        "The existing preview window is reused — the user sees the change in-place.")]
+        "The running app is patched in place when possible (hot reload): its data and UI state survive, " +
+        "and the result says 'Hot reload (generation n)' — or 'Hot reload not possible — <reason>' when it had to restart the app. " +
+        "Use this (not compile_and_preview) for every change to the running app.")]
     public static async Task<string> UpdatePreview(
         CompilationPipeline compilation,
         PreviewSessionManager preview,
@@ -142,7 +146,8 @@ public sealed partial class PreviewTools
                 result.DllBytes!,
                 "DynamicUserControl.dll",
                 deps,
-                windowId: windowId);
+                windowId: windowId,
+                dllPath: result.DllPath);
 
             if (!updated)
             {
@@ -151,7 +156,8 @@ public sealed partial class PreviewTools
             }
 
             return $"SUCCESS: Preview updated live.\n" +
-                   $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}";
+                   $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}" +
+                   LoadNote(preview, windowId);
         }
         catch (Exception ex)
         {
@@ -219,7 +225,7 @@ public sealed partial class PreviewTools
     /// Applies a unified diff patch to the last compiled code and hot-reloads.
     /// </summary>
     [McpServerTool(Name = "patch_preview")]
-    [Description("Applies a unified diff patch to the LAST compiled source code and hot-reloads. " +
+    [Description("Applies a unified diff patch to the LAST compiled source code and updates the running app like update_preview (hot reload: state survives when possible). " +
         "Much more efficient than update_preview — send only the changed lines instead of the full code. " +
         "Uses standard unified diff format (--- a/file, +++ b/file, @@ hunks). " +
         "Supports fuzzy matching for context lines. Requires a previous compile_and_preview call.")]
@@ -277,13 +283,15 @@ public sealed partial class PreviewTools
                 if (File.Exists(dllPath))
                     deps[Path.GetFileName(dllPath)] = await File.ReadAllBytesAsync(dllPath);
 
-            var updated = await preview.UpdateAsync(result.DllBytes!, "DynamicUserControl.dll", deps);
+            var updated = await preview.UpdateAsync(result.DllBytes!, "DynamicUserControl.dll", deps,
+                windowId: windowId, dllPath: result.DllPath);
             if (!updated)
                 return $"PATCH applied and compiled, but hot-reload failed.\n" +
                        $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
 
             return $"SUCCESS: Patch applied and preview updated.\n" +
-                   $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}";
+                   $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}" +
+                   LoadNote(preview, windowId);
         }
         catch (Exception ex)
         {
@@ -330,6 +338,13 @@ public sealed partial class PreviewTools
 
         return packages;
     }
+
+    /// <summary>
+    /// Tells the model whether the running app was patched in place (its state is still there) or
+    /// replaced (it starts from scratch, and why) — it decides what to verify next based on that.
+    /// </summary>
+    internal static string LoadNote(PreviewSessionManager preview, string? windowId)
+        => preview.GetLastLoadMessage(windowId) is { Length: > 0 } message ? "\n" + message : "";
 
     private static void EnsureAvaloniaPackages(Dictionary<string, string> packages)
     {

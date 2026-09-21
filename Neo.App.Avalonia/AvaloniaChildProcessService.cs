@@ -212,7 +212,13 @@ namespace Neo.App
                     {
                         switch (env.Type)
                         {
+                            case IpcTypes.HotReloadResult:
+                                if (_pendingHotReloads.TryRemove(env.CorrelationId, out var pendingHotReload))
+                                    pendingHotReload.TrySetResult(Json.FromJson<HotReloadResultMessage>(env.PayloadJson));
+                                break;
+
                             case IpcTypes.Hello:
+                                HotReloadCapabilities = Json.FromJson<HelloMessage>(env.PayloadJson)?.HotReloadCapabilities;
                                 Debug.WriteLine("[ChildProcess] Hello received from child");
                                 await SafeSendControlAsync(new IpcEnvelope(
                                     IpcTypes.Ack, env.CorrelationId,
@@ -437,6 +443,32 @@ namespace Neo.App
                 IpcTypes.SetDesignerMode,
                 Guid.NewGuid().ToString("N"),
                 Json.ToJson(new SetDesignerModeMessage(enabled))));
+        }
+
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<HotReloadResultMessage?>> _pendingHotReloads = new();
+
+        public string? HotReloadCapabilities { get; private set; }
+
+        public async Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request)
+        {
+            var correlationId = Guid.NewGuid().ToString("N");
+            var pending = new TaskCompletionSource<HotReloadResultMessage?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pendingHotReloads[correlationId] = pending;
+            try
+            {
+                await SafeSendControlAsync(new IpcEnvelope(IpcTypes.HotReload, correlationId, Json.ToJson(request)));
+                var finished = await Task.WhenAny(pending.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+                return finished == pending.Task ? await pending.Task : null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HotReloadAsync] Failed: {ex.Message}");
+                return null;
+            }
+            finally
+            {
+                _pendingHotReloads.TryRemove(correlationId, out _);
+            }
         }
 
         public async Task UnloadControlAsync()

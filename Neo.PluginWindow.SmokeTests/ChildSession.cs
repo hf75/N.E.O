@@ -20,6 +20,7 @@ internal sealed class ChildSession : IAsyncDisposable
     private readonly ConcurrentQueue<string> _logs = new();
     private readonly ConcurrentQueue<string> _errors = new();
     private readonly ConcurrentDictionary<string, int> _frameCounts = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<IpcEnvelope>> _pending = new(StringComparer.Ordinal);
     private Process? _child;
     private Task? _receiveLoop;
     private int _loadExecuted;
@@ -34,6 +35,9 @@ internal sealed class ChildSession : IAsyncDisposable
     public IReadOnlyCollection<string> Errors => _errors.ToArray();
     public IReadOnlyCollection<string> Logs => _logs.ToArray();
     public bool ChildIsAlive => _child is { HasExited: false };
+
+    /// <summary>What the child reported in its Hello: null means it cannot hot reload.</summary>
+    public string? HotReloadCapabilities { get; private set; }
 
     /// <summary>How many control frames of the given <see cref="IpcTypes"/> type the child sent.</summary>
     public int FrameCount(string ipcType) => _frameCounts.TryGetValue(ipcType, out var n) ? n : 0;
@@ -106,6 +110,43 @@ internal sealed class ChildSession : IAsyncDisposable
     public Task UnloadAsync()
         => SendAsync(new IpcEnvelope(IpcTypes.UnloadControl, Guid.NewGuid().ToString("N"), "{}"));
 
+    /// <summary>Sends a request and waits for the reply with the same correlation id (null: no reply in time).</summary>
+    public async Task<IpcEnvelope?> RequestAsync(string type, string payloadJson, TimeSpan? timeout = null)
+    {
+        var correlationId = Guid.NewGuid().ToString("N");
+        var reply = new TaskCompletionSource<IpcEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pending[correlationId] = reply;
+        try
+        {
+            await SendAsync(new IpcEnvelope(type, correlationId, payloadJson));
+            var finished = await Task.WhenAny(reply.Task, Task.Delay(timeout ?? TimeSpan.FromSeconds(30)));
+            return finished == reply.Task ? await reply.Task : null;
+        }
+        finally
+        {
+            _pending.TryRemove(correlationId, out _);
+        }
+    }
+
+    public async Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request)
+    {
+        var reply = await RequestAsync(IpcTypes.HotReload, Json.ToJson(request));
+        return reply?.Type == IpcTypes.HotReloadResult ? Json.FromJson<HotReloadResultMessage>(reply.PayloadJson) : null;
+    }
+
+    public async Task<SetPropertyResultMessage?> SetPropertyAsync(string target, string property, string value)
+    {
+        var reply = await RequestAsync(IpcTypes.SetProperty, Json.ToJson(new SetPropertyRequest(target, property, value)));
+        return reply?.Type == IpcTypes.SetPropertyResult ? Json.FromJson<SetPropertyResultMessage>(reply.PayloadJson) : null;
+    }
+
+    /// <summary>The visual tree of the loaded control as the child serialises it (JSON).</summary>
+    public async Task<string?> InspectVisualTreeAsync()
+    {
+        var reply = await RequestAsync(IpcTypes.InspectVisualTree, "{}");
+        return reply?.Type == IpcTypes.InspectVisualTreeResult ? reply.PayloadJson : null;
+    }
+
     /// <summary>Waits until the child reported <paramref name="count"/> executed loads, or an error arrived.</summary>
     public async Task<bool> WaitForLoadsAsync(int count)
     {
@@ -134,9 +175,18 @@ internal sealed class ChildSession : IAsyncDisposable
                 onControl: async env =>
                 {
                     _frameCounts.AddOrUpdate(env.Type, 1, (_, n) => n + 1);
+
+                    if (env.Type != IpcTypes.Error && !string.IsNullOrEmpty(env.CorrelationId) &&
+                        _pending.TryRemove(env.CorrelationId, out var waiting))
+                    {
+                        waiting.TrySetResult(env);
+                        return;
+                    }
+
                     switch (env.Type)
                     {
                         case IpcTypes.Hello:
+                            HotReloadCapabilities = Json.FromJson<HelloMessage>(env.PayloadJson)?.HotReloadCapabilities;
                             await SendAsync(new IpcEnvelope(IpcTypes.Ack, env.CorrelationId,
                                 Json.ToJson(new AckMessage("Hello acknowledged"))));
                             _hello.TrySetResult(true);

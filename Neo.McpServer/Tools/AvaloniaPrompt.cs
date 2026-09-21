@@ -49,6 +49,9 @@ public static class AvaloniaPrompt
             AvaloniaGuidance.AsMarkdownList(AvaloniaGuidance.ApiChanges) + "\n" +
             "## Web content\n\n" +
             AvaloniaGuidance.AsMarkdownList(AvaloniaGuidance.WebViewFacts) + "\n" +
+            "## Live updates (hot reload)\n\n" +
+            "update_preview and patch_preview patch the running app in place when they can; the result says \"Hot reload (generation n)\" or \"Hot reload not possible — <reason>\". Follow these rules so the user keeps their state:\n\n" +
+            AvaloniaGuidance.AsMarkdownList(HotReloadGuidance.Rules) + "\n" +
             "## Code Structure Template\n\n" +
             "```csharp\n" +
             "using Avalonia;\n" +
@@ -123,6 +126,9 @@ public static class AvaloniaPrompt
             "- Use `ColumnDefinition`/`RowDefinition` with `Width = new GridLength(...)` for Grid layout\n" +
             "- `Mouse.OverrideCursor = Cursors.Hand` for cursor changes\n" +
             "- `DispatcherTimer` is in `System.Windows.Threading`\n\n" +
+            "## Live updates (hot reload)\n\n" +
+            "update_preview and patch_preview patch the running app in place when they can; the result says \"Hot reload (generation n)\" or \"Hot reload not possible — <reason>\". Follow these rules so the user keeps their state:\n\n" +
+            AvaloniaGuidance.AsMarkdownList(HotReloadGuidance.Rules) + "\n" +
             "## Code Structure Template\n\n" +
             "```csharp\n" +
             "using System;\n" +

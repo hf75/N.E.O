@@ -25,9 +25,14 @@ namespace Neo.PluginWindowAvalonia
         private static readonly ConditionalWeakTable<NativeWebView, object> Hooked = new();
         private static bool _installed;
 
-        /// <summary>Per-user browser profile shared by all preview windows.</summary>
-        public static string UserDataFolder { get; } = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Neo", "WebView2");
+        /// <summary>
+        /// Browser profile shared by all preview windows: the folder the host prepared (the WPF host's
+        /// AppContainer sandbox passes a writable one in WEBVIEW2_USER_DATA_FOLDER), else a per-user one.
+        /// </summary>
+        public static string UserDataFolder { get; } =
+            Environment.GetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER") is { Length: > 0 } fromHost
+                ? fromHost
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Neo", "WebView2");
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static void Install()

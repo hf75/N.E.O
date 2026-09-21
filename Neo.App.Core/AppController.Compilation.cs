@@ -153,8 +153,32 @@ namespace Neo.App
             return compiledUserControlDllPath;
         }
 
+        // One running app, one hot reload session. Every way a new build reaches the child goes
+        // through DisplayCompiledDllAsync (prompts, undo/redo, history jumps, designer edits), so
+        // all of them keep the state of the running app when the change allows it.
+        private readonly Neo.HotReload.HotReloadCoordinator _hotReload = new();
+
         private async Task<bool> DisplayCompiledDllAsync(string compiledUserControlDllPath)
         {
+            // First choice: patch the running app in place. Its instance survives, and with it
+            // everything the user loaded or entered. A child that was restarted in the meantime
+            // (clear, crash recovery, sandbox switch) has nothing to patch.
+            if (!ChildProcessService.HasLoadedControl)
+                await _hotReload.ResetAsync();
+            bool couldHotReload = _hotReload.IsActive;
+            var attempt = await _hotReload.TryAsync(compiledUserControlDllPath, ChildProcessService.HotReloadAsync);
+            if (attempt.Applied)
+            {
+                Logger.LogMessage(attempt.Message, BubbleType.Info);
+                await _view.HideFrostedSnapshotAsync();
+                ChildProcessService.ShowChild();
+                ChildProcessService.UpdatePosition();
+                LastErrorMsg = "";
+                return true;
+            }
+            if (couldHotReload)
+                Logger.LogMessage(attempt.Message, BubbleType.Info);
+
             // Unload old control right before loading the new one
             await ChildProcessService.UnloadControlAsync();
 
@@ -170,6 +194,12 @@ namespace Neo.App
                 LastErrorMsg = "Failed to load the control in the child process.";
                 return false;
             }
+
+            // Arm hot reload for the next change. The build lies at a path the next compile
+            // overwrites, so the snapshot has to be taken now, before anyone compiles again.
+            var hotReloadProblem = await _hotReload.StartAsync(compiledUserControlDllPath, ChildProcessService.HotReloadCapabilities);
+            if (hotReloadProblem != null)
+                Debug.WriteLine("[HotReload] " + hotReloadProblem);
 
             await _view.HideFrostedSnapshotAsync();
             ChildProcessService.ShowChild();

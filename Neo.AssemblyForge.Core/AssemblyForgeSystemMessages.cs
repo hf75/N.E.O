@@ -44,6 +44,10 @@ public static class AssemblyForgeSystemMessages
         if (usePython)
             system += neoHost ? NeoHostPythonHead : PythonHead;
 
+        // The C# UserControl is patched in place on the next change; React UIs live in the web view.
+        if (!useReact)
+            system += " " + HotReloadGuidance.Notes;
+
         system += CommonCoreSystemMessage;
         if (neoHost)
             system += NeoHostApiDocs;

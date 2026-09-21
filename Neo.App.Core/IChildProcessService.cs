@@ -20,6 +20,15 @@ namespace Neo.App
         Task UnloadControlAsync();
 
         /// <summary>
+        /// What the runtime of the child can patch into a loaded plugin, as reported in its Hello message.
+        /// Null: this child cannot hot reload (older build, or started without DOTNET_MODIFIABLE_ASSEMBLIES).
+        /// </summary>
+        string? HotReloadCapabilities { get; }
+
+        /// <summary>Asks the child to patch the running plugin in place. Null: no answer.</summary>
+        Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request);
+
+        /// <summary>
         /// Captures a screenshot of the child window. Returns a platform-specific image object
         /// (e.g. BitmapSource on WPF) or null if unavailable.
         /// </summary>

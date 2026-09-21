@@ -234,7 +234,14 @@ builder.Services
             "- Internal helper, plumbing, or anything the user wouldn't ask Claude to do → leave un-annotated\n\n" +
 
             "Live-MCP and Channels compose: a method invoked via `invoke_method` can itself call `Ai.Trigger`\n" +
-            "to push a follow-up. Loop protection caps such chains at 5 hops by default.";
+            "to push a follow-up. Loop protection caps such chains at 5 hops by default.\n\n" +
+
+            "=== LIVE UPDATES (HOT RELOAD) ===\n" +
+            "update_preview and patch_preview patch the RUNNING app in place when possible — the instance, its data and\n" +
+            "what the user typed or selected survive. The tool result says \"Hot reload (generation n)\" or\n" +
+            "\"Hot reload not possible — <reason>\" (then the app was restarted and starts empty). Rules for code that\n" +
+            "survives updates:\n" +
+            Neo.AssemblyForge.AvaloniaGuidance.AsMarkdownList(Neo.AssemblyForge.HotReloadGuidance.Rules);
     })
     .WithStdioServerTransport()
     .WithToolsFromAssembly()

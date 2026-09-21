@@ -57,11 +57,29 @@ namespace Neo.Agents
                 isRequired: false,
                 description: @"Liste zusätzlicher DLL-Dateien."));
 
+            metadata.Options.Add(new Option<bool>(
+                name: "HotReload",
+                isRequired: false,
+                defaultValue: true,
+                description: "Build the DLL so that Neo.HotReload can patch it later while it is running: without " +
+                             "optimizations, with a portable PDB next to it and with a '<dll>.hotreload.json' that " +
+                             "records the sources and references (see HotReloadBaselineFile)."));
+
             // =========== Ausgabeparameter ===========
             metadata.OutputParameters.Add(new OutputParameter<string>(
                 name: "CompiledDllPath",
                 isAlwaysProvided: true,
                 description: "Pfad zur erfolgreich erstellten DLL."));
+
+            metadata.OutputParameters.Add(new OutputParameter<string>(
+                name: "PdbPath",
+                isAlwaysProvided: false,
+                description: "Hot reload mode: path of the portable PDB."));
+
+            metadata.OutputParameters.Add(new OutputParameter<List<string>>(
+                name: "ReferencePaths",
+                isAlwaysProvided: false,
+                description: "Hot reload mode: the assemblies the code was compiled against."));
 
             return metadata;
         }
@@ -129,11 +147,23 @@ namespace Neo.Agents
             var additionalDlls = GetInput<List<string>>("AdditionalDlls");
             var assemblyName = GetInput<string>("AssemblyName");
 
+            // Hot reload mode: edit-and-continue needs an unoptimized build and a PDB whose document
+            // names and checksums match what Neo.HotReload puts into its workspace.
+            bool hotReload = true;
+            try { hotReload = GetOption<bool>("HotReload"); }
+            catch (KeyNotFoundException) { /* option not set: default */ }
+            var hotReloadPaths = Enumerable.Range(0, code.Count).Select(HotReloadBaselineFile.SourcePathFor).ToList();
+
             List<SyntaxTree> syntaxTrees = new List<SyntaxTree>();
-            foreach (var c in code)
+            for (int i = 0; i < code.Count; i++)
             {
                 // SyntaxTree aus dem Code erstellen
-                 syntaxTrees.Add(CSharpSyntaxTree.ParseText(c));
+                syntaxTrees.Add(hotReload
+                    ? CSharpSyntaxTree.ParseText(
+                        Microsoft.CodeAnalysis.Text.SourceText.From(code[i], new System.Text.UTF8Encoding(false),
+                            Microsoft.CodeAnalysis.Text.SourceHashAlgorithm.Sha256),
+                        path: hotReloadPaths[i])
+                    : CSharpSyntaxTree.ParseText(code[i]));
             }
 
             // Referenzen sammeln
@@ -186,6 +216,8 @@ namespace Neo.Agents
 #else
             optimizationLevel = OptimizationLevel.Release;
 #endif
+            if (hotReload)
+                optimizationLevel = OptimizationLevel.Debug;
 
             // C#-Kompilation erstellen
             var compilation = CSharpCompilation.Create(
@@ -200,9 +232,14 @@ namespace Neo.Agents
             );
 
             // Kompilieren und DLL erzeugen
+            var pdbPath = Path.ChangeExtension(dllOutputPath, ".pdb");
             using (var fs = new FileStream(dllOutputPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var pdbStream = hotReload ? new FileStream(pdbPath, FileMode.Create, FileAccess.Write, FileShare.None) : null)
             {
-                var result = compilation.Emit(fs);
+                var result = hotReload
+                    ? compilation.Emit(fs, pdbStream, options: new Microsoft.CodeAnalysis.Emit.EmitOptions(
+                        debugInformationFormat: Microsoft.CodeAnalysis.Emit.DebugInformationFormat.PortablePdb, pdbFilePath: pdbPath))
+                    : compilation.Emit(fs);
 
                 if (!result.Success)
                 {
@@ -216,6 +253,24 @@ namespace Neo.Agents
 
             // Erfolg: In den Output schreiben
             SetOutput("CompiledDllPath", dllOutputPath);
+            if (hotReload)
+            {
+                var referencePaths = references.OfType<PortableExecutableReference>()
+                    .Select(r => r.FilePath).Where(f => !string.IsNullOrEmpty(f)).Select(f => f!).ToList();
+                SetOutput("PdbPath", pdbPath);
+                SetOutput("ReferencePaths", referencePaths);
+
+                // Hosts get the DLL path back through several layers that know nothing about hot
+                // reload; whoever wants to start a session finds everything next to the DLL.
+                new HotReloadBaselineFile
+                {
+                    AssemblyName = assemblyName,
+                    PdbPath = pdbPath,
+                    SourcePaths = hotReloadPaths,
+                    SourceTexts = code.ToList(),
+                    ReferencePaths = referencePaths,
+                }.Write(dllOutputPath);
+            }
 
             // Asynchrone Operation abschließen
             await Task.CompletedTask;

@@ -124,6 +124,10 @@ namespace Neo.App
 
         public AppController(IMainView view, IPlatformServices platformServices)
         {
+            // Plugin windows inherit this process' environment. Edit-and-continue has to be switched on
+            // before their runtime starts; for this process it changes nothing (it is already running).
+            Environment.SetEnvironmentVariable(Neo.Shared.HotReloadRuntime.EnvironmentVariable, Neo.Shared.HotReloadRuntime.EnvironmentValue);
+
             _view = view;
             _platformServices = platformServices ?? throw new ArgumentNullException(nameof(platformServices));
 

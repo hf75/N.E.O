@@ -1,3 +1,4 @@
+using Neo.IPC;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -135,6 +136,52 @@ namespace Neo.PluginWindowWPF
         }
 
         // ================================
+        // Hot reload
+        // ================================
+        private System.Reflection.Assembly? _pluginAssembly;
+
+        /// <summary>
+        /// Patches the running plugin in place instead of replacing it: the control instance — and
+        /// with it everything the user loaded or entered — stays alive. Runs on the UI thread.
+        /// Throws when the update cannot be applied; the host then falls back to a full reload.
+        /// </summary>
+        public string HandleHotReload(HotReloadRequest request)
+        {
+            var plugin = _pluginAssembly;
+            if (plugin == null || dynamicContent.Content is not UserControl control)
+                throw new InvalidOperationException("No plugin is loaded.");
+            if (!HotReloadRuntime.IsSupported)
+                throw new NotSupportedException(
+                    $"This process was started without {HotReloadRuntime.EnvironmentVariable}={HotReloadRuntime.EnvironmentValue}.");
+
+            // Snapshot first: once the UI is rebuilt, what the user typed or selected is gone.
+            var uiState = request.RebuildUi ? UiStateSnapshot.Capture(control) : null;
+
+            var applied = HotReloadRuntime.Apply(plugin, control, request);
+
+            string ui = "";
+            if (request.RebuildUi && !string.IsNullOrEmpty(request.RebuildMethodName))
+            {
+                // "void BuildUi()" assigns Content itself, "Content = BuildUI();" hands the new root back.
+                if (HotReloadRuntime.InvokeRebuild(control, request.RebuildMethodName, out var stoppedTimers) is UIElement newRoot &&
+                    !ReferenceEquals(newRoot, control))
+                    control.Content = newRoot;
+
+                ClearSelection(); // the designer's selection pointed into the old tree
+                int restored = uiState!.Restore(control);
+                ui = $", UI rebuilt ({restored} of {uiState.Count} UI value(s) carried over" +
+                     (stoppedTimers > 0 ? $", {stoppedTimers} replaced timer(s) stopped)" : ")");
+
+                // Scroll extents and virtualized items settle with the next layout pass.
+                Dispatcher.BeginInvoke(new Action(() => { try { uiState.Restore(control); } catch { } }),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
+            }
+
+            HotReloadRuntime.InvokeOnHotReloaded(control);
+            return applied + ui;
+        }
+
+        // ================================
         // Bytes-basierter Ladeweg
         // ================================
         public void HandleLoadUserControlFromBytes(
@@ -154,6 +201,7 @@ namespace Neo.PluginWindowWPF
             {
                 var pluginAssembly = plc.LoadFromStream(ms)
                     ?? throw new InvalidOperationException("Main assembly could not be loaded.");
+                _pluginAssembly = pluginAssembly;
 
                 var controlType = SandboxPluginLoadContext.FindControlType(
                     pluginAssembly, explicitControlTypeName, typeof(UserControl));
@@ -218,12 +266,15 @@ namespace Neo.PluginWindowWPF
             {
                 oldPlc = pluginLoadContext;
                 pluginLoadContext = null;
+                _pluginAssembly = null;
             }
 
             _ = Task.Run(() =>
             {
                 try { (oldPlc as SandboxPluginLoadContext)?.Dispose(); } catch (Exception ex) { Debug.WriteLine($"[UnloadPlugin] Dispose failed: {ex.Message}"); }
-                try { oldPlc?.Unload(); } catch (Exception ex) { Debug.WriteLine($"[UnloadPlugin] Unload failed: {ex.Message}"); }
+                // Not collectible when this process can hot reload (see SandboxPluginLoadContext):
+                // the old plugin then stays loaded, and only its UI and objects are released.
+                try { if (oldPlc?.IsCollectible == true) oldPlc.Unload(); } catch (Exception ex) { Debug.WriteLine($"[UnloadPlugin] Unload failed: {ex.Message}"); }
 
                 try
                 {

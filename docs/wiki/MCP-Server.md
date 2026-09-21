@@ -114,7 +114,7 @@ Compiles C# UserControl code and shows it in a live preview window. Supports bot
 
 ### `update_preview`
 
-Hot-reloads modified code in the existing preview window. Same parameters as `compile_and_preview`. The preview window stays open — the user sees changes in place. App state (timers, scroll positions) is reset with the new code.
+Updates the running app in the existing preview window. Same parameters as `compile_and_preview`. The new code is patched into the **running** app ([[Hot Reload]]): the instance, its data and the UI state (typed text, selection, scroll position) survive, and the result ends with `Hot reload (generation n): …`. When a change cannot be patched, the result says `Hot reload not possible — <reason>` and the app is reloaded fresh, as before. (`compile_and_preview` always starts the app fresh.)
 
 ### `capture_screenshot`
 
@@ -162,7 +162,7 @@ The exported directory (~27 MB) contains the executable, all Avalonia DLLs, NuGe
 
 ### `patch_preview`
 
-Applies a unified diff patch to the last compiled source code and hot-reloads. Much more efficient than `update_preview` — Claude sends only the changed lines instead of the full code. Uses fuzzy context matching. NuGet packages carry over automatically from the previous compilation.
+Applies a unified diff patch to the last compiled source code and updates the running app like `update_preview` (patched in place, state preserved, when possible). Much more efficient than `update_preview` — Claude sends only the changed lines instead of the full code. Uses fuzzy context matching. NuGet packages carry over automatically from the previous compilation.
 
 **Parameters:**
 - `patch` (string, required) — Unified diff text with `@@ hunk` headers targeting `./currentcode.cs`.

@@ -156,6 +156,10 @@ Generated Avalonia code is compiled against, and runs on, the Avalonia assemblie
 - **The host's copy wins** (`Neo.Agents.NugetLoader/HostProvidedAssemblies`). A project saved with an older N.E.O. still asks for `Avalonia|11.3.12`; a second `Avalonia.Base` in the reference list would make every Avalonia type ambiguous. The desktop hosts register the Avalonia DLLs from their own bin folder (`AppController.RegisterHostAvaloniaAssemblies`) and move such requests to the shipped version; the MCP server does not download host-provided packages at all. Add-ons the host does not ship (`Avalonia.Controls.DataGrid`, …) still come from NuGet.
 - **Web content**: the child runtime ships the official `Avalonia.Controls.WebView` (`NativeWebView`: WebView2 / WKWebView / WebKitGTK), so generated apps can embed a browser without a package download. The child redirects the WebView2 profile to `%LOCALAPPDATA%/Neo/WebView2` (`WebViewDefaults`) — the default would be a folder next to the executable. Not available in the Web App.
 
+### Hot reload
+
+A code change is patched into the running plugin (Roslyn's edit-and-continue deltas, `MetadataUpdater.ApplyUpdate` in the child) instead of replacing it, so the app instance and its state survive; state the new code expects but the living objects lack is filled in by injected helpers, and the UI is rebuilt with its visible state carried over. Anything that cannot be carried over safely falls back to the old unload/load. See [[Hot Reload]].
+
 ### Channels (MCP only)
 
 The generated app links against `Neo.App.Api` and calls `Ai.Trigger(prompt)` — the trigger text travels out via the pipe → MCP server → Claude Code channel → a new Claude turn. See [[Channels]].

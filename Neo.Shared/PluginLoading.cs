@@ -24,7 +24,12 @@ namespace Neo.Shared
         public SandboxPluginLoadContext(
             Func<AssemblyName, byte[]?> managedResolver,
             Func<string, string> nativePathProvider)
-            : base(isCollectible: true)
+            // Collectible, so a replaced plugin can be unloaded — except when the process can hot
+            // reload: edit-and-continue on an assembly in a collectible context crashes the runtime
+            // as soon as an update adds a static field (access violation in the type's .cctor).
+            // Those processes patch the plugin in place most of the time and only leak an assembly
+            // on the rarer full reloads.
+            : base(isCollectible: !HotReloadRuntime.IsSupported)
         {
             _managedResolver = managedResolver;
             _nativePathProvider = nativePathProvider;

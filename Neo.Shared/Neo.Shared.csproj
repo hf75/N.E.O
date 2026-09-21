@@ -10,4 +10,7 @@
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neo.HotReload.Tests" />
+  </ItemGroup>
 </Project>
