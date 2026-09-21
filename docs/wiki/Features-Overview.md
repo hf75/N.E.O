@@ -177,7 +177,7 @@ Switch between frameworks in **Settings**:
 
 The desktop host is one of three ways to use Neo. The same prompt → compile → run loop is also available:
 
-- **[[MCP Server]]** — Claude Code / Cowork drives Neo as an MCP server (25 tools). Covers compile-and-preview, hot-reload, unified-diff patches, screenshots, visual-tree inspection, live property edits, data injection, session save/load, skills registry, multi-window layouts, standalone-`.exe` export, and the Smart-Edit overlay (`Ctrl+K` inside the preview window).
+- **[[MCP Server]]** — Claude Code / Cowork drives Neo as an MCP server (30 tools). Covers compile-and-preview, hot-reload, unified-diff patches, screenshots, visual-tree inspection, live property edits, data injection, session save/load, skills registry, multi-window layouts, standalone-`.exe` export, and the Smart-Edit overlay (`Ctrl+K` inside the preview window).
 - **[[Web App]]** — Everything runs in a browser tab. Roslyn-in-WASM compiles the generated code; the backend proxies AI and NuGet. Good if you don't want to install Neo itself on the target machine.
 
 See also **[[Channels]]** — running apps that push prompts back into Claude (MCP-only, research preview).

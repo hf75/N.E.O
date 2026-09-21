@@ -114,7 +114,7 @@ Everything lives in [docs/wiki/](docs/wiki/Home.md). Start with [Home](docs/wiki
 
 - [Getting Started](docs/wiki/Getting-Started.md) — install, first prompt (desktop host path)
 - [Web App](docs/wiki/Web-App.md) — the browser variant
-- [MCP Server](docs/wiki/MCP-Server.md) — Claude-driven workflow (25 tools)
+- [MCP Server](docs/wiki/MCP-Server.md) — Claude-driven workflow (30 tools)
 - [Live-MCP](docs/wiki/Live-MCP.md) — generated apps as MCP servers (call into them, read state, subscribe)
 - [Frozen-Mode](docs/wiki/Frozen-Mode.md) — exporting Live-MCP apps as standalone executables
 - [Excel MCP](docs/wiki/Excel-MCP.md) — live Excel integration

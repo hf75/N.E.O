@@ -93,7 +93,7 @@ In Claude Code, you can verify with:
 claude mcp list
 ```
 
-The `neo-preview` server should appear with 25 tools.
+The `neo-preview` server should appear with 30 tools (the 25 preview tools below plus the five Live-MCP tools — see [[Live-MCP]]). Every running app adds one more tool per `[McpCallable]` method.
 
 ## Available Tools (25)
 
@@ -382,7 +382,9 @@ Neo.McpServer/
     PreviewSessionManager.cs        — PluginWindow lifecycle + Named Pipe IPC (framework-aware)
     SkillsRegistry.cs               — App skills registry (skills.json read/write)
   Tools/
-    PreviewTools.cs                 — MCP tool definitions (25 tools, framework parameter)
+    PreviewTools*.cs                — the 25 preview tools (partial class: lifecycle, Inspection, LiveEditing,
+                                      WebBridge, SessionsAndExport, Windows)
+    LiveMcpTools.cs / LiveMcpInputTools.cs — the 5 Live-MCP tools
     AvaloniaPrompt.cs               — MCP prompts (create_avalonia_app + create_wpf_app)
 
 Neo.PluginWindowAvalonia.MCP/       — Avalonia preview child process (cross-platform); thin head, adds Smart Edit

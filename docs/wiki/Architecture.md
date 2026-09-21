@@ -81,7 +81,8 @@ Neo.App.WebApp.Tests          22 tests (parser, analyzer, session store, ChatEnt
 Neo.Backend                   ASP.NET Core helper — AI+NuGet proxy + static server.
 Neo.Backend.Tests             12 tests (endpoints, provider registry).
 
-Neo.McpServer                 MCP server over stdio. 25 tools.
+Neo.McpServer                 MCP server over stdio. 30 static tools (25 preview + 5 Live-MCP), plus one
+                              dynamic tool per [McpCallable] method of a running app.
 
 Neo.ExcelMcp/                 Container directory.
   Neo.ExcelMcp.AddIn          Excel-DNA .xll that runs inside Excel.exe.
@@ -156,7 +157,7 @@ The generated app links against `Neo.App.Api` and calls `Ai.Trigger(prompt)` —
 | You want to | Look at |
 |---|---|
 | Add a new AI provider | `Neo.Agents/Neo.Agents.Core` and existing providers like `Neo.Agents.Claude` |
-| Change the prompt → code → UI flow | `Neo.App.Core/AppController.cs` (desktop), `Neo.App.WebApp/.../AppOrchestrator.cs` (Web) |
-| Add a new MCP tool | `Neo.McpServer/Tools/PreviewTools.cs` |
+| Change the prompt → code → UI flow | `Neo.App.Core/AppController.Prompting.cs` (desktop; `AppController` is a partial class split by concern: Agents, History, Compilation, ImportExport, Prompting, SingleShotTools, Designer, CrashRecovery), `Neo.App.WebApp/.../AppOrchestrator.cs` (Web) |
+| Add a new MCP tool | `Neo.McpServer/Tools/PreviewTools*.cs` (partial class, one file per tool group); add its name to `ToolSurfaceTests` |
 | Tweak generated-code safety rules | `Neo.App.WebApp/.../SecurityAnalyzer.cs` (Web); there's no equivalent on desktop (AppContainer covers it) |
 | Explore the Web App stack | [[Web App]] + [[Backend API]] |
