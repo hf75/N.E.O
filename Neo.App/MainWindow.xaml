@@ -268,11 +268,6 @@
                 <!-- Settings Button -->
                 <Button ToolTip="Settings" Margin="8,0,0,0" Content="&#xE713;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Settings"></Button>                
                 
-                <!-- Designer Mode (Click-to-Edit) -->
-                <ToggleButton x:Name="BtnDesignerMode" Margin="8,0,0,0" Style="{StaticResource MinimalistToggleButtonStyle}" ToolTip="Designer Mode (Click-to-Edit)" Click="BtnDesignerMode_Click">
-                    <TextBlock Style="{StaticResource IconText}" Text="&#xE70F;"/>
-                </ToggleButton>
-
                 <!-- Code Editor Toggle -->
                 <ToggleButton x:Name="BtnCodeEditor" Margin="8,0,0,0" Style="{StaticResource MinimalistToggleButtonStyle}" ToolTip="Code Editor (Ctrl+Shift+C)" Click="BtnCodeEditor_Click">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE943;"/>

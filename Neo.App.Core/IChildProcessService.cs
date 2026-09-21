@@ -16,7 +16,6 @@ namespace Neo.App
         void NotifyParentWindowStateChanged(HostWindowState newState);
         Task SetCursorVisibilityAsync(bool isVisible);
         Task SetChildModalityAsync(bool isModal);
-        Task SetDesignerModeAsync(bool enabled);
         Task UnloadControlAsync();
 
         /// <summary>
@@ -40,6 +39,5 @@ namespace Neo.App
 
         event Func<CrashReason, ErrorMessage, Task> ChildProcessCrashed;
         event Action<LogMessage> ChildLogReceived;
-        event Action<DesignerSelectionMessage> DesignerSelectionReceived;
     }
 }

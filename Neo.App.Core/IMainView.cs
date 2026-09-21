@@ -50,11 +50,6 @@ namespace Neo.App
             bool isPowerShellMode = false,
             bool isConsoleAppMode = false);
 
-        // ─── Designer ────────────────────────────────────────────────────
-        void ShowDesignerPropertiesWindow(DesignerSelectionMessage selection,
-            EventHandler<DesignerApplyRequestedEventArgs> applyHandler);
-        void CloseDesignerPropertiesWindow();
-
         // ─── Factory Methods ──────────────────────────────────────────────
         IChildProcessService CreateChildProcessService();
         IAppLogger CreateLogger(ApplicationState appState);

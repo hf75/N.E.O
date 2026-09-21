@@ -397,22 +397,6 @@ namespace Neo.PluginWindowAvalonia
                         break;
                     }
 
-                case IpcTypes.SetDesignerMode:
-                    {
-                        var designerMsg = Json.FromJson<SetDesignerModeMessage>(env.PayloadJson)!;
-
-                        Dispatcher.UIThread.Post(() =>
-                        {
-                            MainWin.SetDesignerMode(designerMsg.Enabled);
-                        });
-
-                        await SafeSendAsync(new IpcEnvelope(
-                            IpcTypes.Ack, env.CorrelationId,
-                            Json.ToJson(new AckMessage("Designer mode updated."))
-                        ));
-                        break;
-                    }
-
                 case IpcTypes.ParentWindowBounds:
                     {
                         var bounds = Json.FromJson<ParentWindowBoundsMessage>(env.PayloadJson);
@@ -1077,12 +1061,6 @@ namespace Neo.PluginWindowAvalonia
 
             var msg = new IAmActivated(0);
             await SafeSendAsync(new IpcEnvelope(IpcTypes.ChildActivated, "", Json.ToJson(msg)));
-        }
-
-        public Task NotifyParentDesignerSelection(DesignerSelectionMessage selection)
-        {
-            if (_client == null) return Task.CompletedTask;
-            return SafeSendAsync(new IpcEnvelope(IpcTypes.DesignerSelection, "", Json.ToJson(selection)));
         }
 
         // =======================================================

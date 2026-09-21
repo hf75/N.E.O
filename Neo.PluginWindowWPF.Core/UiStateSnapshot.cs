@@ -16,7 +16,7 @@ namespace Neo.PluginWindowWPF
     /// <para>Every control is remembered under its position in the tree (type and index among
     /// siblings of the same type, all the way up) and, when it has one, under its <c>Name</c>. The
     /// name wins when both versions have it; the position covers controls that gained or lost a name
-    /// in between — switching the designer on names every control. A control that cannot be found
+    /// in between (the next version names what it wants to address). A control that cannot be found
     /// again, or that changed its type, is left as the new code built it. Values are only written
     /// when they differ, so change handlers do not fire for nothing.</para>
     /// </summary>

@@ -77,7 +77,7 @@ Open <http://localhost:5099>. Full guide: [docs/wiki/Web-App.md](docs/wiki/Web-A
 - **Prompt → code → live UI in seconds.** Claude/GPT/Gemini writes C#; Roslyn compiles; a collectible `AssemblyLoadContext` loads it into a plugin window (desktop) or the same WASM runtime (web).
 - **Iterate.** Follow-up prompts see the previous code and produce full updates (desktop/MCP also support unified-diff patches).
 - **[Hot reload](docs/wiki/Hot-Reload.md)** — the next prompt patches the *running* app (desktop and MCP): the file you loaded, the text you typed, the selected row are still there when the new feature appears.
-- **Branching undo/redo**, **visual designer** (WPF), **export to standalone `.exe`** (Win/Linux/macOS), **AppContainer sandbox** (WPF).
+- **Branching undo/redo**, **export to standalone `.exe`** (Win/Linux/macOS), **AppContainer sandbox** (WPF).
 - **Session save/load** as `.neo` files — same format across desktop, MCP, and Web App.
 - **Built-in AI capabilities**: image generation (Gemini), image analysis (Gemini), speech-to-text (Whisper), text-to-speech (OpenAI TTS).
 - **Optional Python** integration via embedded Python 3.11 (desktop only).
@@ -121,7 +121,7 @@ Everything lives in [docs/wiki/](docs/wiki/Home.md). Start with [Home](docs/wiki
 - [Excel MCP](docs/wiki/Excel-MCP.md) — live Excel integration
 - [Channels](docs/wiki/Channels.md) — generated apps that push prompts back to Claude
 - [Architecture](docs/wiki/Architecture.md) — how the projects fit together
-- [Features Overview](docs/wiki/Features-Overview.md) · [Designer Mode](docs/wiki/Designer-Mode.md) · [Export and Import](docs/wiki/Export-and-Import.md) · [Settings](docs/wiki/Settings-and-Configuration.md) · [Shortcuts](docs/wiki/Keyboard-Shortcuts.md) · [Troubleshooting](docs/wiki/Troubleshooting.md)
+- [Features Overview](docs/wiki/Features-Overview.md) · [Hot Reload](docs/wiki/Hot-Reload.md) · [Export and Import](docs/wiki/Export-and-Import.md) · [Settings](docs/wiki/Settings-and-Configuration.md) · [Shortcuts](docs/wiki/Keyboard-Shortcuts.md) · [Troubleshooting](docs/wiki/Troubleshooting.md)
 
 ## License
 

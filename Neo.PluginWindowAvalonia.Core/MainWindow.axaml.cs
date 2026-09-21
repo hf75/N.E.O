@@ -155,7 +155,6 @@ namespace Neo.PluginWindowAvalonia
                     !ReferenceEquals(newRoot, control))
                     control.Content = newRoot;
 
-                ClearSelection(); // the designer's selection pointed into the old tree
                 int restored = uiState!.Restore(control);
                 ui = $", UI rebuilt ({restored} of {uiState.Count} UI value(s) carried over" +
                      (stoppedTimers > 0 ? $", {stoppedTimers} replaced timer(s) stopped)" : ")");

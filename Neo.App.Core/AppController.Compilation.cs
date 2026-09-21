@@ -154,7 +154,7 @@ namespace Neo.App
         }
 
         // One running app, one hot reload session. Every way a new build reaches the child goes
-        // through DisplayCompiledDllAsync (prompts, undo/redo, history jumps, designer edits), so
+        // through DisplayCompiledDllAsync (prompts, undo/redo, history jumps, code editor), so
         // all of them keep the state of the running app when the change allows it.
         private readonly Neo.HotReload.HotReloadCoordinator _hotReload = new();
 

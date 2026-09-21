@@ -57,7 +57,6 @@ From left to right:
 | Export | Export | Export your app as a standalone executable |
 | Sandbox | Sandbox Controls | Toggle security sandbox options |
 | Settings | Settings | Open the settings window |
-| Designer | Designer Mode | Click-to-edit visual editing |
 | Code | Code Editor | Open the built-in code editor |
 | History | History | View branching undo/redo tree |
 | Clear | Clear | Reset the session |

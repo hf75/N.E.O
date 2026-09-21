@@ -23,7 +23,7 @@ Browser tab                                     Neo.Backend (your machine)
 
 **When not to prefer it**
 
-- You need WPF-specific features (designer mode, AppContainer).
+- You need WPF-specific features (AppContainer sandbox).
 - You need P/Invoke, `System.IO.File`, or any API the WASM runtime doesn't expose. These are blocked by a Roslyn-based security analyzer before compilation (see the *Security* section below for the blocked API list).
 
 ## Prerequisites
@@ -133,7 +133,6 @@ The dropdown in the header lists every provider the backend could see. Entries w
 | Unloadable plugin (collectible ALC) | Yes — heap stays flat over long sessions |
 | Forbidden-API analyzer | Yes — blocks `File`, `Process`, `P/Invoke`, `unsafe`, `System.Windows.*` |
 | Export as standalone `.exe` | Not yet — planned |
-| Visual designer | Not yet — possibly WPF-only forever |
 | Channel back-reporting (`Ai.Trigger`) | Not yet — MCP-only |
 
 ## Bundle size

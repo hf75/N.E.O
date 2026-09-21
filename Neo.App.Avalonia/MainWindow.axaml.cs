@@ -41,7 +41,6 @@ namespace Neo.App
 
         private AppController _appController = null!;
         // Wait indicator is now shown in the Live Preview child window, not here
-        private DesignerPropertiesWindow? _designerPropertiesWindow;
 
         public MainWindow()
         {
@@ -592,19 +591,6 @@ namespace Neo.App
             );
         }
 
-        private async void BtnDesignerMode_Click(object? sender, RoutedEventArgs e)
-        {
-            if (_appController == null) return;
-
-            bool enable = BtnDesignerMode.IsChecked == true;
-            bool ok = await _appController.SetDesignerModeAsync(enable);
-            if (!ok && enable)
-                BtnDesignerMode.IsChecked = false;
-
-            if (!enable && _isCodeEditorActive)
-                HideCodeEditor();
-        }
-
         private async void Button_Click_Settings(object? sender, RoutedEventArgs e)
         {
             var settingsWindow = new SettingsWindow();
@@ -655,7 +641,6 @@ namespace Neo.App
             BtnSandboxToggle.IsChecked = false;
             BtnInternetToggle.IsChecked = false;
             BtnFolderAccess.IsChecked = false;
-            BtnDesignerMode.IsChecked = false;
         }
 
         public async Task<CrashDialogResult> ShowCrashDialogAsync()
@@ -703,35 +688,6 @@ namespace Neo.App
                 isPowerShellMode: isPowerShellMode, isConsoleAppMode: isConsoleAppMode);
             await review.ShowDialog<bool?>(this);
             return review.Decision;
-        }
-
-        void IMainView.ShowDesignerPropertiesWindow(DesignerSelectionMessage selection,
-            EventHandler<DesignerApplyRequestedEventArgs> applyHandler)
-        {
-            if (_designerPropertiesWindow == null || !_designerPropertiesWindow.IsVisible)
-            {
-                _designerPropertiesWindow = new DesignerPropertiesWindow();
-                _designerPropertiesWindow.ApplyRequested += applyHandler;
-                _designerPropertiesWindow.Closed += (_, _) => _designerPropertiesWindow = null;
-                _designerPropertiesWindow.Show();
-                _designerPropertiesWindow.Topmost = true;
-            }
-
-            _designerPropertiesWindow.SetSelection(selection);
-            // Toggle Topmost off/on to force window manager to bring it to front
-            _designerPropertiesWindow.Topmost = false;
-            _designerPropertiesWindow.Topmost = true;
-            _designerPropertiesWindow.Activate();
-            _designerPropertiesWindow.Focus();
-        }
-
-        void IMainView.CloseDesignerPropertiesWindow()
-        {
-            if (_designerPropertiesWindow != null)
-            {
-                try { _designerPropertiesWindow.Close(); } catch { }
-                _designerPropertiesWindow = null;
-            }
         }
 
         IChildProcessService IMainView.CreateChildProcessService() =>

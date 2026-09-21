@@ -33,9 +33,6 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="8.0.1" />
-    <!-- DesignerIdInjector recognises Avalonia controls with the Avalonia assemblies next to the
-         running program (the hosts have them); the designer tests need them here the same way. -->
-    <PackageReference Include="Avalonia" Version="$(NeoAvaloniaVersion)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -43,8 +40,6 @@
     <!-- The hosts' half of hot reload; brings Roslyn and the compile agent along. -->
     <ProjectReference Include="..\Neo.HotReload\Neo.HotReload.csproj" />
     <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
-    <!-- DesignerIdInjector: what switching on the designer does to the code. -->
-    <ProjectReference Include="..\Neo.App.Core\Neo.App.Core.csproj" />
 
     <!-- Build-order only: the tests launch these executables from their own bin folders. -->
     <ProjectReference Include="..\Neo.PluginWindowAvalonia\Neo.PluginWindowAvalonia.csproj" ReferenceOutputAssembly="false" Private="false" />

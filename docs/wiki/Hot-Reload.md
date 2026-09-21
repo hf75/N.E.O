@@ -2,7 +2,7 @@
 
 When you refine a running app with the next prompt, N.E.O. patches the new code into the **running** app instead of restarting it. The app instance survives — and with it everything you did: the Excel file you loaded, the rows you imported, the text you typed, the tab you had open, the ticked boxes, the scroll position. The new feature appears in the app you were already using.
 
-This works in the desktop hosts (WPF and Avalonia, every way a new build reaches the preview: prompts, undo/redo, history jumps, designer edits) and in the MCP server (`update_preview`, `patch_preview`). `compile_and_preview` always starts the app fresh. The Web App reloads in the browser as before.
+This works in the desktop hosts (WPF and Avalonia, every way a new build reaches the preview: prompts, undo/redo, history jumps, code editor) and in the MCP server (`update_preview`, `patch_preview`). `compile_and_preview` always starts the app fresh. The Web App reloads in the browser as before.
 
 ## What you see
 
@@ -35,7 +35,7 @@ This works in the desktop hosts (WPF and Avalonia, every way a new build reaches
    - **new fields with initializers** (`List<string> _tags = new()`) are initialised on every live object of that type — otherwise the first use is a `NullReferenceException`;
    - **changed configuration** (a `readonly` string/colour/number, anything `static readonly`) is applied again — "make the accent blue" shows; mutable fields are your data and keep their value;
    - **statements added to the constructor** ("start the clock") run once on the live control;
-   - **UI code**: when something that runs while the UI is built changed, the app's UI method (`BuildUi()`, `InitializeComponents()`, …) is called again. Before that, the window takes a snapshot of the visual tree (text, selection, checked state, expanded, scroll offset, focus — matched by control name and by position, so controls the designer renamed are found again) and puts it back into the new tree (`UiStateSnapshot.cs` per framework). Timers the UI method replaced are stopped instead of ticking twice.
+   - **UI code**: when something that runs while the UI is built changed, the app's UI method (`BuildUi()`, `InitializeComponents()`, …) is called again. Before that, the window takes a snapshot of the visual tree (text, selection, checked state, expanded, scroll offset, focus — matched by control name and by position, so a control that got a name in the new version is found again) and puts it back into the new tree (`UiStateSnapshot.cs` per framework). Timers the UI method replaced are stopped instead of ticking twice.
 4. **Anything that cannot be carried over safely ends in a full reload**, never in a half-updated app: rude edits, a constructor change that cannot be replayed, UI changes in an app without a re-runnable UI method, a changed set of references (a new NuGet package), a failure while applying.
 
 ## Writing apps that survive changes

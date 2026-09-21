@@ -21,13 +21,5 @@
             </StackPanel>
         </Border>
 
-        <Canvas x:Name="SelectionOverlay" IsHitTestVisible="False">
-            <Border x:Name="SelectionBorder"
-                    BorderBrush="#FF00A2FF"
-                    BorderThickness="2"
-                    CornerRadius="2"
-                    Background="Transparent"
-                    IsVisible="False" />
-        </Canvas>
 </Grid>
 </Window>

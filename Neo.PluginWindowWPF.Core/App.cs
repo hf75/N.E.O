@@ -330,17 +330,6 @@ namespace Neo.PluginWindowWPF
                         break;
                     }
 
-                case IpcTypes.SetDesignerMode:
-                    {
-                        var designerMsg = Json.FromJson<SetDesignerModeMessage>(env.PayloadJson)!;
-                        await Dispatcher.BeginInvoke(() => MainWin.SetDesignerMode(designerMsg.Enabled));
-                        await SafeSendAsync(new IpcEnvelope(
-                            IpcTypes.Ack, env.CorrelationId,
-                            Json.ToJson(new AckMessage("Designer mode updated."))
-                        ));
-                        break;
-                    }
-
                 case IpcTypes.PositionWindow:
                     {
                         var bounds = Json.FromJson<ParentWindowBoundsMessage>(env.PayloadJson);
@@ -850,12 +839,6 @@ namespace Neo.PluginWindowWPF
         {
             if (_client == null) return;
             await SafeSendAsync(new IpcEnvelope(IpcTypes.ChildActivated, "", Json.ToJson(new IAmActivated(0))));
-        }
-
-        public Task NotifyParentDesignerSelection(DesignerSelectionMessage selection)
-        {
-            if (_client == null) return Task.CompletedTask;
-            return SafeSendAsync(new IpcEnvelope(IpcTypes.DesignerSelection, "", Json.ToJson(selection)));
         }
 
         private void HardExitNow()

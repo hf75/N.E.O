@@ -4,7 +4,7 @@ namespace Neo.PluginWindowWPF
 {
     /// <summary>
     /// What an executable head may customise about the shared plugin window.
-    /// Everything else — IPC loop, plugin loading, designer mode, web bridge, the MCP
+    /// Everything else — IPC loop, plugin loading, hot reload, web bridge, the MCP
     /// inspection handlers — is identical for every head and lives in this library.
     /// </summary>
     public sealed class PluginHostOptions

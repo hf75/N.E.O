@@ -89,7 +89,7 @@ Neo.ExcelMcp/                 Container directory.
   Neo.ExcelMcp.Bridge         stdio↔named-pipe translator for Claude.
 
 Neo.PluginWindowAvalonia.Core Everything the Avalonia child window does: IPC loop, plugin loading,
-                              designer mode, Live-MCP, WebBridge. Shared by both Avalonia heads.
+                              hot reload, Live-MCP, WebBridge. Shared by both Avalonia heads.
 Neo.PluginWindowAvalonia      Thin exe head: Avalonia child of the desktop hosts.
 Neo.PluginWindowAvalonia.MCP  Thin exe head: Avalonia child of Neo.McpServer. Adds Smart Edit (Ctrl+K)
                               and switches on the MCP host features (Live-MCP manifest, Ai.Trigger).
@@ -169,7 +169,7 @@ The generated app links against `Neo.App.Api` and calls `Ai.Trigger(prompt)` —
 | You want to | Look at |
 |---|---|
 | Add a new AI provider | `Neo.Agents/Neo.Agents.Core` and existing providers like `Neo.Agents.Claude` |
-| Change the prompt → code → UI flow | `Neo.App.Core/AppController.Prompting.cs` (desktop; `AppController` is a partial class split by concern: Agents, History, Compilation, ImportExport, Prompting, SingleShotTools, Designer, CrashRecovery), `Neo.App.WebApp/.../AppOrchestrator.cs` (Web) |
+| Change the prompt → code → UI flow | `Neo.App.Core/AppController.Prompting.cs` (desktop; `AppController` is a partial class split by concern: Agents, History, Compilation, ImportExport, Prompting, SingleShotTools, CrashRecovery), `Neo.App.WebApp/.../AppOrchestrator.cs` (Web) |
 | Add a new MCP tool | `Neo.McpServer/Tools/PreviewTools*.cs` (partial class, one file per tool group); add its name to `ToolSurfaceTests` |
 | Tweak generated-code safety rules | `Neo.App.WebApp/.../SecurityAnalyzer.cs` (Web); there's no equivalent on desktop (AppContainer covers it) |
 | Explore the Web App stack | [[Web App]] + [[Backend API]] |

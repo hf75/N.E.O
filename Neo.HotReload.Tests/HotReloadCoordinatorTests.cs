@@ -42,9 +42,9 @@ public class HotReloadCoordinatorTests
     [Fact]
     public async Task The_host_can_keep_compiling_to_the_same_path_while_the_app_is_hot_reloaded()
     {
-        // The desktop hosts compile every build — prompts, designer mode, undo — to the same DLL path.
+        // The desktop hosts compile every build — prompts, code editor, undo — to the same DLL path.
         // Regression: the hot reload session held that path's PDB open after the first update, so
-        // the next compile (switching on designer mode) failed with "file is being used".
+        // the next compile failed with "file is being used".
         using var app = await HotReloadHarness.StartAsync(V1);
         using var coordinator = new HotReloadCoordinator();
         (await coordinator.StartAsync(app.DllPath, HotReloadRuntime.Capabilities)).Should().BeNull();

@@ -25,7 +25,6 @@ namespace Neo.App
 
         public event Func<CrashReason, ErrorMessage, Task>? ChildProcessCrashed;
         public event Action<LogMessage>? ChildLogReceived;
-        public event Action<DesignerSelectionMessage>? DesignerSelectionReceived;
 
         //
         // Deps
@@ -373,23 +372,6 @@ namespace Neo.App
             catch (Exception ex)
             {
                 Debug.WriteLine($"[SetCursorVisibilityAsync] Failed: {ex.Message}");
-            }
-        }
-
-        public async Task SetDesignerModeAsync(bool enabled)
-        {
-            if (_pipeServer == null || !_pipeServer.IsConnected) return;
-            try
-            {
-                await SendRequestAsync(
-                    IpcTypes.SetDesignerMode,
-                    new SetDesignerModeMessage(enabled),
-                    timeout: TimeSpan.FromMilliseconds(500),
-                    ct: _pipeCts.Token);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[SetDesignerModeAsync] Failed: {ex.Message}");
             }
         }
 
@@ -906,11 +888,6 @@ namespace Neo.App
                         case IpcTypes.Log:
                             var log = IPC.Json.FromJson<LogMessage>(env.PayloadJson)!;
                             ChildLogReceived?.Invoke(log);
-                            break;
-
-                        case IpcTypes.DesignerSelection:
-                            var sel = IPC.Json.FromJson<DesignerSelectionMessage>(env.PayloadJson)!;
-                            _ = _dispatcher.InvokeAsync(() => DesignerSelectionReceived?.Invoke(sel));
                             break;
 
                         case IpcTypes.Error:

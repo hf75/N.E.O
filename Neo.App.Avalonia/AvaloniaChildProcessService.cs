@@ -40,7 +40,6 @@ namespace Neo.App
 
         public event Func<CrashReason, ErrorMessage, Task>? ChildProcessCrashed;
         public event Action<LogMessage>? ChildLogReceived;
-        public event Action<DesignerSelectionMessage>? DesignerSelectionReceived;
 
         public AvaloniaChildProcessService(MainWindow mainWindow)
         {
@@ -237,12 +236,6 @@ namespace Neo.App
                                     await ChildProcessCrashed.Invoke(CrashReason.UnhandledException, errMsg);
                                 break;
 
-                            case IpcTypes.DesignerSelection:
-                                var selMsg = Json.FromJson<DesignerSelectionMessage>(env.PayloadJson);
-                                if (selMsg != null)
-                                    Dispatcher.UIThread.Post(() => DesignerSelectionReceived?.Invoke(selMsg));
-                                break;
-
                             case IpcTypes.NotifyFirstChildVisibility:
                             case IpcTypes.ChildActivated:
                             case IpcTypes.Heartbeat:
@@ -435,14 +428,6 @@ namespace Neo.App
                 IpcTypes.SetChildModal,
                 Guid.NewGuid().ToString("N"),
                 Json.ToJson(new IsChildModal(isModal ? 1 : 0))));
-        }
-
-        public async Task SetDesignerModeAsync(bool enabled)
-        {
-            await SafeSendControlAsync(new IpcEnvelope(
-                IpcTypes.SetDesignerMode,
-                Guid.NewGuid().ToString("N"),
-                Json.ToJson(new SetDesignerModeMessage(enabled))));
         }
 
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<HotReloadResultMessage?>> _pendingHotReloads = new();

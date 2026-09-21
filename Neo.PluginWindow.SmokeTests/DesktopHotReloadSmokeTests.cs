@@ -133,15 +133,15 @@ public class DesktopHotReloadSmokeTests : IDisposable
 
     [Theory]
     [MemberData(nameof(DesktopHeads))]
-    public async Task Switching_the_designer_on_after_a_hot_reload_keeps_the_state(string head, string launchArgs)
+    public async Task Controls_that_get_a_name_in_the_next_version_keep_their_state(string head, string launchArgs)
     {
-        // The reported sequence: the app runs, the user types, a prompt changes it (hot reload), then
-        // designer mode is switched on — which rewrites the code (every control gets a __neo_ name)
-        // and compiles it to the same path. That compile failed because the hot reload session held
-        // the PDB of that path open.
+        // A box the user typed into has no name in one version and gets one in the next (the model
+        // names what it wants to address). The UI is rebuilt; its state is found again by position.
+        // The versions are compiled to the same path, as the desktop hosts do — which also covers the
+        // reported "file is being used by another process" on the compile after a hot reload.
         bool wpf = head.Contains("WPF", StringComparison.Ordinal);
         var dllPath = Path.Combine(_directory, "DynamicUserControl.dll");
-        var v1 = wpf ? WpfDesignerV1 : AvaloniaDesignerV1;
+        var v1 = wpf ? WpfNotesV1 : AvaloniaNotesV1;
 
         await using var child = await ChildSession.StartAsync(TestEnvironment.HeadExe(head), launchArgs,
             new Dictionary<string, string> { [HotReloadRuntime.EnvironmentVariable] = HotReloadRuntime.EnvironmentValue });
@@ -152,35 +152,31 @@ public class DesktopHotReloadSmokeTests : IDisposable
         (await child.WaitForLoadsAsync(1)).Should().BeTrue(string.Join(" | ", child.Errors));
         (await hotReload.StartAsync(dllPath, child.HotReloadCapabilities)).Should().BeNull();
 
-        // Typed into a box that has no name — until the designer gives it one.
         (await child.SetPropertyAsync("TextBox:0", "Text", "typed by the user"))!.Success.Should().BeTrue();
 
-        // A prompt changes the app.
+        // Two prompts in a row: a new title, then names for the controls.
         var v2 = v1.Replace("\"Notes v1\"", "\"Notes v2\"");
         await CompileAsync(v2, dllPath, wpf);
         (await hotReload.TryAsync(dllPath, child.HotReloadAsync)).Applied.Should().BeTrue();
 
-        // Designer mode on: what AppController.EnsureDesignIdsForClickToEditAsync does to the code.
-        Neo.App.DesignerIdInjector.TryInjectDesignIds(v2, useAvalonia: !wpf, out var withIds, out var injected, out var error)
-            .Should().BeTrue(error);
-        injected.Should().BeGreaterThan(0);
-        await CompileAsync(withIds, dllPath, wpf); // failed with "file is being used by another process"
+        var v3 = v2.Replace("new TextBlock {", "new TextBlock { Name = \"title\",").Replace("new TextBox()", "new TextBox { Name = \"notes\" }");
+        await CompileAsync(v3, dllPath, wpf);
         var attempt = await hotReload.TryAsync(dllPath, child.HotReloadAsync);
 
         attempt.Applied.Should().BeTrue(attempt.Message);
-        child.LoadExecutedCount.Should().Be(1, "neither the prompt nor the designer replaced the app");
+        child.LoadExecutedCount.Should().Be(1, "neither change replaced the app");
         var tree = await child.InspectVisualTreeAsync();
-        FirstOfType(tree, "TextBlock", "Text").Should().Be("Notes v2");
-        FirstOfType(tree, "TextBox", "Text").Should().Be("typed by the user",
-            "the box is matched by its position although it is called __neo_… now");
+        Property(tree, "title", "Text").Should().Be("Notes v2");
+        Property(tree, "notes", "Text").Should().Be("typed by the user",
+            "the box had no name when the user typed; it is found again by its position");
 
         await Task.Delay(300);
         child.Errors.Should().BeEmpty();
         child.ChildIsAlive.Should().BeTrue();
     }
 
-    private const string AvaloniaDesignerV1 = """
-        // The shape of the desktop base code: using System; and namespace Neo.App.
+    private const string AvaloniaNotesV1 = """
+        // The shape of the desktop base code: namespace Neo.App.
         using System;
         using Avalonia;
         using Avalonia.Controls;
@@ -201,8 +197,8 @@ public class DesktopHotReloadSmokeTests : IDisposable
         }
         """;
 
-    private const string WpfDesignerV1 = """
-        // The shape of the desktop base code: using System; and namespace Neo.App.
+    private const string WpfNotesV1 = """
+        // The shape of the desktop base code: namespace Neo.App.
         using System;
         using System.Windows;
         using System.Windows.Controls;
@@ -254,24 +250,6 @@ public class DesktopHotReloadSmokeTests : IDisposable
                 foreach (var child in children.EnumerateArray()) pending.Push(child);
         }
         return null;
-    }
-
-    /// <summary>A property of the first control of the given type (depth first, in tree order).</summary>
-    private static string? FirstOfType(string? treeJson, string type, string property)
-    {
-        if (treeJson == null) return null;
-        using var document = System.Text.Json.JsonDocument.Parse(treeJson);
-        string? Find(System.Text.Json.JsonElement node)
-        {
-            if (node.TryGetProperty("type", out var t) && t.GetString() == type &&
-                node.TryGetProperty("properties", out var properties) && properties.TryGetProperty(property, out var value))
-                return value.GetString();
-            if (node.TryGetProperty("children", out var children))
-                foreach (var child in children.EnumerateArray())
-                    if (Find(child) is { } found) return found;
-            return null;
-        }
-        return Find(document.RootElement);
     }
 
     /// <summary>The compile agent with the hosts' defaults — hot-reloadable builds with a baseline file.</summary>

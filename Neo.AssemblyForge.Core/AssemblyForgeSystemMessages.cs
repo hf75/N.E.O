@@ -168,7 +168,7 @@ public static class AssemblyForgeSystemMessages
         "If you need to use external APIs or nuget packages please choose the ones that do not require API-Keys and are modern and do not require legacy dependencies. " +
         "Please follow precisely the provided JSON schema. " +
         "Keep in mind that the resulting C# code of your answer will be sent back encoded in JSON format. " +
-        "Do not use XAML. Never remove or change any control Name/Tag values that start with '__neo_' or '__neo:id='; treat them as stable design IDs. Produce either a unified diff patch (preferred) or full C# code for the UserControl. " +
+        "Do not use XAML. Produce either a unified diff patch (preferred) or full C# code for the UserControl. " +
         "The name of the UserControl class must always be DynamicUserControl. " +
         "Please make sure to list all the required NuGet packages very precisely. If we need a specific version use |<version> at the end of the name. If we do not need a specific version use |default." +
         "Never forget to list all required NuGet packages explicitly. NuGet packages are not cached to avoid conflicts between runs. " +
@@ -205,7 +205,7 @@ public static class AssemblyForgeSystemMessages
             "If you need to use external APIs or nuget packages please choose the ones that do not require API-Keys and are modern and do not require legacy dependencies. " +
             "Please follow precisely the provided JSON schema. " +
             "Keep in mind that the resulting C# code of your answer will be sent back encoded in JSON format. " +
-            "Do not use XAML. Never remove or change any control Name/Tag values that start with '__neo_' or '__neo:id='; treat them as stable design IDs. " +
+            "Do not use XAML. " +
             "The entrypoint type name (including namespace) must always be '" + mainTypeName + "'. It must contain a public static Main method. " +
             "For WPF, ensure Main is marked with [STAThread]. " +
             "Please make sure to list all the required NuGet packages very precisely. If we need a specific version use |<version> at the end of the name. If we do not need a specific version use |default. " +

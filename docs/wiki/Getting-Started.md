@@ -113,7 +113,7 @@ The AI sends a unified-diff patch, not a full rewrite — your existing code is 
 ## Where next
 
 - [[Features Overview]] — Every feature the desktop host exposes
-- [[Designer Mode]] — Click a UI element to edit its properties
+- [[Hot Reload]] — Refine a running app without losing what you did in it
 - [[Export and Import]] — Save your generation as a standalone `.exe`
 - [[Keyboard Shortcuts]] — Speed up your workflow
 - Want the same flow without installing Neo? → [[Web App]]

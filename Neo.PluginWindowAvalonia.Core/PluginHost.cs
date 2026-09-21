@@ -6,7 +6,7 @@ namespace Neo.PluginWindowAvalonia
 {
     /// <summary>
     /// What an executable head may customise about the shared plugin window.
-    /// Everything else — IPC loop, plugin loading, designer mode, Live-MCP, web bridge —
+    /// Everything else — IPC loop, plugin loading, hot reload, Live-MCP, web bridge —
     /// is identical for every head and lives in this library.
     /// </summary>
     public sealed class PluginHostOptions

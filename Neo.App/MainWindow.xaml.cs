@@ -862,19 +862,6 @@ namespace Neo.App
             );
         }
 
-        private async void BtnDesignerMode_Click(object sender, RoutedEventArgs e)
-        {
-            if (_appController == null) return;
-
-            bool enable = BtnDesignerMode.IsChecked == true;
-            bool ok = await _appController.SetDesignerModeAsync(enable);
-            if (!ok && enable)
-                BtnDesignerMode.IsChecked = false;
-
-            if (!enable && _isCodeEditorActive)
-                HideCodeEditor();
-        }
-
         private async void HandleFullScreenCursor()
         {
             // Ermittle, ob der Cursor sichtbar sein soll.
@@ -1005,7 +992,6 @@ namespace Neo.App
             BtnSandboxToggle.IsChecked = false;
             BtnInternetToggle.IsChecked = false;
             BtnFolderAccess.IsChecked = false;
-            BtnDesignerMode.IsChecked = false;
         }
 
         private async void Button_Click_Settings(object sender, RoutedEventArgs e)
@@ -1128,36 +1114,6 @@ namespace Neo.App
             };
             review.ShowDialog();
             return Task.FromResult(review.Decision);
-        }
-
-        private DesignerPropertiesWindow? _designerPropertiesWindow;
-
-        void IMainView.ShowDesignerPropertiesWindow(DesignerSelectionMessage selection,
-            EventHandler<DesignerApplyRequestedEventArgs> applyHandler)
-        {
-            if (_designerPropertiesWindow == null || !_designerPropertiesWindow.IsVisible)
-            {
-                _designerPropertiesWindow = new DesignerPropertiesWindow
-                {
-                    Owner = this
-                };
-                _designerPropertiesWindow.ApplyRequested += applyHandler;
-                _designerPropertiesWindow.Closed += (_, _) => _designerPropertiesWindow = null;
-                _designerPropertiesWindow.Show();
-            }
-
-            _designerPropertiesWindow.SetSelection(selection);
-            _designerPropertiesWindow.RepositionNearCursor();
-            _designerPropertiesWindow.Activate();
-        }
-
-        void IMainView.CloseDesignerPropertiesWindow()
-        {
-            if (_designerPropertiesWindow != null)
-            {
-                try { _designerPropertiesWindow.Close(); } catch { }
-                _designerPropertiesWindow = null;
-            }
         }
 
         IChildProcessService IMainView.CreateChildProcessService() =>
