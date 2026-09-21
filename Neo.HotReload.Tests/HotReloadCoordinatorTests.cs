@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Neo.Agents;
 using Neo.IPC;
 using Neo.Shared;
 using Xunit;
@@ -145,6 +146,61 @@ public class HotReloadCoordinatorTests
 
         attempt.Applied.Should().BeTrue(attempt.Message);
         app.Call("Describe").Should().Be("v2 clicks=1");
+    }
+
+    [Fact]
+    public async Task A_reference_listed_twice_does_not_keep_hot_reload_from_starting()
+    {
+        // Field report: the WPF host listed its AI agent DLL twice. Roslyn's workspace rejected the
+        // project ("duplicate items"), the session never started, and every change reloaded the
+        // app - the todo items the user had entered were gone after the next prompt.
+        using var app = await HotReloadHarness.StartAsync(V1);
+        var baseline = HotReloadBaseline.TryLoad(app.DllPath)!;
+        var twice = baseline with { ReferencePaths = [.. baseline.ReferencePaths, baseline.ReferencePaths[0].ToUpperInvariant()] };
+
+        using var session = await HotReloadSession.StartAsync(twice, HotReloadRuntime.Capabilities ?? "Baseline");
+        var update = await session.CreateUpdateAsync(
+            [new HotReloadSource(twice.Sources[0].Path, V1.Replace("\"v1 clicks=\"", "\"v2 clicks=\""))],
+            twice.ReferencePaths);
+
+        update.Status.Should().Be(HotReloadStatus.Ready, update.Reason);
+        update.AddedReferences.Should().BeEmpty("the same reference, listed twice, is not a new one");
+    }
+
+    [Fact]
+    public async Task The_compile_agent_lists_every_reference_once()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "neo_hotreload_tests", "dup_" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(directory);
+        var libraryPath = Path.Combine(directory, "Library.dll");
+        await HotReloadHarness.CompileAsync("public static class Library { }", "Library", libraryPath);
+
+        var dllPath = Path.Combine(directory, "App.dll");
+        await HotReloadHarness.CompileAsync(V1, "App", dllPath, additionalDlls: [libraryPath, libraryPath]);
+
+        var references = HotReloadBaselineFile.TryRead(dllPath)!.ReferencePaths;
+        references.Should().OnlyHaveUniqueItems().And.ContainSingle(p => p.EndsWith("Library.dll", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task An_app_that_could_not_be_armed_says_why_on_the_next_change()
+    {
+        // Hot reload must never fail silently: the host reports every attempt while an app is
+        // running, and the attempt names the reason the app could not be armed.
+        using var app = await HotReloadHarness.StartAsync(V1);
+        File.Delete(HotReloadBaselineFile.PathFor(app.DllPath));
+
+        using var coordinator = new HotReloadCoordinator();
+        (await coordinator.StartAsync(app.DllPath, HotReloadRuntime.Capabilities)).Should().Be("the DLL was not built for hot reload");
+        coordinator.HasRunningApp.Should().BeTrue("the host has to report the next attempt");
+
+        var attempt = await coordinator.TryAsync(app.DllPath, _ => Task.FromResult<HotReloadResultMessage?>(null));
+
+        attempt.Applied.Should().BeFalse();
+        attempt.Message.Should().Be("Hot reload not possible — the DLL was not built for hot reload. Reloading the app.");
+
+        await coordinator.ResetAsync();
+        coordinator.HasRunningApp.Should().BeFalse("after the app is gone there is nothing to report");
     }
 
     [Fact]

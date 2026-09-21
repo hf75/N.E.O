@@ -59,10 +59,10 @@ public sealed class HotReloadSession : IDisposable
 
     private HotReloadSession(AdhocWorkspace workspace, RoslynHotReloadService service, ProjectId projectId,
         Dictionary<string, DocumentId> documents, Dictionary<string, MetadataReference> references, Solution solution,
-        HotReloadBaseline baseline, HotReloadOptions options, string snapshotDirectory)
+        HotReloadBaseline baseline, IReadOnlyList<string> referencePaths, HotReloadOptions options, string snapshotDirectory)
     {
         _workspace = workspace; _service = service; _projectId = projectId; _documents = documents; _references = references;
-        _committed = solution; _lastSources = baseline.Sources; _lastReferencePaths = baseline.ReferencePaths;
+        _committed = solution; _lastSources = baseline.Sources; _lastReferencePaths = referencePaths;
         _options = options; _snapshotDirectory = snapshotDirectory;
     }
 
@@ -127,8 +127,9 @@ public sealed class HotReloadSession : IDisposable
         var workspace = new AdhocWorkspace(s_host.Value);
         try
         {
+            var referencePaths = DistinctPaths(baseline.ReferencePaths);
             var references = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
-            foreach (var path in baseline.ReferencePaths)
+            foreach (var path in referencePaths)
                 references[path] = MetadataReference.CreateFromFile(path);
 
             var projectId = ProjectId.CreateNewId(baseline.AssemblyName);
@@ -137,7 +138,7 @@ public sealed class HotReloadSession : IDisposable
                     outputFilePath: snapshot.AssemblyPath,
                     compilationOptions: CompilationOptions,
                     parseOptions: ParseOptions,
-                    metadataReferences: baseline.ReferencePaths.Select(p => references[p]))
+                    metadataReferences: referencePaths.Select(p => references[p]))
                 .WithCompilationOutputInfo(default(CompilationOutputInfo).WithAssemblyPath(snapshot.AssemblyPath));
 
             var solution = workspace.CurrentSolution.AddProject(project);
@@ -150,7 +151,7 @@ public sealed class HotReloadSession : IDisposable
             await service.StartSessionAsync(solution, cancellationToken).ConfigureAwait(false);
 
             return new HotReloadSession(workspace, service, projectId, documents, references, solution,
-                baseline, options ?? new HotReloadOptions(), snapshot.Directory);
+                baseline, referencePaths, options ?? new HotReloadOptions(), snapshot.Directory);
         }
         catch
         {
@@ -193,7 +194,9 @@ public sealed class HotReloadSession : IDisposable
             if (removed.Count > 0)
                 return HotReloadUpdate.NotPossible("a source file was removed");
 
-            if (SameSources(sources, _lastSources) && referencePaths.SequenceEqual(_lastReferencePaths, StringComparer.OrdinalIgnoreCase))
+            referencePaths = DistinctPaths(referencePaths);
+            bool sameReferences = new HashSet<string>(referencePaths, StringComparer.OrdinalIgnoreCase).SetEquals(_lastReferencePaths);
+            if (SameSources(sources, _lastSources) && sameReferences)
                 return new HotReloadUpdate(HotReloadStatus.NoChanges, null, "the source is unchanged");
 
             // The new version: file texts, new files, the reference set.
@@ -208,7 +211,7 @@ public sealed class HotReloadSession : IDisposable
 
             var addedReferences = referencePaths.Except(_lastReferencePaths, StringComparer.OrdinalIgnoreCase).ToList();
             var newReferences = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
-            if (!referencePaths.SequenceEqual(_lastReferencePaths, StringComparer.OrdinalIgnoreCase))
+            if (!sameReferences)
             {
                 pristine = pristine.WithProjectMetadataReferences(_projectId, referencePaths.Select(path =>
                     _references.TryGetValue(path, out var existing) ? existing : newReferences[path] = MetadataReference.CreateFromFile(path)));
@@ -259,6 +262,12 @@ public sealed class HotReloadSession : IDisposable
             _gate.Release();
         }
     }
+
+    // Hosts may list a reference twice (the same agent DLL from two settings). The compiler does
+    // not mind; Roslyn's workspace rejects the project ("duplicate items") — and a session that
+    // cannot start means every change reloads the app.
+    private static List<string> DistinctPaths(IEnumerable<string> paths)
+        => paths.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
     private static bool SameSources(IReadOnlyList<HotReloadSource> a, IReadOnlyList<HotReloadSource> b)
         => a.Count == b.Count && a.Zip(b).All(p =>

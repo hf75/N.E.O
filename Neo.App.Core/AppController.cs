@@ -155,7 +155,11 @@ namespace Neo.App
                 if (!Settings.PluginAgentModels.ContainsKey(plugin.SettingsKey))
                     Settings.PluginAgentModels[plugin.SettingsKey] = plugin.DefaultModel;
             }
-            AdditionalDlls.Add(ResolveAppDll(GetAIQueryAgentDll(Settings.AIQueryProvider)));
+            // The Settings setter above already added it; a second entry made the reference list
+            // of every build contain it twice (which kept hot reload from starting).
+            var aiQueryDll = ResolveAppDll(GetAIQueryAgentDll(Settings.AIQueryProvider));
+            if (!AdditionalDlls.Contains(aiQueryDll, StringComparer.OrdinalIgnoreCase))
+                AdditionalDlls.Add(aiQueryDll);
             DefaultNugets.Add(GetAIQueryNuGetPackage(Settings.AIQueryProvider));
 
             // Note: the Avalonia DLLs are not a default NuGet package — they are registered

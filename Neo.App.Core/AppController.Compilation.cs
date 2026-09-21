@@ -165,7 +165,7 @@ namespace Neo.App
             // (clear, crash recovery, sandbox switch) has nothing to patch.
             if (!ChildProcessService.HasLoadedControl)
                 await _hotReload.ResetAsync();
-            bool couldHotReload = _hotReload.IsActive;
+            bool couldHotReload = _hotReload.HasRunningApp;
             var attempt = await _hotReload.TryAsync(compiledUserControlDllPath, request => ChildProcessService.HotReloadAsync(request,
                 (AppState.NuGetDlls ?? new List<string>()).Concat(AdditionalDlls).ToList()));
             if (attempt.Applied)

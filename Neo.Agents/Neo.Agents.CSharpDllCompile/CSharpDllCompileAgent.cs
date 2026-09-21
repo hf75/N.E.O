@@ -161,8 +161,14 @@ namespace Neo.Agents
                     : CSharpSyntaxTree.ParseText(code[i]));
             }
 
-            // Referenzen sammeln
+            // Referenzen sammeln — jede Datei einmal, auch wenn der Host sie doppelt nennt.
             var references = new List<MetadataReference>();
+            var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            void AddReference(string dll)
+            {
+                if (referenced.Add(Path.GetFullPath(dll)))
+                    references.Add(MetadataReference.CreateFromFile(dll));
+            }
 
             // .NET Core Referenz-DLLs
             foreach(string path in coreDllPath)
@@ -170,7 +176,7 @@ namespace Neo.Agents
                 foreach (var dll in Directory.GetFiles(path, "*.dll"))
                 {
                     if (IsManagedAssembly(dll))
-                        references.Add(MetadataReference.CreateFromFile(dll));
+                        AddReference(dll);
 
                 }
             }
@@ -186,7 +192,7 @@ namespace Neo.Agents
                     }
                     if (!IsManagedAssembly(dllPath))
                         continue;
-                    references.Add(MetadataReference.CreateFromFile(dllPath));
+                    AddReference(dllPath);
                 }
             }
 
@@ -201,7 +207,7 @@ namespace Neo.Agents
                     }
                     if (!IsManagedAssembly(dllPath))
                         continue;
-                    references.Add(MetadataReference.CreateFromFile(dllPath));
+                    AddReference(dllPath);
                 }
             }
 

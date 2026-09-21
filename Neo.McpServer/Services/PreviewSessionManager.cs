@@ -460,7 +460,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         if (s == null) return false;
 
         s.LastLoadMessage = null;
-        if (dllPath != null && s.HotReload.IsActive)
+        if (dllPath != null && s.HotReload.HasRunningApp)
         {
             var attempt = await TryHotReloadAsync(dllPath, ct, windowId, dependencyDlls);
             s.LastLoadMessage = attempt.Message;

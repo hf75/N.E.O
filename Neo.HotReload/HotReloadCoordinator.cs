@@ -33,6 +33,7 @@ public sealed class HotReloadCoordinator : IDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private HotReloadSession? _session;
     private int _starting;
+    private string? _armProblem; // why the running app could not be armed
 
     public HotReloadCoordinator(HotReloadOptions? options = null) => _options = options ?? new HotReloadOptions();
 
@@ -41,6 +42,13 @@ public sealed class HotReloadCoordinator : IDisposable
     /// start the session in the background; <see cref="TryAsync"/> waits for it.)
     /// </summary>
     public bool IsActive => _session != null || Volatile.Read(ref _starting) > 0;
+
+    /// <summary>
+    /// Is there a running app the host would patch on the next change — armed, being armed, or
+    /// one that could not be armed? In the last case <see cref="TryAsync"/> says why, so a host
+    /// that reports attempts whenever this is true never reloads silently.
+    /// </summary>
+    public bool HasRunningApp => IsActive || Volatile.Read(ref _armProblem) != null;
 
     /// <summary>
     /// Call right after <paramref name="loadedDllPath"/> was loaded into the plugin window. The
@@ -78,7 +86,7 @@ public sealed class HotReloadCoordinator : IDisposable
         try
         {
             ResetCore();
-            if (snapshot == null) return problem;
+            if (snapshot == null) return _armProblem = problem;
 
             // Roslyn's workspace and the first analysis are CPU work; not on the caller's (UI) thread.
             _session = await Task.Run(() => HotReloadSession.StartAsync(snapshot, childCapabilities!, _options, cancellationToken),
@@ -88,7 +96,7 @@ public sealed class HotReloadCoordinator : IDisposable
         catch (Exception ex)
         {
             ResetCore();
-            return "hot reload could not be prepared: " + ex.Message;
+            return _armProblem = "hot reload could not be prepared: " + ex.Message;
         }
         finally
         {
@@ -111,7 +119,9 @@ public sealed class HotReloadCoordinator : IDisposable
         try
         {
             if (_session == null)
-                return new HotReloadAttempt(false, "no hot reload session for the running app");
+                return new HotReloadAttempt(false, _armProblem != null
+                    ? "Hot reload not possible — " + _armProblem + ". Reloading the app."
+                    : "no hot reload session for the running app");
 
             var build = HotReloadBaselineFile.TryRead(newDllPath);
             if (build == null || build.SourcePaths.Count != build.SourceTexts.Count)
@@ -177,6 +187,7 @@ public sealed class HotReloadCoordinator : IDisposable
     {
         try { _session?.Dispose(); } catch { /* best effort */ }
         _session = null;
+        _armProblem = null;
     }
 
     public void Dispose() => Reset();
