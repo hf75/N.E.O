@@ -189,11 +189,11 @@ namespace Neo.App
             foreach (var config in new[] { "Debug", "Release" })
             {
                 var devNative = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
-                    "Neo.PluginWindowAvalonia", "bin", config, "net9.0", nativeName));
+                    "Neo.PluginWindowAvalonia", "bin", config, Neo.Shared.NeoBuildInfo.TargetFramework, nativeName));
                 if (File.Exists(devNative)) return (devNative, false);
 
                 var devDll = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
-                    "Neo.PluginWindowAvalonia", "bin", config, "net9.0", dllName));
+                    "Neo.PluginWindowAvalonia", "bin", config, Neo.Shared.NeoBuildInfo.TargetFramework, dllName));
                 if (File.Exists(devDll)) return (devDll, true);
             }
 

@@ -74,7 +74,7 @@ Neo.App.Api                   Public surface generated apps see (Ai.Trigger, …
 
 Neo.App.WebApp/               Container directory (sub-solution neo-webapp-like).
   Neo.App.WebApp/             Shared Avalonia library for WASM.
-  Neo.App.WebApp.Browser/     WASM head (net9.0-browser). The real target.
+  Neo.App.WebApp.Browser/     WASM head (net10.0-browser). The real target.
   Neo.App.WebApp.Desktop/     Dev-iteration head; not shipped.
 Neo.App.WebApp.Tests          22 tests (parser, analyzer, session store, ChatEntry INPC).
 

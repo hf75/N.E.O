@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>$(NeoTargetFramework)</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
@@ -26,9 +26,13 @@
   <!-- Neo.AssemblyForge.Core ships the storage-agnostic primitives
        (StructuredResponse, unified-diff patcher/generator, validators,
        history formatter, JSON schemata, system messages). Safe to reference
-       from a net9.0-browser head because Core has no NuGet.Protocol
+       from a netX.0-browser head because Core has no NuGet.Protocol
        transitive dep. -->
   <ItemGroup>
     <ProjectReference Include="..\..\Neo.AssemblyForge.Core\Neo.AssemblyForge.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neo.App.WebApp.Tests" />
   </ItemGroup>
 </Project>

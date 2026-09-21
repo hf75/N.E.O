@@ -4,7 +4,7 @@ name: Build and test
 # Trigger: pushes to main and pull requests that touch code, or manual dispatch.
 #
 # Why Windows only: neo.sln contains the WPF host and WPF plugin windows
-# (net9.0-windows). The cross-platform slice (neo-avalonia.sln) is a strict
+# (net10.0-windows). The cross-platform slice (neo-avalonia.sln) is a strict
 # subset of what gets built here.
 
 on:
@@ -32,7 +32,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
 
       - name: Restore
         run: dotnet restore neo.sln

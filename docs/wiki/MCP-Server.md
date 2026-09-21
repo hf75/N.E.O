@@ -32,7 +32,7 @@ Claude Cowork/Code                  Neo.McpServer
 
 ## Prerequisites
 
-- .NET 9 runtime (not the SDK — the runtime is sufficient)
+- .NET 10 runtime or newer (not the SDK — the runtime is sufficient; with only a newer major installed the server rolls forward to it)
 - The N.E.O. repository cloned and built
 
 ## Setup
@@ -60,7 +60,7 @@ Add the MCP server to your Claude settings.
   "mcpServers": {
     "neo-preview": {
       "command": "dotnet",
-      "args": ["/full/path/to/Neo.McpServer/bin/Release/net9.0/Neo.McpServer.dll"],
+      "args": ["/full/path/to/Neo.McpServer/bin/Release/net10.0/Neo.McpServer.dll"],
       "env": {
         "ANTHROPIC_API_KEY": "sk-ant-your-key-here"
       }
@@ -158,7 +158,7 @@ Exports the generated app as a **standalone executable** that runs without N.E.O
 **Example prompt in Claude Cowork:**
 > "Export this app as MyCalculator to C:/tmp for Windows."
 
-The exported directory (~27 MB) contains the executable, all Avalonia DLLs, NuGet dependencies, and native libraries (SkiaSharp, HarfBuzz). Copy the folder to any machine with the .NET 9 runtime and it runs.
+The exported directory (~27 MB) contains the executable, all Avalonia DLLs, NuGet dependencies, and native libraries (SkiaSharp, HarfBuzz). Copy the folder to any machine with the .NET 10 runtime (or a newer major — the exported app rolls forward) and it runs.
 
 ### `patch_preview`
 
@@ -293,7 +293,7 @@ A prompt template for WPF UserControls (Windows-only):
 
 - Class must be named `DynamicUserControl`
 - No XAML — everything in C# code-behind
-- WPF on .NET 9 (no extra NuGet packages needed)
+- WPF on .NET 10 (no extra NuGet packages needed)
 - Uses `System.Windows.*` namespaces
 - Includes WPF-specific guidance (no `Spacing` on StackPanel, `Visibility.Collapsed`, `FontWeights.Bold`, etc.)
 
@@ -344,7 +344,7 @@ The PluginWindow has global exception handlers (`Dispatcher_UnhandledException`,
 
 ### Export
 
-The `export_app` tool compiles the user's source code together with an Avalonia app wrapper (window, FluentTheme, exception handler, assembly preloader) into a standalone executable using `CSharpCompileAgent` with embedded AppHost templates. All Avalonia DLLs, NuGet dependencies, and platform-specific native libraries (SkiaSharp, HarfBuzz) are copied to the export directory. The result is a ~27 MB folder that runs on any machine with the .NET 9 runtime.
+The `export_app` tool compiles the user's source code together with an Avalonia app wrapper (window, FluentTheme, exception handler, assembly preloader) into a standalone executable using `CSharpCompileAgent` with embedded AppHost templates. All Avalonia DLLs, NuGet dependencies, and platform-specific native libraries (SkiaSharp, HarfBuzz) are copied to the export directory. The result is a ~27 MB folder that runs on any machine with the .NET 10 runtime.
 
 Cross-compilation is supported: you can build a Linux or macOS app on Windows.
 
@@ -448,7 +448,7 @@ Windows persist across prompts within the same Cowork session. Claude can target
 - The MCP server auto-discovers plugin windows relative to its own location. If using a non-standard layout, set `NEO_PLUGIN_PATH` / `NEO_PLUGIN_PATH_WPF`
 
 **Compilation fails with "No .NET reference assemblies found":**
-- The .NET 9 runtime must be installed and `dotnet` must be on your PATH
+- The .NET 10 runtime must be installed and `dotnet` must be on your PATH
 - Run `dotnet --list-runtimes` to verify
 
 **Compilation fails with Avalonia type errors:**
@@ -501,7 +501,7 @@ User types in ChatOverlay
 ### Requirements
 
 - `ANTHROPIC_API_KEY` environment variable (set in MCP server config `env` section)
-- .NET 9 runtime (for Roslyn compilation)
+- .NET 10 runtime (for Roslyn compilation)
 
 ### Interaction with MCP Server
 

@@ -78,7 +78,7 @@ public sealed class CompilationPipeline
                 System.Diagnostics.Debug.WriteLine("[CompilationPipeline] Resolving NuGet packages...");
                 var nugetService = new NuGetPackageService(
                     _nugetCacheDir!,
-                    "net9.0",
+                    Neo.Shared.NeoBuildInfo.RuntimeTargetFramework,
                     _referenceAssemblyDirs!);
 
                 var nugetResult = await nugetService.LoadPackagesAsync(
@@ -201,7 +201,7 @@ public sealed class CompilationPipeline
             if (nonAvaloniaPackages.Count > 0)
             {
                 var nugetService = new NuGetPackageService(
-                    _nugetCacheDir!, "net9.0", _referenceAssemblyDirs!);
+                    _nugetCacheDir!, Neo.Shared.NeoBuildInfo.RuntimeTargetFramework, _referenceAssemblyDirs!);
                 var nugetResult = await nugetService.LoadPackagesAsync(
                     nonAvaloniaPackages, Enumerable.Empty<string>(), ct);
                 nugetDllPaths.AddRange(nugetResult.DllPaths);
@@ -497,7 +497,7 @@ namespace {{ExportHostNamespace}}
         };
 
         var pluginPath = Environment.GetEnvironmentVariable("NEO_PLUGIN_PATH")
-            ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "Neo.PluginWindowAvalonia", "bin", "Debug", "net9.0");
+            ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "Neo.PluginWindowAvalonia", "bin", "Debug", Neo.Shared.NeoBuildInfo.TargetFramework);
 
         var nativeDir = Path.Combine(pluginPath, "runtimes", rid, "native");
         if (!Directory.Exists(nativeDir))
@@ -507,7 +507,7 @@ namespace {{ExportHostNamespace}}
             foreach (var config in new[] { "Debug", "Release" })
             {
                 var devDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
-                    "Neo.PluginWindowAvalonia", "bin", config, "net9.0", "runtimes", rid, "native"));
+                    "Neo.PluginWindowAvalonia", "bin", config, Neo.Shared.NeoBuildInfo.TargetFramework, "runtimes", rid, "native"));
                 if (Directory.Exists(devDir)) { nativeDir = devDir; break; }
             }
         }
@@ -530,7 +530,7 @@ namespace {{ExportHostNamespace}}
         _referenceAssemblyDirs = DiscoverReferenceAssemblyDirs();
         if (_referenceAssemblyDirs.Count == 0)
             throw new InvalidOperationException(
-                "No .NET reference assemblies found. Ensure .NET 9 runtime is installed.");
+                $"No .NET reference assemblies found. Ensure the .NET {Neo.Shared.NeoBuildInfo.RuntimeMajor} runtime is installed.");
 
         _avaloniaAdditionalDlls = DiscoverAvaloniaFromPluginWindow();
         _neoAppMcpRuntimeDlls = DiscoverNeoAppMcpRuntime();
@@ -586,7 +586,7 @@ namespace {{ExportHostNamespace}}
         var candidateDirs = new List<string> { baseDir };
         foreach (var config in new[] { "Debug", "Release" })
             candidateDirs.Add(Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
-                "Neo.McpServer", "bin", config, "net9.0")));
+                "Neo.McpServer", "bin", config, Neo.Shared.NeoBuildInfo.TargetFramework)));
 
         foreach (var dir in candidateDirs)
         {
@@ -709,7 +709,7 @@ namespace {{ExportHostNamespace}}
         foreach (var config in new[] { "Debug", "Release" })
         {
             var devDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
-                "Neo.PluginWindowAvalonia", "bin", config, "net9.0"));
+                "Neo.PluginWindowAvalonia", "bin", config, Neo.Shared.NeoBuildInfo.TargetFramework));
             if (Directory.Exists(devDir))
             {
                 dlls.AddRange(Directory.GetFiles(devDir, "*.dll"));
@@ -745,13 +745,13 @@ namespace {{ExportHostNamespace}}
             return dlls;
         }
 
-        // 3. Dev-time: sibling project output (WPF uses net9.0-windows TFM)
+        // 3. Dev-time: sibling project output (WPF uses the -windows TFM)
         foreach (var projectName in new[] { "Neo.PluginWindowWPF.MCP", "Neo.PluginWindowWPF" })
         {
             foreach (var config in new[] { "Debug", "Release" })
             {
                 var devDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
-                    projectName, "bin", config, "net9.0-windows"));
+                    projectName, "bin", config, Neo.Shared.NeoBuildInfo.TargetFrameworkWindows));
                 if (Directory.Exists(devDir))
                 {
                     dlls.AddRange(Directory.GetFiles(devDir, "*.dll"));

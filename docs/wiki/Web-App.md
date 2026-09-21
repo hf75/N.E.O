@@ -28,8 +28,10 @@ Browser tab                                     Neo.Backend (your machine)
 
 ## Prerequisites
 
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
-- `wasm-tools` workload (`dotnet workload install wasm-tools-net9` if missing)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- `wasm-tools` workload (`dotnet workload install wasm-tools` if missing)
+
+> **Upgrading from a .NET 9 build?** .NET 10 no longer writes `_framework/blazor.boot.json` on its own and changed the file's shape. The Browser head keeps it as a separate file on purpose (`WasmBootConfigFileName`, `withConfigSrc` in `main.js`) because the in-browser compiler reads it to find Roslyn's reference assemblies. After a framework upgrade publish from a clean state (delete the Browser head's `bin/` and `obj/`) — an incremental publish can leave a stale `dotnet.js` behind.
 - A modern browser (Chromium, Firefox, Safari — all tested)
 - One AI provider configured (see [[Settings and Configuration]])
 
@@ -41,12 +43,12 @@ Browser tab                                     Neo.Backend (your machine)
 cd N.E.O
 dotnet publish Neo.App.WebApp/Neo.App.WebApp.Browser/Neo.App.WebApp.Browser.csproj \
     -c Release \
-    -o Neo.App.WebApp/Neo.App.WebApp.Browser/bin/Release/net9.0-browser/publish
+    -o Neo.App.WebApp/Neo.App.WebApp.Browser/bin/Release/net10.0-browser/publish
 ```
 
 This produces the full WASM bundle (Avalonia + Roslyn + Neo services) in the publish folder. ~50 MB uncompressed, ~27 MB brotli, ~12 MB gzip.
 
-> The backend's build target auto-copies the published `wwwroot` into its own `bin/Release/net9.0/wwwroot`. You only need to run `publish` again when you change client code.
+> The backend's build target auto-copies the published `wwwroot` into its own `bin/Release/net10.0/wwwroot`. You only need to run `publish` again when you change client code.
 
 ### 2. Run the backend
 

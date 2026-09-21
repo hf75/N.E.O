@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>$(NeoTargetFramework)</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InternalsVisibleTo>Neo.Backend.Tests</InternalsVisibleTo>
@@ -24,11 +24,11 @@
        from a previous publish can't linger and get served alongside the fresh
        ones (which would confuse the browser's SRI integrity check). -->
   <Target Name="CopyWebAppToWwwRoot" AfterTargets="Build"
-          Condition="Exists('..\Neo.App.WebApp\Neo.App.WebApp.Browser\bin\$(Configuration)\net9.0-browser\publish\wwwroot')">
+          Condition="Exists('..\Neo.App.WebApp\Neo.App.WebApp.Browser\bin\$(Configuration)\$(NeoTargetFrameworkBrowser)\publish\wwwroot')">
     <RemoveDir Directories="$(TargetDir)wwwroot\_framework"
                Condition="Exists('$(TargetDir)wwwroot\_framework')"/>
     <ItemGroup>
-      <_WebAppFiles Include="..\Neo.App.WebApp\Neo.App.WebApp.Browser\bin\$(Configuration)\net9.0-browser\publish\wwwroot\**\*.*" />
+      <_WebAppFiles Include="..\Neo.App.WebApp\Neo.App.WebApp.Browser\bin\$(Configuration)\$(NeoTargetFrameworkBrowser)\publish\wwwroot\**\*.*" />
     </ItemGroup>
     <Copy SourceFiles="@(_WebAppFiles)"
           DestinationFiles="@(_WebAppFiles->'$(TargetDir)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"

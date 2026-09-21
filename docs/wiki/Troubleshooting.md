@@ -12,7 +12,7 @@
 2. Or start a local server (Ollama or LM Studio)
 3. Restart N.E.O.
 
-## Build Fails with "net9.0 targeting pack not found"
+## Build Fails with "net10.0 targeting pack not found"
 
 **Cause:** You have a different .NET SDK version installed.
 
@@ -95,7 +95,7 @@ or an old bundle is cached.
 1. Publish the client bundle once:
    ```bash
    dotnet publish Neo.App.WebApp/Neo.App.WebApp.Browser/Neo.App.WebApp.Browser.csproj \
-       -c Release -o Neo.App.WebApp/Neo.App.WebApp.Browser/bin/Release/net9.0-browser/publish
+       -c Release -o Neo.App.WebApp/Neo.App.WebApp.Browser/bin/Release/net10.0-browser/publish
    ```
 2. Rebuild the backend (`dotnet build Neo.Backend -c Release`) so its
    `wwwroot` picks up the fresh bundle.

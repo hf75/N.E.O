@@ -1,12 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
   <PropertyGroup>
-    <TargetFramework>net9.0-browser</TargetFramework>
+    <TargetFramework>$(NeoTargetFrameworkBrowser)</TargetFramework>
     <OutputType>Exe</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <!-- Ship raw PE assemblies so Roslyn can parse them at runtime.
          WebCIL is a browser-friendly wrapper that isn't a valid PE image. -->
     <WasmEnableWebcil>false</WasmEnableWebcil>
+    <!-- From .NET 10 on the boot configuration is inlined into dotnet.js by default and
+         _framework/blazor.boot.json is no longer written. WasmCompiler reads that file at
+         runtime to find the (fingerprinted) reference assemblies for Roslyn, so keep it
+         as a separate JSON file. Without this the app builds fine and fails on the
+         first prompt with a 404. -->
+    <WasmBootConfigFileName>blazor.boot.json</WasmBootConfigFileName>
     <!-- System.Text.Json falls back to reflection for types without a
          source-gen context. In WASM trimmed builds that's off by default;
          turn it on so the MVP's Deserialize<T> calls work. Future:

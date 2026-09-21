@@ -5,7 +5,7 @@ using Neo.Backend.Services;
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
-    // The WebApp Browser bundle is copied to bin/<config>/net9.0/wwwroot during
+    // The WebApp Browser bundle is copied to bin/<config>/<tfm>/wwwroot during
     // Neo.Backend's build (see csproj). Point WebRoot there so `dotnet run`
     // from the project dir also serves the bundle.
     WebRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot"),
@@ -45,6 +45,16 @@ app.UseStaticFiles(new StaticFileOptions
     ContentTypeProvider = provider,
     ServeUnknownFileTypes = true,
     DefaultContentType = "application/octet-stream",
+    OnPrepareResponse = ctx =>
+    {
+        // index.html, main.js, dotnet.js and blazor.boot.json keep their names across publishes.
+        // Without a Cache-Control header browsers cache them heuristically, and then yesterday's
+        // loader boots against today's _framework — the app hangs on the splash screen after an
+        // upgrade. Make those revalidate (cheap, there is an ETag); only fingerprinted files may
+        // be reused without asking.
+        if (!StaticFileCaching.IsFingerprinted(ctx.File.Name))
+            ctx.Context.Response.Headers.CacheControl = "no-cache";
+    },
 });
 
 app.MapHealth();

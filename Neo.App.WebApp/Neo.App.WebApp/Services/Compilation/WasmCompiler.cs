@@ -71,29 +71,59 @@ public sealed class WasmCompiler
         if (_bootManifest is not null) return _bootManifest;
 
         var json = await _http.GetStringAsync("_framework/blazor.boot.json");
+        _bootManifest = ParseBootManifest(json);
+        return _bootManifest;
+    }
+
+    /// <summary>
+    /// Maps assembly base names ("Avalonia.Base") to the file to fetch from <c>_framework/</c>
+    /// ("Avalonia.Base.5d2jkk9qdl.dll"). Understands both shapes of the boot manifest:
+    /// <list type="bullet">
+    ///   <item>up to .NET 9 — each resource group is an object keyed by the (fingerprinted) file name;</item>
+    ///   <item>.NET 10+ — each group is an array of <c>{ "virtualPath": "Avalonia.Base.dll",
+    ///         "name": "Avalonia.Base.5d2jkk9qdl.dll", … }</c>.</item>
+    /// </list>
+    /// </summary>
+    internal static Dictionary<string, string> ParseBootManifest(string json)
+    {
         using var doc = JsonDocument.Parse(json);
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        if (doc.RootElement.TryGetProperty("resources", out var resources))
+        if (!doc.RootElement.TryGetProperty("resources", out var resources) ||
+            resources.ValueKind != JsonValueKind.Object)
+            return map;
+
+        foreach (var group in resources.EnumerateObject())
         {
-            foreach (var prop in resources.EnumerateObject())
+            if (group.Value.ValueKind == JsonValueKind.Object)
             {
-                if (prop.Value.ValueKind != JsonValueKind.Object) continue;
-                foreach (var res in prop.Value.EnumerateObject())
+                foreach (var res in group.Value.EnumerateObject())
                 {
-                    var fileName = res.Name;
-                    var baseName = StripFingerprintAndExt(fileName);
-                    if (baseName is not null && !map.ContainsKey(baseName))
-                        map[baseName] = fileName;
+                    var baseName = StripFingerprintAndExt(res.Name);
+                    if (baseName is not null) map.TryAdd(baseName, res.Name);
+                }
+            }
+            else if (group.Value.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var res in group.Value.EnumerateArray())
+                {
+                    if (res.ValueKind != JsonValueKind.Object ||
+                        !res.TryGetProperty("name", out var nameProp) ||
+                        nameProp.GetString() is not { Length: > 0 } fileName)
+                        continue;
+
+                    // virtualPath is the un-fingerprinted name — no guessing needed when it is there.
+                    var virtualPath = res.TryGetProperty("virtualPath", out var vp) ? vp.GetString() : null;
+                    var baseName = StripFingerprintAndExt(string.IsNullOrEmpty(virtualPath) ? fileName : virtualPath, fingerprinted: string.IsNullOrEmpty(virtualPath));
+                    if (baseName is not null) map.TryAdd(baseName, fileName);
                 }
             }
         }
 
-        _bootManifest = map;
         return map;
     }
 
-    private static string? StripFingerprintAndExt(string fileName)
+    private static string? StripFingerprintAndExt(string fileName, bool fingerprinted = true)
     {
         if (!fileName.EndsWith(".wasm", StringComparison.OrdinalIgnoreCase) &&
             !fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
@@ -103,7 +133,7 @@ public sealed class WasmCompiler
         var noExt = fileName.Substring(0, dot);
 
         var lastDot = noExt.LastIndexOf('.');
-        if (lastDot > 0)
+        if (fingerprinted && lastDot > 0)
         {
             var tail = noExt.Substring(lastDot + 1);
             if (tail.Length >= 8 && tail.Length <= 16 &&

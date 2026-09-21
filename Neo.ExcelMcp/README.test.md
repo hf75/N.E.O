@@ -26,8 +26,8 @@ Build-Output (verifiziert auf dieser Maschine):
 
 | Was | Pfad |
 |---|---|
-| **Add-in (Excel lädt das)** | `Neo.ExcelMcp/Neo.ExcelMcp.AddIn/bin/Debug/net9.0-windows/publish/Neo.ExcelMcp.AddIn64-packed.xll` |
-| **Bridge (Claude startet das)** | `Neo.ExcelMcp/Neo.ExcelMcp.Bridge/bin/Debug/net9.0/Neo.ExcelMcp.Bridge.exe` |
+| **Add-in (Excel lädt das)** | `Neo.ExcelMcp/Neo.ExcelMcp.AddIn/bin/Debug/net10.0-windows/publish/Neo.ExcelMcp.AddIn64-packed.xll` |
+| **Bridge (Claude startet das)** | `Neo.ExcelMcp/Neo.ExcelMcp.Bridge/bin/Debug/net10.0/Neo.ExcelMcp.Bridge.exe` |
 
 Die `-packed.xll` hat die Managed-DLL LZMA-komprimiert inside — einzelne Datei,
 Hot-Reload ohne Excel-Neustart funktioniert (`LoadFromBytes="true"` im .dna File).
@@ -56,7 +56,7 @@ Du solltest sehen:
 
 Wenn `AutoOpen` fehlt → Excel hat den Add-in nicht geladen. Häufige Ursachen:
 - Falsche .xll (32-bit statt 64-bit)
-- .NET 9 Desktop Runtime fehlt — [Download](https://dotnet.microsoft.com/download/dotnet/9.0)
+- .NET 10 Desktop Runtime fehlt — [Download](https://dotnet.microsoft.com/download/dotnet/10.0)
 - Excel blockiert den Add-in als untrusted. In Excel: **Datei → Optionen → Trust Center → Einstellungen für das Trust Center → Vertrauenswürdige Speicherorte** — Publish-Ordner hinzufügen.
 
 ---
@@ -71,7 +71,7 @@ Datei: `%APPDATA%\Claude\claude_desktop_config.json`
 {
   "mcpServers": {
     "neo-excel": {
-      "command": "C:\\Home\\Code\\nw.Create.VX-Avalonia-OpenSource\\Neo.ExcelMcp\\Neo.ExcelMcp.Bridge\\bin\\Debug\\net9.0\\Neo.ExcelMcp.Bridge.exe"
+      "command": "C:\\Home\\Code\\nw.Create.VX-Avalonia-OpenSource\\Neo.ExcelMcp\\Neo.ExcelMcp.Bridge\\bin\\Debug\\net10.0\\Neo.ExcelMcp.Bridge.exe"
     }
   }
 }
@@ -83,7 +83,7 @@ nicht nur das Fenster schließen).
 ### Claude Code (in diesem Repo)
 
 ```bash
-claude mcp add neo-excel "C:\Home\Code\nw.Create.VX-Avalonia-OpenSource\Neo.ExcelMcp\Neo.ExcelMcp.Bridge\bin\Debug\net9.0\Neo.ExcelMcp.Bridge.exe"
+claude mcp add neo-excel "C:\Home\Code\nw.Create.VX-Avalonia-OpenSource\Neo.ExcelMcp\Neo.ExcelMcp.Bridge\bin\Debug\net10.0\Neo.ExcelMcp.Bridge.exe"
 ```
 
 Oder manuell in `.mcp.json`:
@@ -93,7 +93,7 @@ Oder manuell in `.mcp.json`:
   "mcpServers": {
     "neo-excel": {
       "type": "stdio",
-      "command": "C:\\Home\\Code\\nw.Create.VX-Avalonia-OpenSource\\Neo.ExcelMcp\\Neo.ExcelMcp.Bridge\\bin\\Debug\\net9.0\\Neo.ExcelMcp.Bridge.exe",
+      "command": "C:\\Home\\Code\\nw.Create.VX-Avalonia-OpenSource\\Neo.ExcelMcp\\Neo.ExcelMcp.Bridge\\bin\\Debug\\net10.0\\Neo.ExcelMcp.Bridge.exe",
       "args": []
     }
   }

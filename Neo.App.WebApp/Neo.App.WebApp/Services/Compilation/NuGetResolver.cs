@@ -25,10 +25,10 @@ public sealed class NuGetResolver
     public NuGetResolver(HttpClient http) => _http = http;
 
     /// <summary>
-    /// TFM reported to the server. Defaults to net9.0 because that's the
+    /// TFM reported to the server. Defaults to the framework this client runs on — the
     /// closest cross-platform TFM the WASM runtime can consume.
     /// </summary>
-    public string TargetFramework { get; set; } = "net9.0";
+    public string TargetFramework { get; set; } = $"net{Environment.Version.Major}.0";
 
     public sealed class ResolveResult
     {

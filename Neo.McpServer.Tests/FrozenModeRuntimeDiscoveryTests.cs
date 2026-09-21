@@ -7,7 +7,7 @@ namespace Neo.McpServer.Tests;
 /// <summary>
 /// Phase 4B export pipeline relies on <see cref="CompilationPipeline.DiscoverNeoAppMcpRuntime"/>
 /// finding the right DLLs to ship alongside a Frozen-Mode EXE. The test runs from
-/// <c>Neo.McpServer.Tests/bin/Debug/net9.0</c>, which transitively pulls Neo.App.Mcp's runtime
+/// <c>Neo.McpServer.Tests/bin/Debug/&lt;tfm&gt;</c>, which transitively pulls Neo.App.Mcp's runtime
 /// closure via the project reference chain — so the production discovery code-path (scan the
 /// running executable's bin folder) is exercised end-to-end here.
 ///

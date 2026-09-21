@@ -114,7 +114,7 @@ signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /a my-todo
 
 ## Limitations (Phase 4 scope, will be revisited)
 
-- Single-file `dotnet publish --self-contained` is scaffolded in the FrozenTodoApp sample (`<NeoMcpFrozen>true</NeoMcpFrozen>`) but not yet wired into `export_app`. Today's exports require the .NET 9 runtime on the consumer machine.
+- Single-file `dotnet publish --self-contained` is scaffolded in the FrozenTodoApp sample (`<NeoMcpFrozen>true</NeoMcpFrozen>`) but not yet wired into `export_app`. Today's exports require the .NET 10 runtime (or a newer major — the exported app rolls forward) on the consumer machine.
 - AOT publishing has not been validated; reflection-heavy paths in `AppManifestBuilder` and `InProcessDispatcher` may need `[DynamicallyAccessedMembers]` annotations before AOT works.
 - `--mcp --headless` (server-only, no window) is not implemented in the wrapper. Workaround: launch with `--mcp` and minimise / close the window — the MCP server keeps running until stdin closes.
 - `[McpTriggerable]` is recognised by the manifest builder but not yet used by either dispatcher.

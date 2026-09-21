@@ -13,11 +13,11 @@
     <UseWPF>false</UseWPF>
     <AssemblyName>Neo.ExcelMcp.AddIn</AssemblyName>
     <RootNamespace>Neo.ExcelMcp.AddIn</RootNamespace>
-    <!-- LatestMajor: hostfxr will use .NET 9 even though the ExcelDna host
+    <!-- LatestMajor: hostfxr will use the newest installed .NET even though the ExcelDna host
          was compiled against .NET 6. Without this, it demands .NET 6 Desktop Runtime. -->
     <RollForward>LatestMajor</RollForward>
     <!-- true = ExcelDna skips generating its own runtimeconfig (which requests
-         .NET 6.0.2) and uses ours (which requests .NET 9 + LatestMajor). -->
+         .NET 6.0.2) and uses ours (which requests the .NET major from the .dna file + LatestMajor). -->
     <ExcelAddInCustomRuntimeConfiguration>true</ExcelAddInCustomRuntimeConfiguration>
   </PropertyGroup>
 

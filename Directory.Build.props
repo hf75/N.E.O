@@ -1,7 +1,27 @@
 <Project>
   <PropertyGroup>
-    <NeoNetMajor>9</NeoNetMajor>
+    <!--
+      The one switch for the .NET major version N.E.O. is built and tested for. Everything that
+      depends on it derives from here: the target frameworks below, the build-output folder names
+      the hosts look up at dev time (via the NeoTargetFramework assembly metadata, see
+      Neo.Shared/NeoBuildInfo.cs), and the CI workflow's SDK version (keep that one in sync by hand).
+    -->
+    <NeoNetMajor>10</NeoNetMajor>
     <NeoTargetFramework>net$(NeoNetMajor).0</NeoTargetFramework>
     <NeoTargetFrameworkWindows>net$(NeoNetMajor).0-windows</NeoTargetFrameworkWindows>
+    <NeoTargetFrameworkBrowser>net$(NeoNetMajor).0-browser</NeoTargetFrameworkBrowser>
+
+    <!--
+      Runtime policy for every executable: run on the major we build for; if that one is not
+      installed but a newer major is (a machine that only has .NET 11), use the newer one.
+      Deliberately not LatestMajor: the hosts compile generated code against the runtime they
+      run on and stamp that major into exported apps, so with 10 and 11 side by side we want the
+      tested LTS runtime, not whatever happens to be newest.
+    -->
+    <RollForward>Major</RollForward>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="NeoTargetFramework" Value="$(NeoTargetFramework)" />
+  </ItemGroup>
 </Project>

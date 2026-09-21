@@ -908,8 +908,8 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         var projectNames = framework == "wpf"
             ? new[] { "Neo.PluginWindowWPF.MCP", "Neo.PluginWindowWPF" }
             : new[] { "Neo.PluginWindowAvalonia.MCP", "Neo.PluginWindowAvalonia" };
-        // WPF uses net9.0-windows TFM
-        var tfm = framework == "wpf" ? "net9.0-windows" : "net9.0";
+        // Build-output folder of the sibling project (WPF uses the -windows TFM)
+        var tfm = framework == "wpf" ? Neo.Shared.NeoBuildInfo.TargetFrameworkWindows : Neo.Shared.NeoBuildInfo.TargetFramework;
 
         var envPath = Environment.GetEnvironmentVariable(envVar);
         if (!string.IsNullOrWhiteSpace(envPath))

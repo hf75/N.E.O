@@ -207,11 +207,11 @@ public sealed partial class PreviewTools
             ? $"\nRuntime Errors ({preview.GetRuntimeErrors(windowId).Count}):\n{string.Join("\n", preview.GetRuntimeErrors(windowId).TakeLast(10))}"
             : "\nRuntime Errors: none";
 
-        var frameworkInfo = fw == "wpf" ? "WPF (.NET 9 Windows Desktop)" : "Avalonia 11.3.12";
+        var frameworkInfo = fw == "wpf" ? $"WPF (.NET {Neo.Shared.NeoBuildInfo.RuntimeMajor} Windows Desktop)" : "Avalonia 11.3.12";
 
         return $"Preview Status: {status}\n" +
                $"UI Framework: {frameworkInfo}\n" +
-               $"Framework: .NET 9\n" +
+               $"Framework: .NET {Neo.Shared.NeoBuildInfo.RuntimeMajor}\n" +
                $"Recent Logs:\n{logs}{errorsSection}";
     }
 

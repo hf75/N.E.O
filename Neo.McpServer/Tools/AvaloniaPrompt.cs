@@ -97,7 +97,7 @@ public static class AvaloniaPrompt
             "1. **Class name**: The UserControl class MUST be named `DynamicUserControl`.\n" +
             "2. **Namespace**: Use any namespace you like, but the class must be discoverable as a `UserControl`.\n" +
             "3. **No XAML**: Write everything in C# code-behind. Do not use XAML files.\n" +
-            "4. **Framework**: WPF on .NET 9 — no additional NuGet packages needed for the UI framework.\n" +
+            $"4. **Framework**: WPF on .NET {Neo.Shared.NeoBuildInfo.RuntimeMajor} — no additional NuGet packages needed for the UI framework.\n" +
             "   WPF ships with the .NET Windows Desktop runtime.\n" +
             "5. **Thread safety**: Always access or modify UI elements on the WPF Dispatcher thread.\n" +
             "   Use `System.Windows.Application.Current.Dispatcher.CheckAccess()` and, if false, marshal with\n" +

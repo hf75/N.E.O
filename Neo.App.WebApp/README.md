@@ -2,7 +2,7 @@
 
 **N.E.O. running entirely in your browser.** A local-first, open-source dev tool
 that lets you describe an app in natural language and see it compiled, loaded,
-and running — all inside a WASM sandbox, with no installation beyond .NET 9.
+and running — all inside a WASM sandbox, with no installation beyond .NET 10.
 
 ## What it is
 
@@ -29,8 +29,8 @@ Key design choices:
 ```
 Neo.App.WebApp/
 ├── Neo.App.WebApp/          shared Avalonia library (Services + Views)
-├── Neo.App.WebApp.Browser/  net9.0-browser WASM head (real target)
-├── Neo.App.WebApp.Desktop/  net9.0 dev-iteration head (optional)
+├── Neo.App.WebApp.Browser/  net10.0-browser WASM head (real target)
+├── Neo.App.WebApp.Desktop/  net10.0 dev-iteration head (optional)
 └── README.md                this file
 
 Neo.Backend/                 ASP.NET Core helper — AI proxy + NuGet proxy + static server
@@ -42,13 +42,13 @@ Neo.App.WebApp.Tests/        xUnit (16 tests — parser, analyzer, session store
 
 Everything builds with the standard SDK (Avalonia template's xplat layout,
 `Microsoft.NET.Sdk.WebAssembly`, etc.). Workload required: `wasm-tools` /
-`wasm-tools-net9`.
+`wasm-tools`.
 
 ```bash
 # 1) Publish the browser client (~50 s first time, ~10 s afterwards)
 cd Neo.App.WebApp
 dotnet publish Neo.App.WebApp.Browser/Neo.App.WebApp.Browser.csproj -c Release \
-  -o Neo.App.WebApp.Browser/bin/Release/net9.0-browser/publish
+  -o Neo.App.WebApp.Browser/bin/Release/net10.0-browser/publish
 
 # 2) Build the backend (copies the wwwroot bundle into its own bin)
 cd ..

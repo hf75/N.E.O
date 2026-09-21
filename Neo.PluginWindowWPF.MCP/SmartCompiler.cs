@@ -100,7 +100,7 @@ internal sealed class SmartCompiler
         }
 
         if (dirs.Count == 0)
-            throw new InvalidOperationException("No .NET runtime found. Ensure .NET 9 runtime is installed.");
+            throw new InvalidOperationException($"No .NET runtime found. Ensure the .NET {Environment.Version.Major} runtime is installed.");
 
         _referenceAssemblyDirs = dirs;
 

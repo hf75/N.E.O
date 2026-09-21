@@ -26,7 +26,7 @@ All three share the same `Neo.App.Core` (compile pipeline, agents, structured-re
 
 ### Prerequisites
 
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) (change `NeoNetMajor` in `Directory.Build.props` if you're on a different major).
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). .NET 10 (LTS) is the minimum; every executable rolls forward to a newer major when .NET 10 itself is not installed, so a machine that only has .NET 11 works too. The version lives in one place: `NeoNetMajor` in `Directory.Build.props`.
 - One AI provider env var, or a local model (Ollama, LM Studio). Neo reads keys from user env vars — nothing is stored in the repo.
 
 | Provider | Env var |
@@ -62,7 +62,7 @@ Then register the server in `.claude/settings.json` — full details in [docs/wi
 ```bash
 # 1. Publish the Avalonia.Browser client once
 dotnet publish Neo.App.WebApp/Neo.App.WebApp.Browser/Neo.App.WebApp.Browser.csproj \
-    -c Release -o Neo.App.WebApp/Neo.App.WebApp.Browser/bin/Release/net9.0-browser/publish
+    -c Release -o Neo.App.WebApp/Neo.App.WebApp.Browser/bin/Release/net10.0-browser/publish
 
 # 2. Run the backend (serves the WASM bundle + proxies AI + NuGet)
 dotnet run --project Neo.Backend -c Release --urls=http://localhost:5099

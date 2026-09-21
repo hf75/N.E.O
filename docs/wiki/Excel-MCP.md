@@ -36,7 +36,7 @@ The bridge is invisible to the user — no window, no tray icon, ~8 MB in memory
 
 ## Prerequisites
 
-- .NET 9 Desktop Runtime (already installed if you run the N.E.O. WPF host)
+- .NET 10 Desktop Runtime (already installed if you run the N.E.O. WPF host)
 - Microsoft Excel 365 x64 (Windows)
 - The N.E.O. repository cloned and built
 
@@ -54,18 +54,18 @@ dotnet build Neo.ExcelMcp/Neo.ExcelMcp.Bridge -c Debug
 
 1. Open Excel
 2. **File > Options > Add-ins > Manage: Excel Add-ins > Go > Browse**
-3. Select `Neo.ExcelMcp/Neo.ExcelMcp.AddIn/bin/Debug/net9.0-windows/publish/Neo.ExcelMcp.AddIn64-packed.xll`
+3. Select `Neo.ExcelMcp/Neo.ExcelMcp.AddIn/bin/Debug/net10.0-windows/publish/Neo.ExcelMcp.AddIn64-packed.xll`
 4. Check the box, click OK
 
 The packed `.xll` is a single file with the managed DLL embedded (LZMA-compressed).
 
-> **Tip:** If Excel shows a ".NET Desktop Runtime 6.0.2" error, verify the `.dna` file contains `RuntimeVersion="v9"`. See Troubleshooting below.
+> **Tip:** If Excel shows a ".NET Desktop Runtime 6.0.2" error, verify the `.dna` file contains `RuntimeVersion="v10"`. See Troubleshooting below.
 
 ### 3. Configure Claude
 
 **Claude Code** (via CLI):
 ```bash
-claude mcp add neo-excel -- "/path/to/Neo.ExcelMcp/Neo.ExcelMcp.Bridge/bin/Debug/net9.0/Neo.ExcelMcp.Bridge.exe"
+claude mcp add neo-excel -- "/path/to/Neo.ExcelMcp/Neo.ExcelMcp.Bridge/bin/Debug/net10.0/Neo.ExcelMcp.Bridge.exe"
 ```
 
 **Claude Desktop** (`%APPDATA%\Claude\claude_desktop_config.json`):
@@ -73,7 +73,7 @@ claude mcp add neo-excel -- "/path/to/Neo.ExcelMcp/Neo.ExcelMcp.Bridge/bin/Debug
 {
   "mcpServers": {
     "neo-excel": {
-      "command": "/path/to/Neo.ExcelMcp/Neo.ExcelMcp.Bridge/bin/Debug/net9.0/Neo.ExcelMcp.Bridge.exe"
+      "command": "/path/to/Neo.ExcelMcp/Neo.ExcelMcp.Bridge/bin/Debug/net10.0/Neo.ExcelMcp.Bridge.exe"
     }
   }
 }
@@ -214,11 +214,11 @@ Response: `{"result": {"values": [...]}}` or `{"error": "message"}`
 
 One connection per tool call (connect, send, receive, disconnect). The add-in accepts one client at a time via `NamedPipeServerStream` with `maxNumberOfServerInstances: 1`.
 
-### Excel-DNA and .NET 9
+### Excel-DNA and .NET 10
 
-The `.xll` native host bootstrapper is compiled against .NET 6. To use .NET 9:
+The `.xll` native host bootstrapper is compiled against .NET 6. To use .NET 10:
 
-1. Set `RuntimeVersion="v9"` in the `.dna` file — this tells the native host to request .NET 9 from `hostfxr`
+1. Set `RuntimeVersion="v10"` in the `.dna` file — this tells the native host to request .NET 10 from `hostfxr`
 2. Set `<ExcelAddInCustomRuntimeConfiguration>true</ExcelAddInCustomRuntimeConfiguration>` in the `.csproj` — this prevents ExcelDna from generating a .NET 6 runtimeconfig
 3. Set `<UseWindowsForms>true</UseWindowsForms>` — adds `Microsoft.WindowsDesktop.App` framework to the runtimeconfig (the ExcelDna host needs the Desktop Runtime)
 4. Set `<RollForward>LatestMajor</RollForward>` — allows framework version roll-forward
@@ -245,9 +245,9 @@ Neo.ExcelMcp/
     PipeServer.cs             — Named Pipe JSON-RPC server (accept loop, message routing)
     ExcelGateway.cs           — All Excel COM access (STA marshalling, COM release)
     Log.cs                    — File logger (%LOCALAPPDATA%\NeoExcelMcp\addin.log)
-    Neo.ExcelMcp.AddIn.csproj — .NET 9, x64, ExcelDna.AddIn 1.9.0
-    Neo.ExcelMcp.AddIn.dna    — Excel-DNA config (RuntimeVersion="v9")
-    exceldna.runtimeconfig.json — Custom runtime config for .NET 9 Desktop
+    Neo.ExcelMcp.AddIn.csproj — .NET 10, x64, ExcelDna.AddIn 1.9.0
+    Neo.ExcelMcp.AddIn.dna    — Excel-DNA config (RuntimeVersion="v10")
+    exceldna.runtimeconfig.json — Custom runtime config for .NET 10 Desktop
 
   Neo.ExcelMcp.Bridge/
     Program.cs                — MCP STDIO host (same pattern as Neo.McpServer)
@@ -269,7 +269,7 @@ The bridge logs to stderr (visible in Claude Code's MCP server logs or `%APPDATA
 ## Troubleshooting
 
 **".NET Desktop Runtime 6.0.2" error when loading the add-in:**
-The `.dna` file must contain `RuntimeVersion="v9"`. Without it, the ExcelDna host defaults to .NET 6.0.2. Rebuild after changing the `.dna` file.
+The `.dna` file must contain `RuntimeVersion="v10"`. Without it, the ExcelDna host defaults to .NET 6.0.2. Rebuild after changing the `.dna` file.
 
 **"Could not connect to pipe" when calling tools:**
 Excel isn't running or the add-in isn't loaded. Check `addin.log` for `PipeServer started` messages. If missing, the add-in's `AutoOpen` didn't run — verify the add-in is checked in Excel's Add-ins dialog.

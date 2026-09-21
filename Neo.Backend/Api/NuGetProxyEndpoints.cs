@@ -21,7 +21,7 @@ public static class NuGetProxyEndpoints
     {
         // POST /api/nuget/resolve
         //   Body: { "packages": { "MathNet.Numerics": "5.0.0", "NodaTime": "default" },
-        //           "targetFramework": "net9.0" }
+        //           "targetFramework": "net10.0" }
         //   Response: application/zip — every entry is a .dll (flat).
         app.MapPost("/api/nuget/resolve", async (HttpContext ctx) =>
         {
@@ -46,7 +46,7 @@ public static class NuGetProxyEndpoints
                 return;
             }
 
-            var tfm = string.IsNullOrWhiteSpace(req.TargetFramework) ? "net9.0" : req.TargetFramework;
+            var tfm = string.IsNullOrWhiteSpace(req.TargetFramework) ? $"net{Environment.Version.Major}.0" : req.TargetFramework;
             // Stable cache per TFM — persists across requests so second-time
             // resolves are instant. ~100 MB ceiling per TFM in practice.
             var cache = Path.Combine(

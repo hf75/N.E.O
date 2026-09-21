@@ -60,8 +60,8 @@ so the UI can grey them out.
 ## Static bundle integration
 
 The `.csproj` has an `AfterTargets="Build"` target that copies
-`../Neo.App.WebApp/Neo.App.WebApp.Browser/bin/$(Config)/net9.0-browser/publish/wwwroot/**`
-into `bin/$(Config)/net9.0/wwwroot/`. `Program.cs` points `WebRootPath` at
+`../Neo.App.WebApp/Neo.App.WebApp.Browser/bin/$(Config)/net10.0-browser/publish/wwwroot/**`
+into `bin/$(Config)/net10.0/wwwroot/`. `Program.cs` points `WebRootPath` at
 `AppContext.BaseDirectory/wwwroot` so the same copy is found under `dotnet run`
 as under `dotnet publish`.
 
@@ -70,7 +70,7 @@ First-time setup:
 ```bash
 # Publish the WASM client once
 dotnet publish ../Neo.App.WebApp/Neo.App.WebApp.Browser/Neo.App.WebApp.Browser.csproj \
-  -c Release -o ../Neo.App.WebApp/Neo.App.WebApp.Browser/bin/Release/net9.0-browser/publish
+  -c Release -o ../Neo.App.WebApp/Neo.App.WebApp.Browser/bin/Release/net10.0-browser/publish
 
 # Then
 dotnet run -c Release --urls=http://localhost:5099

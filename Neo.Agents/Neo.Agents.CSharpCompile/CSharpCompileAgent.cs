@@ -564,6 +564,9 @@ namespace Neo.Agents
         {
             string runtimeConfigPath = Path.Combine(outputDirectory, $"{projectName}.runtimeconfig.json");
 
+            // The exported app targets the runtime this host runs on. rollForward=Major lets it
+            // start on a machine that only has a newer major (.NET 11 without .NET 10) instead
+            // of failing with "framework not found"; with the requested major present, that one is used.
             var major = Environment.Version.Major;
             var tfm = $"net{major}.0";
             var fwVersion = $"{major}.0.0";
@@ -572,6 +575,7 @@ namespace Neo.Agents
             var runtimeConfigContent = $@"{{
                   ""runtimeOptions"": {{
                     ""tfm"": ""{tfm}"",
+                    ""rollForward"": ""Major"",
                     ""framework"": {{
                       ""name"": ""{fwName}"",
                       ""version"": ""{fwVersion}""

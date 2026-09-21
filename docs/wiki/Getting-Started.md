@@ -6,7 +6,7 @@ for the Claude-driven MCP workflow, see [[MCP Server]].
 
 ## Prerequisites
 
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) or later
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later (.NET 10 is the minimum; N.E.O. and the apps it exports roll forward to a newer major if .NET 10 is not installed)
 - One AI provider configured, or a local model server (Ollama / LM Studio)
 
 **Platform requirements**

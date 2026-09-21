@@ -109,12 +109,12 @@ Anthropic-, OpenAI- and Gemini-shaped `data:` lines are relayed **verbatim** —
     "MathNet.Numerics": "5.0.0",
     "NodaTime": "default"
   },
-  "targetFramework": "net9.0"
+  "targetFramework": "net10.0"
 }
 ```
 
 - `packages` — map of `{id → version}`. `"default"` selects the latest stable from the NuGet API. `"[3.0,)"` and similar ranges are honored.
-- `targetFramework` — optional. Defaults to `net9.0`. Used by the resolver for `lib/{tfm}` selection.
+- `targetFramework` — optional. Defaults to `net10.0`. Used by the resolver for `lib/{tfm}` selection.
 
 **Response** — `application/zip`. One flat entry per resolved DLL. Transitive dependencies are included automatically — the backend uses the same `NuGetPackageService` that Neo.App.Core and Neo.McpServer use (NuGet.Protocol 7.0.0).
 
@@ -149,8 +149,8 @@ Response headers:
 ## Static serving
 
 The project's build target copies the published Avalonia.Browser bundle from
-`Neo.App.WebApp/Neo.App.WebApp.Browser/bin/<config>/net9.0-browser/publish/wwwroot/`
-into `Neo.Backend/bin/<config>/net9.0/wwwroot/` after every backend build. `Program.cs`
+`Neo.App.WebApp/Neo.App.WebApp.Browser/bin/<config>/net10.0-browser/publish/wwwroot/`
+into `Neo.Backend/bin/<config>/net10.0/wwwroot/` after every backend build. `Program.cs`
 points `WebRootPath` at `AppContext.BaseDirectory/wwwroot` so `dotnet run` and `dotnet publish` behave the same.
 
 Unknown MIME types (`.dll`, `.wasm`, `.blat`, `.dat`, `.webcil`) are explicitly registered as `application/octet-stream`; `ServeUnknownFileTypes = true` covers anything new.
