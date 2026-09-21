@@ -48,7 +48,7 @@ dotnet build Neo.PluginWindowWPF.MCP -c Release      # optional, Windows-only, f
 
 Both `Debug` and `Release` builds work. Use `Release` for better performance.
 
-> **Note:** The `.MCP` variants include all MCP-specific IPC handlers plus the Smart Edit feature (Ctrl+K). The normal `Neo.PluginWindowAvalonia` / `Neo.PluginWindowWPF` are slim variants for the standalone host apps without MCP features.
+> **Note:** All four plugin windows share one code base per UI framework (`Neo.PluginWindowAvalonia.Core` / `Neo.PluginWindowWPF.Core`). The `.MCP` executables are the heads the MCP server launches: they add the Smart Edit feature (Ctrl+K) and switch on the MCP host features (Live-MCP manifest, `Ai.Trigger`). `Neo.PluginWindowAvalonia` / `Neo.PluginWindowWPF` are the heads for the desktop host apps and deliberately carry no Roslyn or AI-agent dependencies.
 
 ### 2. Configure Claude
 
@@ -385,8 +385,10 @@ Neo.McpServer/
     PreviewTools.cs                 — MCP tool definitions (25 tools, framework parameter)
     AvaloniaPrompt.cs               — MCP prompts (create_avalonia_app + create_wpf_app)
 
-Neo.PluginWindowAvalonia.MCP/       — Avalonia preview child process (cross-platform)
-Neo.PluginWindowWPF.MCP/            — WPF preview child process (Windows-only)
+Neo.PluginWindowAvalonia.MCP/       — Avalonia preview child process (cross-platform); thin head, adds Smart Edit
+Neo.PluginWindowAvalonia.Core/      — the window itself: IPC handlers, plugin loading, Live-MCP, WebBridge
+Neo.PluginWindowWPF.MCP/            — WPF preview child process (Windows-only); thin head, adds Smart Edit
+Neo.PluginWindowWPF.Core/           — the WPF window itself: IPC handlers, plugin loading, WebBridge
 ```
 
 ## Multi-Window Mode

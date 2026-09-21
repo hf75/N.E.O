@@ -9,7 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Neo.IPC;
 
-namespace Neo.PluginWindowWPF.MCP
+namespace Neo.PluginWindowWPF
 {
     public partial class MainWindow : Window
     {

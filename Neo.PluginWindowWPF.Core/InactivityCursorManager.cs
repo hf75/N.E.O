@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -7,7 +7,6 @@ namespace Neo.PluginWindowWPF
 {
     public static class InactivityCursorManager
     {
-        // --- WIN32 API IMPORTE ---
         [DllImport("user32.dll")]
         private static extern bool GetCursorPos(out POINT lpPoint);
 
@@ -49,9 +48,7 @@ namespace Neo.PluginWindowWPF
             _pollingTimer = null!;
 
             if (_isCursorHidden)
-            {
                 RestoreOriginalCursor();
-            }
 
             _isRunning = false;
         }

@@ -13,7 +13,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Neo.IPC;
 
-namespace Neo.PluginWindowAvalonia.MCP.LiveMcp;
+namespace Neo.PluginWindowAvalonia.LiveMcp;
 
 /// <summary>
 /// Phase 3 UI-driving runtime: handles <c>RaiseEvent</c> and <c>SimulateInput</c> IPC frames
@@ -21,7 +21,7 @@ namespace Neo.PluginWindowAvalonia.MCP.LiveMcp;
 /// and exercises the appropriate Avalonia code path.
 ///
 /// <para>All operations marshal to the UI thread via <see cref="Dispatcher.UIThread"/>; the
-/// caller (<see cref="Neo.PluginWindowAvalonia.MCP.App"/>) lives on the IPC pipe thread.</para>
+/// caller (<see cref="Neo.PluginWindowAvalonia.App"/>) lives on the IPC pipe thread.</para>
 ///
 /// <para>Strategy mix per VISION.md §3:
 /// <list type="bullet">
@@ -227,7 +227,7 @@ internal sealed class LiveMcpInputDispatcher
 
     /// <summary>
     /// Visual-tree walk identical in spirit to the existing <c>FindControlInTree</c> on
-    /// <see cref="Neo.PluginWindowAvalonia.MCP.App"/> — kept here so this dispatcher has no
+    /// <see cref="Neo.PluginWindowAvalonia.App"/> — kept here so this dispatcher has no
     /// hidden dependency on the App class.
     /// </summary>
     internal static Control? FindControlInTree(Control root, string target)

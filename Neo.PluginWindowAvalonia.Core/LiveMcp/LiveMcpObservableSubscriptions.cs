@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using Neo.IPC;
 
-namespace Neo.PluginWindowAvalonia.MCP.LiveMcp;
+namespace Neo.PluginWindowAvalonia.LiveMcp;
 
 /// <summary>
 /// Phase 2B watch_observable runtime: tracks the set of properties Claude has subscribed to and

@@ -1,0 +1,49 @@
+using System;
+
+using Avalonia;
+
+namespace Neo.PluginWindowAvalonia
+{
+    /// <summary>
+    /// What an executable head may customise about the shared plugin window.
+    /// Everything else — IPC loop, plugin loading, designer mode, Live-MCP, web bridge —
+    /// is identical for every head and lives in this library.
+    /// </summary>
+    public sealed class PluginHostOptions
+    {
+        /// <summary>Window title used in <c>--standalone</c> mode (embedded mode has no title bar).</summary>
+        public string StandaloneWindowTitle { get; init; } = "N.E.O. — Live Preview";
+
+        /// <summary>
+        /// The host on the other end of the pipe is Neo.McpServer: announce the Live-MCP manifest
+        /// after every load and forward <c>Neo.App.Ai.Trigger</c> as <c>AppEvent</c> frames (which
+        /// the server relays to Claude). The desktop hosts understand neither, so their head leaves
+        /// this off and the child stays as quiet on the pipe as it always was.
+        /// </summary>
+        public bool EnableMcpHostFeatures { get; init; }
+
+        /// <summary>
+        /// Called once, right after the <see cref="MainWindow"/> was constructed and before it is
+        /// shown. Heads use this to attach their own features (the MCP head adds Smart Edit).
+        /// </summary>
+        public Action<MainWindow>? MainWindowCreated { get; init; }
+    }
+
+    /// <summary>Entry point shared by all Avalonia plugin window executables.</summary>
+    public static class PluginHost
+    {
+        public static PluginHostOptions Options { get; private set; } = new();
+
+        public static int Run(string[] args, PluginHostOptions? options = null)
+        {
+            Options = options ?? new PluginHostOptions();
+            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+
+        public static AppBuilder BuildAvaloniaApp()
+            => AppBuilder.Configure<App>()
+                .UsePlatformDetect()
+                .WithInterFont()
+                .LogToTrace();
+    }
+}

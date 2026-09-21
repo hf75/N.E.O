@@ -15,7 +15,7 @@ using System.Windows.Controls;
 using System.Reflection;
 using System.Globalization;
 
-namespace Neo.PluginWindowWPF.MCP
+namespace Neo.PluginWindowWPF
 {
     public partial class App : Application
     {
@@ -48,6 +48,9 @@ namespace Neo.PluginWindowWPF.MCP
 
         // =======================================================
 
+        // Embedded children must not pull focus away from the host's prompt box.
+        private bool _isStandalone;
+
         protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
@@ -71,10 +74,14 @@ namespace Neo.PluginWindowWPF.MCP
             // Check if running standalone (from MCP server) or embedded (from WPF host)
             bool isStandalone = e.Args.Any(a => string.Equals(a, "--standalone", StringComparison.OrdinalIgnoreCase));
 
+            var hostOptions = PluginHost.Options;
+            _isStandalone = isStandalone;
+
             MainWin = new MainWindow();
+            hostOptions.MainWindowCreated?.Invoke(MainWin);
             if (isStandalone)
             {
-                MainWin.Title = "N.E.O. \u2014 Live Preview (WPF MCP)";
+                MainWin.Title = hostOptions.StandaloneWindowTitle;
                 MainWin.Width = 800;
                 MainWin.Height = 600;
                 MainWin.ShowInTaskbar = true;
@@ -280,7 +287,8 @@ namespace Neo.PluginWindowWPF.MCP
                                     managedAssembliesByFullName: managedByFull,
                                     nativeLibrariesByBasename: nativeByBase
                                 );
-                                MainWin.Activate();
+                                if (_isStandalone)
+                                    MainWin.Activate();
                             });
 
                             await SendLogAsync(LogLevel.Info, "LoadControl executed.", "Child", "Mode=Bytes(In-Memory)");
@@ -367,9 +375,7 @@ namespace Neo.PluginWindowWPF.MCP
                             {
                                 if (!bounds.IsVisible)
                                 {
-                                    MainWin.WaitOverlay.Visibility = Visibility.Visible;
-                                    MainWin.WaitStatusText.Text = "Generating...";
-                                    MainWin.StartWaitTimer();
+                                    MainWin.ShowWaitOverlay("Generating...");
                                 }
                                 else
                                 {
@@ -1159,9 +1165,11 @@ namespace Neo.PluginWindowWPF.MCP
         // =======================================================
         public string ExtractCodeFromVisualTree(FrameworkElement root)
         {
-            // If SmartCompiler has last code, return that
-            if (MainWin._smartCompiler?.LastCompiledCode != null)
-                return MainWin._smartCompiler.LastCompiledCode;
+            // WPF has no visual-tree code extraction; a head that compiles code itself
+            // (Smart Edit in the MCP head) can supply the last source it built.
+            var lastCompiled = PluginHost.Options.LastCompiledCodeProvider?.Invoke();
+            if (lastCompiled != null)
+                return lastCompiled;
 
             return "// Code extraction not available — use extract_code via MCP when SmartCompiler has compiled code.";
         }

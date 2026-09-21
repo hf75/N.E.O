@@ -1,4 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Thin executable head: child process of Neo.McpServer. All window logic lives in
+    Neo.PluginWindowAvalonia.Core; this head adds Smart Edit (Ctrl+K), which compiles and
+    calls Claude inside the child process and therefore needs Roslyn and the agents.
+  -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>$(NeoTargetFramework)</TargetFramework>
@@ -6,39 +11,16 @@
     <Nullable>enable</Nullable>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.12">
-      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
-      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
-    </PackageReference>
-  </ItemGroup>
+    <ProjectReference Include="..\Neo.PluginWindowAvalonia.Core\Neo.PluginWindowAvalonia.Core.csproj" />
 
-  <ItemGroup>
-    <EmbeddedResource Include="..\Neo.App\icon.ico" Link="Assets\icon.ico" LogicalName="icon.ico" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- Shared (same as normal PluginWindow) -->
-    <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
-    <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
-
-    <!-- NEW: For Chat-Overlay + Self-Compilation -->
+    <!-- Smart Edit: Chat-Overlay + Self-Compilation -->
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Core\Neo.Agents.Core.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Claude\Neo.Agents.Claude.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpDllCompile\Neo.Agents.CSharpDllCompile.csproj" />
     <ProjectReference Include="..\Neo.AssemblyForge\Neo.AssemblyForge.csproj" />
     <ProjectReference Include="..\Neo.App.Core\Neo.App.Core.csproj" />
-    <ProjectReference Include="..\Neo.App.Api\Neo.App.Api.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <InternalsVisibleTo Include="Neo.PluginWindowAvalonia.MCP.Tests" />
   </ItemGroup>
 </Project>

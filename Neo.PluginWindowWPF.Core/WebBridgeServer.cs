@@ -10,7 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Neo.PluginWindowWPF.MCP;
+namespace Neo.PluginWindowWPF;
 
 /// <summary>
 /// Hosts an HTTP + WebSocket server inside the PluginWindow process.

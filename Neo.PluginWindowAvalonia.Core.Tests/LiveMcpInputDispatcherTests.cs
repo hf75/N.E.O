@@ -3,10 +3,10 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using FluentAssertions;
-using Neo.PluginWindowAvalonia.MCP.LiveMcp;
+using Neo.PluginWindowAvalonia.LiveMcp;
 using Xunit;
 
-namespace Neo.PluginWindowAvalonia.MCP.Tests;
+namespace Neo.PluginWindowAvalonia.Core.Tests;
 
 /// <summary>
 /// Phase 3 reflection logic for resolving Avalonia <see cref="RoutedEvent"/>s by name across

@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
+  <!--
+    Thin executable head: child process of Neo.McpServer. All window logic lives in
+    Neo.PluginWindowWPF.Core; this head adds Smart Edit (Ctrl+K), which compiles and calls
+    Claude inside the child process and therefore needs Roslyn and the agents.
+  -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>$(NeoTargetFrameworkWindows)</TargetFramework>
@@ -12,15 +16,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="..\Neo.App\icon.ico" Link="Assets\icon.ico" LogicalName="icon.ico" />
-  </ItemGroup>
+    <ProjectReference Include="..\Neo.PluginWindowWPF.Core\Neo.PluginWindowWPF.Core.csproj" />
 
-  <ItemGroup>
-    <!-- Shared (same as normal PluginWindow) -->
-    <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
-    <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
-
-    <!-- For Chat-Overlay + Self-Compilation -->
+    <!-- Smart Edit: Chat-Overlay + Self-Compilation -->
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Core\Neo.Agents.Core.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Claude\Neo.Agents.Claude.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpDllCompile\Neo.Agents.CSharpDllCompile.csproj" />

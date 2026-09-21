@@ -5,7 +5,7 @@ using System.Reflection;
 using Avalonia.Controls;
 using Neo.IPC;
 
-namespace Neo.PluginWindowAvalonia.MCP.LiveMcp;
+namespace Neo.PluginWindowAvalonia.LiveMcp;
 
 /// <summary>
 /// Reflects over a loaded <see cref="Avalonia.Controls.UserControl"/> and produces

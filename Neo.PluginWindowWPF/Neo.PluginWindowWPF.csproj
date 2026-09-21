@@ -1,5 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Thin executable head: embedded child process of the WPF desktop host (Neo.App).
+    All window logic lives in Neo.PluginWindowWPF.Core. Keep this head free of heavy
+    dependencies - Neo.App copies this project's entire output into its own bin folder.
+  -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>$(NeoTargetFrameworkWindows)</TargetFramework>
@@ -13,8 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
-    <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
+    <ProjectReference Include="..\Neo.PluginWindowWPF.Core\Neo.PluginWindowWPF.Core.csproj" />
   </ItemGroup>
 
 </Project>

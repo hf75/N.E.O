@@ -87,15 +87,19 @@ Neo.ExcelMcp/                 Container directory.
   Neo.ExcelMcp.AddIn          Excel-DNA .xll that runs inside Excel.exe.
   Neo.ExcelMcp.Bridge         stdio↔named-pipe translator for Claude.
 
-Neo.PluginWindowWPF           WPF child process for the desktop host.
-Neo.PluginWindowAvalonia      Avalonia child process for the desktop host.
-Neo.PluginWindowWPF.MCP       WPF child used by MCP (adds Smart Edit, channels).
-Neo.PluginWindowAvalonia.MCP  Avalonia child used by MCP (adds Smart Edit, channels, WebBridge).
+Neo.PluginWindowAvalonia.Core Everything the Avalonia child window does: IPC loop, plugin loading,
+                              designer mode, Live-MCP, WebBridge. Shared by both Avalonia heads.
+Neo.PluginWindowAvalonia      Thin exe head: Avalonia child of the desktop hosts.
+Neo.PluginWindowAvalonia.MCP  Thin exe head: Avalonia child of Neo.McpServer. Adds Smart Edit (Ctrl+K)
+                              and switches on the MCP host features (Live-MCP manifest, Ai.Trigger).
+Neo.PluginWindowWPF.Core      Same for WPF: the complete child window, shared by both WPF heads.
+Neo.PluginWindowWPF           Thin exe head: embedded WPF child of the WPF desktop host.
+Neo.PluginWindowWPF.MCP       Thin exe head: WPF child of Neo.McpServer. Adds Smart Edit (Ctrl+K).
 
 Neo.AssemblyForge             Prompt→DLL pipeline (NuGetPackageService, CompilationService). Used by Core, MCP, Backend.
 Neo.AssemblyForge.Tests       160 tests.
 Neo.IPC                       Named-pipe framed protocol.
-Neo.Shared                    PipeClient + PeUtils.
+Neo.Shared                    PipeClient, PeUtils, and the bytes-only plugin loader (SandboxPluginLoadContext).
 
 Neo.Agents/                   One project per AI provider / capability:
   Neo.Agents.Core             IAgent / AgentBase.
@@ -112,9 +116,6 @@ Neo.Agents/                   One project per AI provider / capability:
   Neo.Agents.CSharpDllCompile Roslyn → DLL only.
   Neo.Agents.NugetLoader      NuGet.Protocol 7.0.0 driver.
   Neo.Agents.PowerShell       PowerShell script execution.
-
-Neo.DynamicSlot.Avalonia      Dynamic UserControl host plumbing.
-Neo.DynamicSlot.Wpf           Same, WPF variant.
 ```
 
 ## Solutions

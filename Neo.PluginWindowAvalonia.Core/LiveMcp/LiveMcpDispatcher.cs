@@ -9,7 +9,7 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using Neo.IPC;
 
-namespace Neo.PluginWindowAvalonia.MCP.LiveMcp;
+namespace Neo.PluginWindowAvalonia.LiveMcp;
 
 /// <summary>
 /// Runtime side of Live-MCP method invocation. Resolves the target method from

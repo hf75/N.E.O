@@ -1,6 +1,6 @@
 using System.Threading;
 
-namespace Neo.PluginWindowAvalonia.MCP.LiveMcp;
+namespace Neo.PluginWindowAvalonia.LiveMcp;
 
 /// <summary>
 /// Per-call context for Live-MCP method invocation. Holds the loop-protection
