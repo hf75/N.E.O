@@ -14,15 +14,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
-    <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
-    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.12">
-      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
-      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
-    </PackageReference>
+    <PackageReference Include="Avalonia" Version="$(NeoAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Desktop" Version="$(NeoAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="$(NeoAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="$(NeoAvaloniaVersion)" />
+    <!-- The official NativeWebView (WebView2 / WKWebView / WebKitGTK). Part of the child runtime on
+         purpose: generated apps get a browser control without a NuGet download, and it always
+         matches the Avalonia version they run on. -->
+    <PackageReference Include="Avalonia.Controls.WebView" Version="$(NeoAvaloniaWebViewVersion)" />
   </ItemGroup>
 
   <ItemGroup>

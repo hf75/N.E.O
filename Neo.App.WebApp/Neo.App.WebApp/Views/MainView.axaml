@@ -53,7 +53,7 @@
           <TextBox Name="PromptBox"
                    AcceptsReturn="True" TextWrapping="Wrap"
                    Height="90"
-                   Watermark="Describe the app you want, e.g. 'A pomodoro timer with start/stop'"
+                   PlaceholderText="Describe the app you want, e.g. 'A pomodoro timer with start/stop'"
                    ScrollViewer.VerticalScrollBarVisibility="Auto"/>
           <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,6,0,0">
             <TextBlock Grid.Column="0" Foreground="#64748b" FontSize="11"

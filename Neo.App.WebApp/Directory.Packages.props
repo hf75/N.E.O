@@ -5,15 +5,14 @@
     </PropertyGroup>
     <ItemGroup>
         <!-- Avalonia packages -->
-        <!-- Important: keep version in sync! -->
-        <PackageVersion Include="Avalonia" Version="11.3.12" />
-        <PackageVersion Include="Avalonia.Themes.Fluent" Version="11.3.12" />
-        <PackageVersion Include="Avalonia.Fonts.Inter" Version="11.3.12" />
-        <PackageVersion Include="Avalonia.Diagnostics" Version="11.3.12" />
-        <PackageVersion Include="Avalonia.Desktop" Version="11.3.12" />
-        <PackageVersion Include="Avalonia.iOS" Version="11.3.12" />
-        <PackageVersion Include="Avalonia.Browser" Version="11.3.12" />
-        <PackageVersion Include="Avalonia.Android" Version="11.3.12" />
+        <!-- One version for the whole repo: NeoAvaloniaVersion in the root Directory.Build.props. -->
+        <PackageVersion Include="Avalonia" Version="$(NeoAvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(NeoAvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Fonts.Inter" Version="$(NeoAvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Desktop" Version="$(NeoAvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.iOS" Version="$(NeoAvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Browser" Version="$(NeoAvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Android" Version="$(NeoAvaloniaVersion)" />
 
         <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
 

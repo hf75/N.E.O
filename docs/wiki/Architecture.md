@@ -148,6 +148,14 @@ Every agent response flows through `StructuredResponseParser`. The AI is instruc
 
 32-byte header + payload. Frame types: `ControlJson`, `BlobStart`, `BlobChunk`, `BlobEnd`. Blob streaming lets the parent send the whole plugin DLL (megabytes) without buffering in memory. Correlation IDs turn the pipe into a request/response channel when needed.
 
+### One Avalonia for everyone
+
+Generated Avalonia code is compiled against, and runs on, the Avalonia assemblies the hosts ship — never a copy a model picked. `NeoAvaloniaVersion` in `Directory.Build.props` is the single place the version is written down: every `PackageReference` uses it, the build stamps it into the assemblies, and the prompts read it back (`Neo.AssemblyForge.Core/AvaloniaGuidance.cs`, `Neo.Shared/NeoBuildInfo.cs`).
+
+- **`AvaloniaGuidance`** holds the version pin, the list of API changes between Avalonia 11 and 12 (models mostly know 11) and the notes on the web view. All three surfaces build their prompts from it. `Neo.McpServer.Tests/AvaloniaVersionCompileTests` pushes every recommended API — and every API declared gone — through the real compile pipeline, so the text cannot drift from the shipped assemblies.
+- **The host's copy wins** (`Neo.Agents.NugetLoader/HostProvidedAssemblies`). A project saved with an older N.E.O. still asks for `Avalonia|11.3.12`; a second `Avalonia.Base` in the reference list would make every Avalonia type ambiguous. The desktop hosts register the Avalonia DLLs from their own bin folder (`AppController.RegisterHostAvaloniaAssemblies`) and move such requests to the shipped version; the MCP server does not download host-provided packages at all. Add-ons the host does not ship (`Avalonia.Controls.DataGrid`, …) still come from NuGet.
+- **Web content**: the child runtime ships the official `Avalonia.Controls.WebView` (`NativeWebView`: WebView2 / WKWebView / WebKitGTK), so generated apps can embed a browser without a package download. The child redirects the WebView2 profile to `%LOCALAPPDATA%/Neo/WebView2` (`WebViewDefaults`) — the default would be a folder next to the executable. Not available in the Web App.
+
 ### Channels (MCP only)
 
 The generated app links against `Neo.App.Api` and calls `Ai.Trigger(prompt)` — the trigger text travels out via the pipe → MCP server → Claude Code channel → a new Claude turn. See [[Channels]].

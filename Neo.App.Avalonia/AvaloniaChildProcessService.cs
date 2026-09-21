@@ -186,7 +186,7 @@ namespace Neo.App
             if (File.Exists(dllCandidate)) return (dllCandidate, true);
 
             // 3. Dev-time: sibling project output
-            foreach (var config in new[] { "Debug", "Release" })
+            foreach (var config in Neo.Shared.NeoBuildInfo.DevBuildConfigurations)
             {
                 var devNative = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
                     "Neo.PluginWindowAvalonia", "bin", config, Neo.Shared.NeoBuildInfo.TargetFramework, nativeName));

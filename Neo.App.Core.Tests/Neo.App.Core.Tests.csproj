@@ -19,5 +19,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Neo.App.Core\Neo.App.Core.csproj" />
+
+    <!-- Build-order only: AvaloniaSourceTemplateTests compiles the hosts' Avalonia source
+         templates against the Avalonia assemblies in this project's bin folder. -->
+    <ProjectReference Include="..\Neo.PluginWindowAvalonia\Neo.PluginWindowAvalonia.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 </Project>

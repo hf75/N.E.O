@@ -102,7 +102,7 @@ namespace Neo.PluginWindowAvalonia
                 MainWin.Width = 800;
                 MainWin.Height = 600;
                 MainWin.ShowInTaskbar = true;
-                MainWin.SystemDecorations = SystemDecorations.Full;
+                MainWin.WindowDecorations = WindowDecorations.Full;
                 MainWin.CanResize = true;
                 MainWin.WindowStartupLocation = WindowStartupLocation.CenterScreen;
                 try
@@ -117,7 +117,7 @@ namespace Neo.PluginWindowAvalonia
             {
                 // Embedded mode: no decorations (WPF host controls position/size via HWND)
                 MainWin.ShowInTaskbar = false;
-                MainWin.SystemDecorations = SystemDecorations.None;
+                MainWin.WindowDecorations = WindowDecorations.None;
                 MainWin.CanResize = false;
             }
 
@@ -483,11 +483,11 @@ namespace Neo.PluginWindowAvalonia
                             if (MainWin.WindowState == WindowState.FullScreen)
                             {
                                 MainWin.WindowState = WindowState.Normal;
-                                MainWin.SystemDecorations = SystemDecorations.Full;
+                                MainWin.WindowDecorations = WindowDecorations.Full;
                             }
                             else
                             {
-                                MainWin.SystemDecorations = SystemDecorations.None;
+                                MainWin.WindowDecorations = WindowDecorations.None;
                                 MainWin.WindowState = WindowState.FullScreen;
                             }
                         });
@@ -531,7 +531,7 @@ namespace Neo.PluginWindowAvalonia
                                 bitmap.Render(target);
 
                                 using var ms = new MemoryStream();
-                                bitmap.Save(ms);
+                                bitmap.Save(ms, Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
                                 return Convert.ToBase64String(ms.ToArray());
                             });
 

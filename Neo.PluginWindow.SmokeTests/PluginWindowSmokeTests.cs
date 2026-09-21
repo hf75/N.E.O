@@ -101,6 +101,45 @@ public class PluginWindowSmokeTests
         }
     }
 
+    [Fact]
+    public async Task Avalonia_child_hosts_the_native_web_view_inside_a_plugin()
+    {
+        // Avalonia.Controls.WebView ships with the child runtime so that generated apps can embed a
+        // browser. The plugin lives in a collectible load context and is loaded from bytes — this
+        // proves the control still starts its platform browser there and talks back to C#.
+        // Needs the platform web view (WebView2 on Windows 10/11).
+        var marker = Path.Combine(Path.GetTempPath(), "neo_smoke_webview_" + Guid.NewGuid().ToString("N")[..8] + ".txt");
+        var profileNextToExe = TestEnvironment.HeadExe("Neo.PluginWindowAvalonia") + ".WebView2";
+        if (Directory.Exists(profileNextToExe))
+            Directory.Delete(profileNextToExe, recursive: true);
+        try
+        {
+            await using var child = await ChildSession.StartAsync(
+                TestEnvironment.HeadExe("Neo.PluginWindowAvalonia"), "--standalone",
+                new Dictionary<string, string> { [TestEnvironment.WebViewMarkerVariable] = marker });
+
+            await child.LoadAsync(TestEnvironment.AvaloniaWebViewPlugin);
+            (await child.WaitForLoadsAsync(1)).Should().BeTrue(Describe(child, "load"));
+
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (!File.Exists(marker) && DateTime.UtcNow < deadline && child.ChildIsAlive)
+                await Task.Delay(200);
+
+            child.Errors.Should().BeEmpty();
+            File.Exists(marker).Should().BeTrue("the page calls invokeCSharpAction(...) and the plugin writes the message to disk");
+            File.ReadAllText(marker).Should().Be("hello from the page");
+
+            // WebView2's default profile folder is "<exe>.WebView2". The child redirects it to a
+            // per-user folder: the bin folder is not writable once installed, and Neo.App's build
+            // copies the child's bin folder wholesale.
+            Directory.Exists(profileNextToExe).Should().BeFalse("the child must keep the browser profile out of its bin folder");
+        }
+        finally
+        {
+            try { File.Delete(marker); } catch { /* best effort */ }
+        }
+    }
+
     private static string Describe(ChildSession child, string step)
         => $"{step} should be reported as executed. Child errors: [{string.Join(" | ", child.Errors)}] " +
            $"logs: [{string.Join(" | ", child.Logs)}]";

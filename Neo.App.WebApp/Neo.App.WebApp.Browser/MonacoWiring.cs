@@ -88,7 +88,9 @@ internal static class MonacoWiring
 
     private static (double x, double y, double w, double h) MeasureHost(Control host)
     {
-        if (host.GetVisualRoot() is not Visual root) return (0, 0, 0, 0);
+        // Avalonia 12: the root of the visual tree is no longer necessarily the TopLevel;
+        // the presentation source knows the visual the canvas coordinates are relative to.
+        if (host.GetPresentationSource()?.RootVisual is not Visual root) return (0, 0, 0, 0);
         var topLeft = host.TranslatePoint(new Avalonia.Point(0, 0), root) ?? new Avalonia.Point(0, 0);
         return (topLeft.X, topLeft.Y, host.Bounds.Width, host.Bounds.Height);
     }

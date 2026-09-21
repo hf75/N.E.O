@@ -64,7 +64,19 @@ builder.Services
         // The registry's collection augments the static tool set discovered by WithToolsFromAssembly.
         options.Capabilities.Tools ??= new ToolsCapability();
         options.Capabilities.Tools.ListChanged = true;
+
+        // The server needs ONE collection: the registry's, because that is the instance whose
+        // Changed event drives tools/list_changed. The SDK's own options setup runs before this
+        // callback and has already put the static tools (WithToolsFromAssembly) into a collection
+        // of its own — replacing that one drops every static tool and tools/list comes back
+        // empty. So carry them over; if the order ever flips, the SDK adds them to ours instead.
+        var staticTools = options.ToolCollection;
         options.ToolCollection = liveMcpToolRegistry.ToolCollection;
+        if (staticTools != null && !ReferenceEquals(staticTools, liveMcpToolRegistry.ToolCollection))
+        {
+            foreach (var tool in staticTools)
+                liveMcpToolRegistry.ToolCollection.TryAdd(tool);
+        }
 
         // ── Live-MCP Phase 2B: dynamic resources + resource subscriptions ──
         // Subscribe=true: clients can resources/subscribe and we will push

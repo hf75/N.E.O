@@ -19,9 +19,21 @@
       tested LTS runtime, not whatever happens to be newest.
     -->
     <RollForward>Major</RollForward>
+
+    <!--
+      The one switch for the Avalonia version: every Avalonia PackageReference in the repo uses
+      it, and the prompts/tools that tell an AI which version to write code for read it back from
+      the NeoAvaloniaVersion assembly metadata (Neo.Shared/NeoBuildInfo.cs). Generated code is
+      compiled against, and runs on, the Avalonia assemblies the hosts ship, so there must never
+      be a second place that spells this number.
+      Avalonia.Controls.WebView (the official NativeWebView) is released on its own cadence.
+    -->
+    <NeoAvaloniaVersion>12.1.2</NeoAvaloniaVersion>
+    <NeoAvaloniaWebViewVersion>12.1.0</NeoAvaloniaWebViewVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <AssemblyMetadata Include="NeoTargetFramework" Value="$(NeoTargetFramework)" />
+    <AssemblyMetadata Include="NeoAvaloniaVersion" Value="$(NeoAvaloniaVersion)" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
+using Neo.AssemblyForge;
 using Neo.McpServer.Services;
 
 namespace Neo.McpServer.Tools;
@@ -29,11 +30,10 @@ public static class AvaloniaPrompt
             "1. **Class name**: The UserControl class MUST be named `DynamicUserControl`.\n" +
             "2. **Namespace**: Use any namespace you like, but the class must be discoverable as a `UserControl`.\n" +
             "3. **No XAML**: Write everything in C# code-behind. Do not use XAML files.\n" +
-            "4. **Avalonia version**: Always use version 11.3.12. Include these NuGet packages:\n" +
-            "   - Avalonia|11.3.12\n" +
-            "   - Avalonia.Desktop|11.3.12\n" +
-            "   - Avalonia.Themes.Fluent|11.3.12\n" +
-            "   - Avalonia.Fonts.Inter|11.3.12\n" +
+            $"4. **Avalonia version**: The preview runs on Avalonia {AvaloniaGuidance.Version} - your code is compiled against\n" +
+            "   exactly this version. Avalonia, Avalonia.Desktop, Avalonia.Themes.Fluent, Avalonia.Fonts.Inter and\n" +
+            "   Avalonia.Controls.WebView are provided by the host; list only additional packages, and only versions\n" +
+            $"   built for Avalonia {AvaloniaGuidance.MajorVersion}.\n" +
             "5. **Thread safety**: Always access or modify UI elements on Avalonia's UI thread.\n" +
             "   Use `Avalonia.Threading.Dispatcher.UIThread.CheckAccess()` and, if false, marshal with\n" +
             "   `Avalonia.Threading.Dispatcher.UIThread.Post(...)` or `await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(...)`.\n" +
@@ -44,6 +44,11 @@ public static class AvaloniaPrompt
             "8. **No XAML designer IDs**: Do not use `__neo_` prefixed names (those are for the visual designer).\n" +
             "9. **Exception handling**: Rethrow all caught exceptions — the host app handles error recovery.\n" +
             "10. **File access**: If using file dialogs, initialize the path from the `SHARED_FOLDER` environment variable.\n\n" +
+            $"## Avalonia {AvaloniaGuidance.MajorVersion} API\n\n" +
+            "Most examples you know were written for Avalonia 11. These APIs changed - always use the new form:\n\n" +
+            AvaloniaGuidance.AsMarkdownList(AvaloniaGuidance.ApiChanges) + "\n" +
+            "## Web content\n\n" +
+            AvaloniaGuidance.AsMarkdownList(AvaloniaGuidance.WebViewFacts) + "\n" +
             "## Code Structure Template\n\n" +
             "```csharp\n" +
             "using Avalonia;\n" +

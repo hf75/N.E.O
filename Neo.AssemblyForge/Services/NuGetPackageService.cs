@@ -56,8 +56,13 @@ public sealed class NuGetPackageService : INuGetPackageService
             return new NuGetResult(existingList, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
         }
 
+        // The host's own assemblies (its Avalonia) win over whatever version was asked for.
+        var existingPaths = existingDlls.ToList();
+        var hostIndex = HostProvidedAssemblies.IndexOutside(existingPaths, _nuGetPackageDirectory);
+        existingDlls = existingPaths;
+
         var loader = new NuGetPackageLoaderAgent();
-        loader.SetInput("PackageNames", packages);
+        loader.SetInput("PackageNames", HostProvidedAssemblies.WithHostVersions(packages, hostIndex));
         loader.SetInput("OutputDirectory", _nuGetPackageDirectory);
         loader.SetInput("TargetFramework", _targetFramework);
 
@@ -66,6 +71,8 @@ public sealed class NuGetPackageService : INuGetPackageService
         var newDllPaths = loader.GetOutput<List<string>>("DllPaths") ?? new List<string>();
         var newPackageVersions = loader.GetOutput<Dictionary<string, string>>("PackageVersions")
             ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        HostProvidedAssemblies.RemoveShadowing(newDllPaths, hostIndex);
 
         var combined = existingDlls
             .Concat(newDllPaths)

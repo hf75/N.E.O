@@ -33,6 +33,14 @@
 - Switch to a different AI provider (Ctrl+1)
 - Open the Code Editor (Ctrl+Shift+C) and fix the issue manually
 
+**Avalonia apps written for an older N.E.O.:** N.E.O. ships Avalonia 12. Code that was generated for Avalonia 11 can use APIs that no longer exist (`CheckBox.Checked`, `OpenFileDialog`, `TextBox.Watermark`, `SystemDecorations`, …). The old package versions stored in a project are moved to the shipped version automatically; for the code, just ask the AI to fix the compiler errors — its prompt lists the changed APIs.
+
+## Web view in a generated app stays empty
+
+**Cause:** The built-in `NativeWebView` renders with the platform browser. On Windows that is the WebView2 runtime — part of Windows 11, optional on Windows 10. On Linux it needs WebKitGTK (`libwebkit2gtk-4.1`) or WPE WebKit.
+
+**Fix:** Install the [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (Windows 10) or the WebKitGTK packages of your distribution. The browser profile of preview windows lives in `%LOCALAPPDATA%\Neo\WebView2`; delete that folder to reset cookies and cache.
+
 ## Preview Panel is Empty
 
 **Cause:** The child process may have crashed or failed to start.

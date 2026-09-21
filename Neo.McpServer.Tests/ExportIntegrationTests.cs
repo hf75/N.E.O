@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Text;
-using System.Text.Json;
 using FluentAssertions;
 using Neo.McpServer.Services;
 using Xunit;
@@ -138,88 +136,14 @@ public class ExportIntegrationTests : IDisposable
         if (!OperatingSystem.IsWindows()) return;
 
         var exe = await ExportAsync("smoke-frozen-run", mcpMode: true);
-        using var process = Process.Start(new ProcessStartInfo
-        {
-            FileName = exe,
-            Arguments = "--mcp",
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardInputEncoding = new UTF8Encoding(false),
-            StandardOutputEncoding = Encoding.UTF8,
-        })!;
-        var stderr = new StringBuilder();
-        process.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (stderr) stderr.AppendLine(e.Data); };
-        process.BeginErrorReadLine();
+        using var app = StdioJsonRpcProcess.Start(exe, "--mcp");
 
-        try
-        {
-            await SendAsync(process, new
-            {
-                jsonrpc = "2.0", id = 1, method = "initialize",
-                @params = new
-                {
-                    protocolVersion = "2024-11-05",
-                    capabilities = new { },
-                    clientInfo = new { name = "neo-export-tests", version = "1.0" },
-                },
-            });
-            (await ReadResponseAsync(process, id: 1, stderr)).TryGetProperty("result", out _).Should().BeTrue();
+        await app.InitializeAsync("neo-export-tests");
 
-            await SendAsync(process, new { jsonrpc = "2.0", method = "notifications/initialized" });
+        (await app.ListToolNamesAsync()).Should().Contain(new[] { "add_item", "raise_event", "simulate_input" });
 
-            await SendAsync(process, new { jsonrpc = "2.0", id = 2, method = "tools/list" });
-            var tools = (await ReadResponseAsync(process, id: 2, stderr)).GetProperty("result").GetProperty("tools")
-                .EnumerateArray().Select(t => t.GetProperty("name").GetString()).ToList();
-            tools.Should().Contain(new[] { "add_item", "raise_event", "simulate_input" });
-
-            await SendAsync(process, new
-            {
-                jsonrpc = "2.0", id = 3, method = "tools/call",
-                @params = new { name = "add_item", arguments = new { title = "from the export test" } },
-            });
-            var call = (await ReadResponseAsync(process, id: 3, stderr)).GetProperty("result");
-            call.GetProperty("content")[0].GetProperty("text").GetString().Should().Be("1", "AddItem returns the new count");
-        }
-        finally
-        {
-            try { process.Kill(entireProcessTree: true); } catch { }
-        }
-    }
-
-    private static async Task SendAsync(Process process, object message)
-    {
-        await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(message));
-        await process.StandardInput.FlushAsync();
-    }
-
-    /// <summary>Reads newline-delimited JSON-RPC messages until the response with the given id arrives.</summary>
-    private static async Task<JsonElement> ReadResponseAsync(Process process, int id, StringBuilder stderr)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
-        while (true)
-        {
-            string? line;
-            try { line = await process.StandardOutput.ReadLineAsync(timeout.Token); }
-            catch (OperationCanceledException)
-            {
-                string err; lock (stderr) err = stderr.ToString();
-                throw new TimeoutException($"No JSON-RPC response with id {id}. Child stderr:\n{err}");
-            }
-
-            if (line == null)
-            {
-                string err; lock (stderr) err = stderr.ToString();
-                throw new InvalidOperationException($"Exported app closed stdout before answering id {id}. Child stderr:\n{err}");
-            }
-            if (string.IsNullOrWhiteSpace(line)) continue;
-
-            using var doc = JsonDocument.Parse(line);
-            if (doc.RootElement.TryGetProperty("id", out var idProp) &&
-                idProp.ValueKind == JsonValueKind.Number && idProp.GetInt32() == id)
-                return doc.RootElement.Clone();
-        }
+        var call = await app.CallToolAsync("add_item", new { title = "from the export test" });
+        call.Should().Be("1", "AddItem returns the new count");
     }
 }
 

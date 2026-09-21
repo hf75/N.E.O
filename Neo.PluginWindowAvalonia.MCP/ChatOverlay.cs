@@ -46,7 +46,7 @@ internal sealed class ChatOverlay : Border
 
         _input = new TextBox
         {
-            Watermark = "Describe a change... (Enter to send, Esc to close)",
+            PlaceholderText = "Describe a change... (Enter to send, Esc to close)",
             AcceptsReturn = false,
             FontSize = 14,
         };

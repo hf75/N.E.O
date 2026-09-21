@@ -89,8 +89,10 @@ public static class AssemblyForgeSystemMessages
         "Design the app with a refined, minimalist aesthetic, emphasizing elegance, clarity, and a calm sense of precision. " +
         "Always access or modify UI elements on Avalonia’s UI thread. Use Dispatcher.UIThread.CheckAccess() and, if false, marshal with Dispatcher.UIThread.Post(...) or await Dispatcher.UIThread.InvokeAsync(...). Use Avalonia.Threading.DispatcherTimer for any timer that touches the UI. Never block the UI thread. " +
         "Please include all avalonia nuget packs required for a full desktop app; not just the plugin. " +
-        "For compatibility you must always use version 11.3.12. " +
-        "Always fully qualify Avalonia dispatcher types (for example Avalonia.Threading.Dispatcher.UIThread and Avalonia.Threading.DispatcherTimer) and never use an unqualified 'Dispatcher' identifier to avoid naming conflicts with other libraries.";
+        AvaloniaGuidance.VersionRule +
+        "Always fully qualify Avalonia dispatcher types (for example Avalonia.Threading.Dispatcher.UIThread and Avalonia.Threading.DispatcherTimer) and never use an unqualified 'Dispatcher' identifier to avoid naming conflicts with other libraries. " +
+        AvaloniaGuidance.ApiNotes +
+        AvaloniaGuidance.WebViewNotes;
 
     private static readonly string ReactHead =
         
@@ -110,6 +112,8 @@ public static class AssemblyForgeSystemMessages
         "Design the UI with a refined, minimalist aesthetic, emphasizing elegance, clarity, and a calm sense of precision. " +
         "Always access or modify UI elements on Avalonia's UI thread. Use Dispatcher.UIThread.CheckAccess() and, if false, marshal with Dispatcher.UIThread.Post(...) or await Dispatcher.UIThread.InvokeAsync(...). Use Avalonia.Threading.DispatcherTimer for any timer that touches the UI. Never block the UI thread. " +
         "Always fully qualify Avalonia dispatcher types (for example Avalonia.Threading.Dispatcher.UIThread and Avalonia.Threading.DispatcherTimer) and never use an unqualified 'Dispatcher' identifier to avoid naming conflicts with other libraries. " +
+        "Always use version " + AvaloniaGuidance.Version + " for every Avalonia package. " +
+        AvaloniaGuidance.ApiNotes +
         "The program must start from a static Main method and show a Window. ";
 
     private static readonly string ReactExeHead =

@@ -36,8 +36,13 @@ namespace Neo.App
 
             if (packages != null && packages.Count > 0)
             {
+                // The host's own assemblies (its Avalonia) win over whatever version was asked for.
+                var existingPaths = existingDlls.ToList();
+                var hostIndex = HostProvidedAssemblies.IndexOutside(existingPaths, _nuGetPackageDirectory);
+                existingDlls = existingPaths;
+
                 var agentLoader = new NuGetPackageLoaderAgent();
-                agentLoader.SetInput("PackageNames", packages);
+                agentLoader.SetInput("PackageNames", HostProvidedAssemblies.WithHostVersions(packages, hostIndex));
                 agentLoader.SetInput("OutputDirectory", _nuGetPackageDirectory);
                 agentLoader.SetInput("TargetFramework", OperatingSystem.IsWindows()
                     ? $"net{Environment.Version.Major}.0-windows"
@@ -47,6 +52,8 @@ namespace Neo.App
 
                 var newDllPaths = agentLoader.GetOutput<List<string>>("DllPaths") ?? new List<string>();
                 var newPackageVersions = agentLoader.GetOutput<Dictionary<string, string>>("PackageVersions") ?? new Dictionary<string, string>();
+
+                HostProvidedAssemblies.RemoveShadowing(newDllPaths, hostIndex);
 
                 var combinedDlls = existingDlls.Concat(newDllPaths).Distinct().ToList();
                 RemoveExistingDefaultDlls(combinedDlls);

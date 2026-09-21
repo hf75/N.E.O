@@ -37,6 +37,7 @@ namespace Neo.PluginWindowAvalonia
         public static int Run(string[] args, PluginHostOptions? options = null)
         {
             Options = options ?? new PluginHostOptions();
+            WebViewDefaults.Install();
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
 

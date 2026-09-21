@@ -82,8 +82,13 @@
   <Target Name="CopyChildOutputs" AfterTargets="Build">
     <!-- Pfad anpassen falls nötig -->
     <ItemGroup>
-      <ChildOutputs Include="..\Neo.PluginWindowWPF\bin\$(Configuration)\$(NeoTargetFrameworkWindows)\**\*.*" />
-      <ChildOutputs Include="..\Neo.PluginWindowAvalonia\bin\$(Configuration)\$(NeoTargetFramework)\**\*.*" />
+      <!-- A WebView2 browser profile ("<exe>.WebView2") is runtime data, never build output: it is
+           large and locked while a child runs. The Avalonia child redirects it to a per-user
+           folder; the exclude keeps a stray one out of the copy anyway. -->
+      <ChildOutputs Include="..\Neo.PluginWindowWPF\bin\$(Configuration)\$(NeoTargetFrameworkWindows)\**\*.*"
+                    Exclude="..\Neo.PluginWindowWPF\bin\$(Configuration)\$(NeoTargetFrameworkWindows)\*.WebView2\**" />
+      <ChildOutputs Include="..\Neo.PluginWindowAvalonia\bin\$(Configuration)\$(NeoTargetFramework)\**\*.*"
+                    Exclude="..\Neo.PluginWindowAvalonia\bin\$(Configuration)\$(NeoTargetFramework)\*.WebView2\**" />
     </ItemGroup>
 
     <Copy SourceFiles="@(ChildOutputs)" DestinationFolder="$(TargetDir)%(RecursiveDir)" SkipUnchangedFiles="true" />

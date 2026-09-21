@@ -935,7 +935,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
         foreach (var projectName in projectNames)
         {
-            foreach (var config in new[] { "Debug", "Release" })
+            foreach (var config in Neo.Shared.NeoBuildInfo.DevBuildConfigurations)
             {
                 var devDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
                     projectName, "bin", config, tfm));

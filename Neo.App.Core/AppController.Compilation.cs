@@ -22,12 +22,64 @@ namespace Neo.App
     {
         public async Task PreloadMandatoryNugetPacks()
         {
+            if (Settings.UseAvalonia)
+                RegisterHostAvaloniaAssemblies();
+
             var packs = ConvertPackageListToDictionary(DefaultNugets);
             await LoadAndApplyNugetPackages(packs);
 
             // Preload ist Teil der "Baseline" und soll die aktuelle Root-Snapshot konsistent halten.
             if (!_undoRedo.CanUndo && !_undoRedo.CanRedo)
                 _undoRedo.ResetToCurrentState(title: "Session start", description: "Preloaded mandatory NuGet packages");
+        }
+
+        /// <summary>
+        /// Registers the Avalonia assemblies that ship next to the host as references for generated
+        /// code. They are exactly what the Avalonia child process runs on (both hosts have the
+        /// child's closure in their bin folder, including the official web view), so compiling
+        /// against them is instant, works offline and can never disagree with the runtime. The
+        /// NuGet services treat DLLs from outside the package folder as host-provided: a project
+        /// that still asks for an older Avalonia is moved to this version.
+        /// Part of the session baseline, so it runs again after every "clear".
+        /// </summary>
+        public void RegisterHostAvaloniaAssemblies()
+        {
+            var baseDir = AppContext.BaseDirectory;
+            var files = new List<string>();
+
+            foreach (var pattern in new[] { "Avalonia*.dll", "HarfBuzzSharp*.dll",
+                "SkiaSharp*.dll", "MicroCom.Runtime.dll", "Tmds.DBus.Protocol.dll" })
+            {
+                try { files.AddRange(Directory.GetFiles(baseDir, pattern)); }
+                catch { /* unreadable folder: fall back to NuGet */ }
+            }
+
+            // Native libraries for the current platform (libSkiaSharp, libHarfBuzzSharp, …):
+            // runtimes/<rid>/native, or the portable RID when the exact one has no folder
+            // (linux-x64 for kali-x64).
+            var arch = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
+            var portableRid = OperatingSystem.IsLinux() ? $"linux-{arch}"
+                            : OperatingSystem.IsMacOS() ? $"osx-{arch}"
+                            : $"win-{arch}";
+            foreach (var rid in new[] { System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier, portableRid })
+            {
+                var nativePath = Path.Combine(baseDir, "runtimes", rid, "native");
+                if (!Directory.Exists(nativePath)) continue;
+                files.AddRange(Directory.GetFiles(nativePath));
+                break;
+            }
+
+            if (files.Count == 0) return;
+
+            AppState.NuGetDlls ??= new List<string>();
+            var known = new HashSet<string>(AppState.NuGetDlls, StringComparer.OrdinalIgnoreCase);
+            foreach (var file in files)
+            {
+                if (known.Add(file))
+                    AppState.NuGetDlls.Add(file);
+            }
+
+            Debug.WriteLine($"[AppController] Registered {files.Count} Avalonia files (managed + native) from the host folder");
         }
 
         public Dictionary<string, string> ConvertPackageListToDictionary(List<string> packageList)

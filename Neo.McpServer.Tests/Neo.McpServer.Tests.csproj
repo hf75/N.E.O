@@ -23,5 +23,9 @@
     <!-- Build-order only: the export pipeline takes its Avalonia reference assemblies from this
          project's bin folder (CompilationPipeline.DiscoverAvaloniaFromPluginWindow). -->
     <ProjectReference Include="..\Neo.PluginWindowAvalonia\Neo.PluginWindowAvalonia.csproj" ReferenceOutputAssembly="false" Private="false" />
+
+    <!-- Build-order only: McpServerProcessTests starts the real server, which starts this head
+         as its preview window (PreviewSessionManager.FindChildExecutable). -->
+    <ProjectReference Include="..\Neo.PluginWindowAvalonia.MCP\Neo.PluginWindowAvalonia.MCP.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 </Project>

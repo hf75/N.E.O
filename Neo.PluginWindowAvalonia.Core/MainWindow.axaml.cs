@@ -61,7 +61,7 @@ namespace Neo.PluginWindowAvalonia
                 if (isEscape || isCtrlShiftF)
                 {
                     WindowState = WindowState.Normal;
-                    SystemDecorations = SystemDecorations.Full;
+                    WindowDecorations = WindowDecorations.Full;
                     e.Handled = true;
                 }
             }

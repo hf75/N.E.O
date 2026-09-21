@@ -283,7 +283,9 @@ A prompt template that teaches Claude the coding conventions for N.E.O. Avalonia
 
 - Class must be named `DynamicUserControl`
 - No XAML — everything in C# code-behind
-- Avalonia 11.3.12 with Fluent theme
+- The Avalonia version the preview really ships (Avalonia 12, Fluent theme) — host-provided, so only additional packages are listed
+- The API changes between Avalonia 11 and 12 that models keep getting wrong (`IsCheckedChanged`, `PlaceholderText`, `StorageProvider`, …)
+- The built-in web browser control `NativeWebView` (no NuGet package needed)
 - Thread-safe UI access via `Avalonia.Threading.Dispatcher.UIThread`
 - Fully qualified dispatcher types to avoid naming conflicts
 

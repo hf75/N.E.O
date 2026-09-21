@@ -37,7 +37,7 @@ namespace Neo.App
         // Fullscreen state
         private bool _isFullScreen = false;
         private WindowState _preFullScreenState = WindowState.Normal;
-        private SystemDecorations _preFullScreenDecorations = SystemDecorations.Full;
+        private WindowDecorations _preFullScreenDecorations = WindowDecorations.Full;
 
         private AppController _appController = null!;
         // Wait indicator is now shown in the Live Preview child window, not here
@@ -139,11 +139,8 @@ namespace Neo.App
             {
                 FileHelper.ClearDirectory(_appController.NuGetPackageDirectory);
 
-                // Register Avalonia DLLs from the host's bin directory instead of
-                // downloading them from NuGet. This is instant, works offline, and
-                // guarantees version consistency with the host.
-                RegisterHostAvaloniaDlls();
-
+                // Also registers the Avalonia DLLs from this bin folder as references for
+                // generated code (AppController.RegisterHostAvaloniaAssemblies).
                 await _appController.PreloadMandatoryNugetPacks();
 
                 titleBase = Title;
@@ -170,69 +167,6 @@ namespace Neo.App
             catch (Exception ex)
             {
                 Debug.WriteLine($"[MainWindow_Loaded] Fatal error: {ex}");
-            }
-        }
-
-        private void RegisterHostAvaloniaDlls()
-        {
-            // Use Avalonia DLLs from the host's own bin directory instead of
-            // downloading them from NuGet. Faster, offline-capable, version-consistent.
-            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var avaloniaDlls = new List<string>();
-
-            foreach (var pattern in new[] { "Avalonia*.dll", "HarfBuzzSharp*.dll",
-                "SkiaSharp*.dll", "MicroCom.Runtime.dll", "Tmds.DBus.Protocol.dll" })
-            {
-                try
-                {
-                    foreach (var dll in Directory.GetFiles(baseDir, pattern))
-                    {
-                        avaloniaDlls.Add(dll);
-                    }
-                }
-                catch { }
-            }
-
-            // Also include native libraries for the current platform (libSkiaSharp.so, etc.)
-            // These are in runtimes/<rid>/native/ subdirectories
-            var rid = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
-            var nativePath = Path.Combine(baseDir, "runtimes", rid, "native");
-            if (Directory.Exists(nativePath))
-            {
-                foreach (var file in Directory.GetFiles(nativePath))
-                    avaloniaDlls.Add(file);
-            }
-            else
-            {
-                // Try broader RID (e.g. linux-x64 if kali-x64 doesn't exist)
-                var arch = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLower();
-                string broadRid;
-                if (OperatingSystem.IsLinux()) broadRid = $"linux-{arch}";
-                else if (OperatingSystem.IsMacOS()) broadRid = $"osx-{arch}";
-                else broadRid = $"win-{arch}";
-
-                nativePath = Path.Combine(baseDir, "runtimes", broadRid, "native");
-                if (Directory.Exists(nativePath))
-                {
-                    foreach (var file in Directory.GetFiles(nativePath))
-                        avaloniaDlls.Add(file);
-                }
-            }
-
-            if (avaloniaDlls.Count > 0)
-            {
-                var existing = new HashSet<string>(
-                    _appController.AppState.NuGetDlls ?? new List<string>(),
-                    StringComparer.OrdinalIgnoreCase);
-
-                _appController.AppState.NuGetDlls ??= new List<string>();
-                foreach (var dll in avaloniaDlls)
-                {
-                    if (existing.Add(dll))
-                        _appController.AppState.NuGetDlls.Add(dll);
-                }
-
-                Debug.WriteLine($"[Startup] Registered {avaloniaDlls.Count} Avalonia files (managed + native) from host");
             }
         }
 
@@ -486,7 +420,7 @@ namespace Neo.App
             if (_isFullScreen)
             {
                 // Restore previous state
-                SystemDecorations = _preFullScreenDecorations;
+                WindowDecorations = _preFullScreenDecorations;
                 WindowState = _preFullScreenState;
                 _isFullScreen = false;
                 SetViewMode(ViewMode.Default);
@@ -495,8 +429,8 @@ namespace Neo.App
             {
                 // Save current state and go fullscreen
                 _preFullScreenState = WindowState;
-                _preFullScreenDecorations = SystemDecorations;
-                SystemDecorations = SystemDecorations.None;
+                _preFullScreenDecorations = WindowDecorations;
+                WindowDecorations = WindowDecorations.None;
                 WindowState = WindowState.FullScreen;
                 _isFullScreen = true;
                 SetViewMode(ViewMode.ContentOnly);

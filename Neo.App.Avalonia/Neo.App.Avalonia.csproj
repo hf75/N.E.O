@@ -11,15 +11,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.12">
-      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
-      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
-    </PackageReference>
+    <PackageReference Include="Avalonia" Version="$(NeoAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="$(NeoAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Desktop" Version="$(NeoAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="$(NeoAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="$(NeoAvaloniaVersion)" />
+    <!-- Not used by the host itself: the child process (Neo.PluginWindowAvalonia) runs from this
+         bin folder and lists the WebView assembly in its deps.json, and RegisterHostAvaloniaDlls
+         hands every Avalonia*.dll found here to the compiler as a reference for generated code. -->
+    <PackageReference Include="Avalonia.Controls.WebView" Version="$(NeoAvaloniaWebViewVersion)" />
   </ItemGroup>
 
   <ItemGroup>

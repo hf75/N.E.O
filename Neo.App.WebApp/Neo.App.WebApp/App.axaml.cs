@@ -1,9 +1,7 @@
 using System;
-using System.Linq;
 using System.Net.Http;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using Neo.App.WebApp.Services;
 using Neo.App.WebApp.Services.Ai;
@@ -28,8 +26,6 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        DisableAvaloniaDataAnnotationValidation();
-
         var view = BuildMainView();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -57,12 +53,5 @@ public partial class App : Application
         view.Bind(orchestrator, SessionStore);
         MainViewConfigured?.Invoke(view);
         return view;
-    }
-
-    private void DisableAvaloniaDataAnnotationValidation()
-    {
-        var toRemove = BindingPlugins.DataValidators
-            .OfType<DataAnnotationsValidationPlugin>().ToArray();
-        foreach (var p in toRemove) BindingPlugins.DataValidators.Remove(p);
     }
 }

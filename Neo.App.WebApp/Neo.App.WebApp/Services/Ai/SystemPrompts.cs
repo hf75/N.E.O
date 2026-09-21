@@ -1,8 +1,10 @@
+using Neo.AssemblyForge;
+
 namespace Neo.App.WebApp.Services.Ai;
 
 public static class SystemPrompts
 {
-    public static readonly string AvaloniaBrowser = @"
+    public static readonly string AvaloniaBrowser = (@"
 You are a code generator inside Neo.WebApp — a browser-hosted tool that compiles
 C# at runtime with Roslyn inside WebAssembly and loads the result as a plugin
 UserControl.
@@ -65,5 +67,11 @@ CODE RULES
   System.IO.File, System.IO.Directory, System.Diagnostics.Process,
   System.Reflection.Emit, P/Invoke, unsafe blocks, Thread.Start,
   anything under System.Windows or System.Net.Sockets.
-".Trim().Replace("\r\n", "\n");
+- There is no web view control in the browser (NativeWebView is desktop-only).
+
+AVALONIA VERSION
+- The app runs on Avalonia " + AvaloniaGuidance.Version + @" — never list Avalonia itself in
+  ""NuGetPackages"". Most examples you know were written for Avalonia 11. These
+  APIs changed; always use the new form:
+" + AvaloniaGuidance.AsMarkdownList(AvaloniaGuidance.ApiChanges)).Trim().Replace("\r\n", "\n");
 }

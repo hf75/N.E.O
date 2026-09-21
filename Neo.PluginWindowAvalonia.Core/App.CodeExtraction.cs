@@ -146,7 +146,7 @@ namespace Neo.PluginWindowAvalonia
 
                 case Avalonia.Controls.TextBox txb:
                     if (txb.Text != null) sb.AppendLine($"{pad}Text = \"{EscapeString(txb.Text)}\",");
-                    if (txb.Watermark != null) sb.AppendLine($"{pad}Watermark = \"{EscapeString(txb.Watermark)}\",");
+                    if (txb.PlaceholderText != null) sb.AppendLine($"{pad}PlaceholderText = \"{EscapeString(txb.PlaceholderText)}\",");
                     if (txb.IsReadOnly) sb.AppendLine($"{pad}IsReadOnly = true,");
                     break;
 

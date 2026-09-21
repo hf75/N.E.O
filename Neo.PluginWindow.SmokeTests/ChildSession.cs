@@ -38,7 +38,8 @@ internal sealed class ChildSession : IAsyncDisposable
     /// <summary>How many control frames of the given <see cref="IpcTypes"/> type the child sent.</summary>
     public int FrameCount(string ipcType) => _frameCounts.TryGetValue(ipcType, out var n) ? n : 0;
 
-    public static async Task<ChildSession> StartAsync(string exePath, string extraArgs)
+    public static async Task<ChildSession> StartAsync(string exePath, string extraArgs,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         if (!File.Exists(exePath))
             throw new FileNotFoundException($"Plugin window executable not built: {exePath}");
@@ -48,12 +49,17 @@ internal sealed class ChildSession : IAsyncDisposable
             PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
         var session = new ChildSession(pipe);
 
-        session._child = Process.Start(new ProcessStartInfo
+        var startInfo = new ProcessStartInfo
         {
             FileName = exePath,
             Arguments = $"--pipe {pipeName} --parentPid {Environment.ProcessId} {extraArgs}".Trim(),
             UseShellExecute = false,
-        }) ?? throw new InvalidOperationException("Child process did not start.");
+        };
+        foreach (var (key, value) in environment ?? new Dictionary<string, string>())
+            startInfo.Environment[key] = value;
+
+        session._child = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Child process did not start.");
 
         var connect = pipe.WaitForConnectionAsync(session._cts.Token);
         if (await Task.WhenAny(connect, Task.Delay(TimeSpan.FromSeconds(30))) != connect)

@@ -207,7 +207,7 @@ public sealed partial class PreviewTools
             ? $"\nRuntime Errors ({preview.GetRuntimeErrors(windowId).Count}):\n{string.Join("\n", preview.GetRuntimeErrors(windowId).TakeLast(10))}"
             : "\nRuntime Errors: none";
 
-        var frameworkInfo = fw == "wpf" ? $"WPF (.NET {Neo.Shared.NeoBuildInfo.RuntimeMajor} Windows Desktop)" : "Avalonia 11.3.12";
+        var frameworkInfo = fw == "wpf" ? $"WPF (.NET {Neo.Shared.NeoBuildInfo.RuntimeMajor} Windows Desktop)" : "Avalonia " + Neo.Shared.NeoBuildInfo.AvaloniaVersion;
 
         return $"Preview Status: {status}\n" +
                $"UI Framework: {frameworkInfo}\n" +
@@ -344,7 +344,7 @@ public sealed partial class PreviewTools
         foreach (var pkg in avaloniaPackages)
         {
             if (!packages.ContainsKey(pkg))
-                packages[pkg] = "11.3.12";
+                packages[pkg] = Neo.Shared.NeoBuildInfo.AvaloniaVersion;
         }
     }
 

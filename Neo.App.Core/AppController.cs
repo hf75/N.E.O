@@ -107,8 +107,8 @@ namespace Neo.App
                 var requiredNuget = GetAIQueryNuGetPackage(value.AIQueryProvider);
                 DefaultNugets.Clear();
                 DefaultNugets.Add(requiredNuget);
-                // Note: Avalonia DLLs are NOT loaded from NuGet — Neo.App.Avalonia
-                // registers them from its own bin directory (RegisterHostAvaloniaDlls).
+                // Note: the Avalonia DLLs are not a default NuGet package — they are registered
+                // from the host's bin folder (RegisterHostAvaloniaAssemblies).
                 if (value.UsePython)
                     DefaultNugets.Add("pythonnet|default");
 
@@ -152,8 +152,8 @@ namespace Neo.App
             AdditionalDlls.Add(ResolveAppDll(GetAIQueryAgentDll(Settings.AIQueryProvider)));
             DefaultNugets.Add(GetAIQueryNuGetPackage(Settings.AIQueryProvider));
 
-            // Note: Avalonia DLLs are NOT loaded from NuGet — Neo.App.Avalonia
-            // registers them from its own bin directory (RegisterHostAvaloniaDlls).
+            // Note: the Avalonia DLLs are not a default NuGet package — they are registered
+            // from the host's bin folder (RegisterHostAvaloniaAssemblies).
 
             if (Settings.UsePython)
                 DefaultNugets.Add("pythonnet|default");

@@ -90,7 +90,7 @@ namespace Neo.PluginWindowAvalonia
             else if (control is Avalonia.Controls.TextBox txb)
             {
                 if (txb.Text != null) props["Text"] = txb.Text;
-                if (txb.Watermark != null) props["Watermark"] = txb.Watermark;
+                if (txb.PlaceholderText != null) props["PlaceholderText"] = txb.PlaceholderText;
                 props["IsReadOnly"] = txb.IsReadOnly.ToString();
             }
             else if (control is Avalonia.Controls.ListBox lb)

@@ -57,18 +57,11 @@ public sealed class CompilationPipeline
 
             var compilationService = new CompilationService(_referenceAssemblyDirs!);
 
-            // Split packages: framework-specific ones are already available locally, only resolve others via NuGet
-            var nonFrameworkPackages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (nugetPackages != null)
-            {
-                foreach (var (name, version) in nugetPackages)
-                {
-                    // Skip Avalonia packages for Avalonia builds (they're local)
-                    if (framework == "avalonia" && name.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    nonFrameworkPackages[name] = version;
-                }
-            }
+            // Whatever the plugin window ships (Avalonia itself, the web view, …) is referenced from
+            // there and never downloaded: that copy is what the code runs on. Everything else —
+            // including Avalonia add-ons such as Avalonia.Controls.DataGrid — comes from NuGet.
+            var hostIndex = HostProvidedAssemblies.Index(frameworkDlls);
+            var nonFrameworkPackages = HostProvidedAssemblies.WithoutProvidedPackages(nugetPackages, hostIndex);
 
             System.Diagnostics.Debug.WriteLine($"[CompilationPipeline] NonFrameworkNuGet: {nonFrameworkPackages.Count}");
 
@@ -87,6 +80,8 @@ public sealed class CompilationPipeline
                     ct);
 
                 nugetDllPaths.AddRange(nugetResult.DllPaths);
+                // An add-on drags in the lowest Avalonia it allows; the host's copy has to win.
+                HostProvidedAssemblies.RemoveShadowing(nugetDllPaths, hostIndex);
                 System.Diagnostics.Debug.WriteLine($"[CompilationPipeline] NuGet resolved: {nugetDllPaths.Count} DLLs");
             }
 
@@ -186,16 +181,9 @@ public sealed class CompilationPipeline
             var allCode = sourceCode.ToList();
             allCode.Add(GetAvaloniaExportWrapper(appName, mcpMode));
 
-            // Resolve non-Avalonia NuGet packages
-            var nonAvaloniaPackages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (nugetPackages != null)
-            {
-                foreach (var (name, version) in nugetPackages)
-                {
-                    if (!name.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase))
-                        nonAvaloniaPackages[name] = version;
-                }
-            }
+            // Resolve the packages the plugin window does not already ship (same rule as CompileAsync)
+            var hostIndex = HostProvidedAssemblies.Index(_avaloniaAdditionalDlls);
+            var nonAvaloniaPackages = HostProvidedAssemblies.WithoutProvidedPackages(nugetPackages, hostIndex);
 
             var nugetDllPaths = new List<string>();
             if (nonAvaloniaPackages.Count > 0)
@@ -205,6 +193,7 @@ public sealed class CompilationPipeline
                 var nugetResult = await nugetService.LoadPackagesAsync(
                     nonAvaloniaPackages, Enumerable.Empty<string>(), ct);
                 nugetDllPaths.AddRange(nugetResult.DllPaths);
+                HostProvidedAssemblies.RemoveShadowing(nugetDllPaths, hostIndex);
             }
 
             // Compile to EXE
@@ -496,21 +485,12 @@ namespace {{ExportHostNamespace}}
             _ => "win-x64",
         };
 
-        var pluginPath = Environment.GetEnvironmentVariable("NEO_PLUGIN_PATH")
-            ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "Neo.PluginWindowAvalonia", "bin", "Debug", Neo.Shared.NeoBuildInfo.TargetFramework);
-
-        var nativeDir = Path.Combine(pluginPath, "runtimes", rid, "native");
-        if (!Directory.Exists(nativeDir))
-        {
-            // Dev-time fallback
-            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            foreach (var config in new[] { "Debug", "Release" })
-            {
-                var devDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
-                    "Neo.PluginWindowAvalonia", "bin", config, Neo.Shared.NeoBuildInfo.TargetFramework, "runtimes", rid, "native"));
-                if (Directory.Exists(devDir)) { nativeDir = devDir; break; }
-            }
-        }
+        // Same folder the managed Avalonia assemblies were discovered in (NEO_PLUGIN_PATH,
+        // side-by-side deployment or the sibling project's build output).
+        var pluginDir = _avaloniaAdditionalDlls is { Count: > 0 }
+            ? Path.GetDirectoryName(_avaloniaAdditionalDlls[0])
+            : null;
+        var nativeDir = Path.Combine(pluginDir ?? AppDomain.CurrentDomain.BaseDirectory, "runtimes", rid, "native");
 
         if (Directory.Exists(nativeDir))
         {
@@ -584,7 +564,7 @@ namespace {{ExportHostNamespace}}
         // to the repo root and use Neo.McpServer's bin output.
         var baseDir = AppDomain.CurrentDomain.BaseDirectory;
         var candidateDirs = new List<string> { baseDir };
-        foreach (var config in new[] { "Debug", "Release" })
+        foreach (var config in Neo.Shared.NeoBuildInfo.DevBuildConfigurations)
             candidateDirs.Add(Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
                 "Neo.McpServer", "bin", config, Neo.Shared.NeoBuildInfo.TargetFramework)));
 
@@ -706,7 +686,7 @@ namespace {{ExportHostNamespace}}
         }
 
         // 3. Dev-time: sibling project output
-        foreach (var config in new[] { "Debug", "Release" })
+        foreach (var config in Neo.Shared.NeoBuildInfo.DevBuildConfigurations)
         {
             var devDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
                 "Neo.PluginWindowAvalonia", "bin", config, Neo.Shared.NeoBuildInfo.TargetFramework));
@@ -748,7 +728,7 @@ namespace {{ExportHostNamespace}}
         // 3. Dev-time: sibling project output (WPF uses the -windows TFM)
         foreach (var projectName in new[] { "Neo.PluginWindowWPF.MCP", "Neo.PluginWindowWPF" })
         {
-            foreach (var config in new[] { "Debug", "Release" })
+            foreach (var config in Neo.Shared.NeoBuildInfo.DevBuildConfigurations)
             {
                 var devDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
                     projectName, "bin", config, Neo.Shared.NeoBuildInfo.TargetFrameworkWindows));

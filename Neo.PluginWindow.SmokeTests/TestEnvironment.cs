@@ -46,6 +46,43 @@ internal static class TestEnvironment
         """,
         Directory.GetFiles(HeadBinDir("Neo.PluginWindowAvalonia"), "Avalonia*.dll")));
 
+    /// <summary>Environment variable the web view plugin reads: where to write what the page sent back.</summary>
+    public const string WebViewMarkerVariable = "NEO_SMOKE_WEBVIEW_MARKER";
+
+    /// <summary>
+    /// A plugin around the official <c>NativeWebView</c>: it renders a page from a string, the page
+    /// calls back into C#, and the handler writes the message to the marker file. If that file
+    /// appears, the whole chain works inside the collectible plugin context of a real child.
+    /// </summary>
+    public static string AvaloniaWebViewPlugin => AvaloniaWebViewPluginDll.Value;
+
+    private static readonly Lazy<string> AvaloniaWebViewPluginDll = new(() => Compile(
+        "avalonia_webview",
+        """
+        using System;
+        using System.IO;
+        using Avalonia.Controls;
+
+        public class DynamicUserControl : UserControl
+        {
+            public DynamicUserControl()
+            {
+                var web = new NativeWebView();
+                web.WebMessageReceived += (_, e) =>
+                {
+                    var marker = Environment.GetEnvironmentVariable("NEO_SMOKE_WEBVIEW_MARKER");
+                    if (!string.IsNullOrEmpty(marker))
+                        File.WriteAllText(marker, e.Body ?? "");
+                };
+                web.NavigateToString(
+                    "<html><body><h1>N.E.O. web view smoke test</h1>" +
+                    "<script>invokeCSharpAction('hello from the page');</script></body></html>");
+                Content = web;
+            }
+        }
+        """,
+        Directory.GetFiles(HeadBinDir("Neo.PluginWindowAvalonia"), "Avalonia*.dll")));
+
     private static readonly Lazy<string> WpfPluginDll = new(() => Compile(
         "wpf",
         """
