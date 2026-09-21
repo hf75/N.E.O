@@ -62,15 +62,19 @@ public sealed class HotReloadSession : IDisposable
         HotReloadOptions? options = null, CancellationToken cancellationToken = default)
     {
         if (!File.Exists(baseline.AssemblyPath)) throw new FileNotFoundException("Baseline assembly not found.", baseline.AssemblyPath);
-        if (!File.Exists(baseline.PdbPath)) throw new FileNotFoundException("Baseline PDB not found (hot reload needs a portable PDB next to the assembly).", baseline.PdbPath);
 
-        // Hosts compile every version to the same path. Roslyn reads the baseline lazily, so it gets
-        // its own copy that nobody overwrites.
+        // Hosts compile every version to the same path. Roslyn reads the baseline lazily — the
+        // assembly and the PDB embedded in it — and keeps it open, so it gets its own copy that
+        // nobody overwrites and that never blocks the next compile.
         var snapshot = Path.Combine(Path.GetTempPath(), "neo_hotreload", Guid.NewGuid().ToString("N")[..12]);
         Directory.CreateDirectory(snapshot);
         var assemblyPath = Path.Combine(snapshot, baseline.AssemblyName + ".dll");
         File.Copy(baseline.AssemblyPath, assemblyPath, overwrite: true);
-        File.Copy(baseline.PdbPath, Path.ChangeExtension(assemblyPath, ".pdb"), overwrite: true);
+        if (!HotReloadBaseline.HasEmbeddedPdb(assemblyPath))
+        {
+            TryDeleteDirectory(snapshot);
+            throw new InvalidOperationException("The baseline assembly has no embedded PDB; it was not built for hot reload.");
+        }
 
         var workspace = new AdhocWorkspace(s_host.Value);
         try

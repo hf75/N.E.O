@@ -300,12 +300,12 @@ internal static class StateMigrationAnalyzer
     // ── what runs while the UI is built ───────────────────────────────────────────────────────
 
     /// <summary>
-    /// Equivalent as far as building the UI is concerned: bodies of event handler lambdas
-    /// (<c>x.Click += (_, _) => …</c>) do not run then, and Roslyn patches them in place, so the
-    /// controls that already exist pick the new code up without being rebuilt.
+    /// Equivalent as far as building the UI is concerned: bodies of lambdas that are only stored
+    /// (<see cref="IsDeferred"/>) do not run then, and Roslyn patches them in place, so the
+    /// controls and delegates that already exist pick the new code up without being rebuilt.
     /// </summary>
     private static bool BuildTimeEquivalent(SyntaxNode oldNode, SyntaxNode newNode)
-        => SyntaxFactory.AreEquivalent(HandlerBodyEraser.Instance.Visit(oldNode), HandlerBodyEraser.Instance.Visit(newNode));
+        => SyntaxFactory.AreEquivalent(DeferredLambdaEraser.Instance.Visit(oldNode), DeferredLambdaEraser.Instance.Visit(newNode));
 
     /// <summary>
     /// The same statement as far as replaying a constructor is concerned. A lambda whose body
@@ -326,19 +326,41 @@ internal static class StateMigrationAnalyzer
         private static ExpressionSyntax Placeholder => SyntaxFactory.LiteralExpression(SyntaxKind.DefaultLiteralExpression);
     }
 
-    private sealed class HandlerBodyEraser : CSharpSyntaxRewriter
+    private sealed class DeferredLambdaEraser : CSharpSyntaxRewriter
     {
-        public static readonly HandlerBodyEraser Instance = new();
+        public static readonly DeferredLambdaEraser Instance = new();
 
-        public override SyntaxNode? VisitAssignmentExpression(AssignmentExpressionSyntax node)
-            => IsHandlerSubscription(node)
-                ? node.WithRight(SyntaxFactory.LiteralExpression(SyntaxKind.DefaultLiteralExpression))
-                : base.VisitAssignmentExpression(node);
+        public override SyntaxNode? VisitParenthesizedLambdaExpression(ParenthesizedLambdaExpressionSyntax node)
+            => IsDeferred(node) ? Placeholder : base.VisitParenthesizedLambdaExpression(node);
+
+        public override SyntaxNode? VisitSimpleLambdaExpression(SimpleLambdaExpressionSyntax node)
+            => IsDeferred(node) ? Placeholder : base.VisitSimpleLambdaExpression(node);
+
+        public override SyntaxNode? VisitAnonymousMethodExpression(AnonymousMethodExpressionSyntax node)
+            => IsDeferred(node) ? Placeholder : base.VisitAnonymousMethodExpression(node);
+
+        private static ExpressionSyntax Placeholder => SyntaxFactory.LiteralExpression(SyntaxKind.DefaultLiteralExpression);
     }
 
-    private static bool IsHandlerSubscription(AssignmentExpressionSyntax node)
-        => (node.IsKind(SyntaxKind.AddAssignmentExpression) || node.IsKind(SyntaxKind.SubtractAssignmentExpression))
-           && node.Right is AnonymousFunctionExpressionSyntax;
+    /// <summary>
+    /// A lambda that is only stored — subscribed (<c>x.Click += (_, _) => …</c>), assigned
+    /// (<c>Tick = () => …</c>, also in object initializers) or used to initialise a field or variable —
+    /// runs later, not while the code around it runs. A lambda passed as an argument may run right
+    /// away (<c>items.Select(i => new TextBlock …)</c>) and counts as running code.
+    /// </summary>
+    private static bool IsDeferred(AnonymousFunctionExpressionSyntax lambda)
+    {
+        SyntaxNode node = lambda;
+        while (node.Parent is ParenthesizedExpressionSyntax or CastExpressionSyntax)
+            node = node.Parent;
+
+        return node.Parent switch
+        {
+            AssignmentExpressionSyntax assignment => assignment.Right == node,
+            EqualsValueClauseSyntax => true,
+            _ => false,
+        };
+    }
 
     private static Dictionary<string, (ISymbol Symbol, SyntaxNode Node)> MemberIndex(Compilation compilation, Func<SyntaxTree, SemanticModel> model)
     {
@@ -398,7 +420,7 @@ internal static class StateMigrationAnalyzer
             {
                 var root = reference.GetSyntax();
                 var semantics = model(root.SyntaxTree);
-                foreach (var node in root.DescendantNodes(descendIntoChildren: n => n is not AssignmentExpressionSyntax a || !IsHandlerSubscription(a)))
+                foreach (var node in root.DescendantNodes(descendIntoChildren: n => n is not AnonymousFunctionExpressionSyntax lambda || !IsDeferred(lambda)))
                 {
                     if (node is not (SimpleNameSyntax or BaseObjectCreationExpressionSyntax or ConstructorInitializerSyntax)) continue;
                     if (node.Parent is AssignmentExpressionSyntax { Right: var right } subscription && right == node &&

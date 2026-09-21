@@ -62,19 +62,14 @@ namespace Neo.Agents
                 isRequired: false,
                 defaultValue: true,
                 description: "Build the DLL so that Neo.HotReload can patch it later while it is running: without " +
-                             "optimizations, with a portable PDB next to it and with a '<dll>.hotreload.json' that " +
-                             "records the sources and references (see HotReloadBaselineFile)."));
+                             "optimizations, with the portable PDB embedded in the DLL and with a '<dll>.hotreload.json' " +
+                             "that records the sources and references (see HotReloadBaselineFile)."));
 
             // =========== Ausgabeparameter ===========
             metadata.OutputParameters.Add(new OutputParameter<string>(
                 name: "CompiledDllPath",
                 isAlwaysProvided: true,
                 description: "Pfad zur erfolgreich erstellten DLL."));
-
-            metadata.OutputParameters.Add(new OutputParameter<string>(
-                name: "PdbPath",
-                isAlwaysProvided: false,
-                description: "Hot reload mode: path of the portable PDB."));
 
             metadata.OutputParameters.Add(new OutputParameter<List<string>>(
                 name: "ReferencePaths",
@@ -231,14 +226,19 @@ namespace Neo.Agents
                     allowUnsafe: true)
             );
 
+            // Hot reload mode embeds the PDB. Roslyn's hot reload engine reads the debug information of
+            // the running build from the DLL itself then (embedded is the first place it looks); with a
+            // separate file it opens the PDB path recorded in the DLL — this very path, which the next
+            // compile overwrites — and keeps it open for the whole session, so that compile fails.
+            if (hotReload)
+                TryDeleteStalePdb(Path.ChangeExtension(dllOutputPath, ".pdb"));
+
             // Kompilieren und DLL erzeugen
-            var pdbPath = Path.ChangeExtension(dllOutputPath, ".pdb");
             using (var fs = new FileStream(dllOutputPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (var pdbStream = hotReload ? new FileStream(pdbPath, FileMode.Create, FileAccess.Write, FileShare.None) : null)
             {
                 var result = hotReload
-                    ? compilation.Emit(fs, pdbStream, options: new Microsoft.CodeAnalysis.Emit.EmitOptions(
-                        debugInformationFormat: Microsoft.CodeAnalysis.Emit.DebugInformationFormat.PortablePdb, pdbFilePath: pdbPath))
+                    ? compilation.Emit(fs, pdbStream: null, options: new Microsoft.CodeAnalysis.Emit.EmitOptions(
+                        debugInformationFormat: Microsoft.CodeAnalysis.Emit.DebugInformationFormat.Embedded))
                     : compilation.Emit(fs);
 
                 if (!result.Success)
@@ -257,7 +257,6 @@ namespace Neo.Agents
             {
                 var referencePaths = references.OfType<PortableExecutableReference>()
                     .Select(r => r.FilePath).Where(f => !string.IsNullOrEmpty(f)).Select(f => f!).ToList();
-                SetOutput("PdbPath", pdbPath);
                 SetOutput("ReferencePaths", referencePaths);
 
                 // Hosts get the DLL path back through several layers that know nothing about hot
@@ -265,7 +264,6 @@ namespace Neo.Agents
                 new HotReloadBaselineFile
                 {
                     AssemblyName = assemblyName,
-                    PdbPath = pdbPath,
                     SourcePaths = hotReloadPaths,
                     SourceTexts = code.ToList(),
                     ReferencePaths = referencePaths,
@@ -274,6 +272,15 @@ namespace Neo.Agents
 
             // Asynchrone Operation abschließen
             await Task.CompletedTask;
+        }
+
+        // A separate PDB from an earlier build would contradict the embedded one — and debuggers or
+        // older N.E.O. builds might pick it up. Best effort: a file still held open stays.
+        private static void TryDeleteStalePdb(string pdbPath)
+        {
+            try { if (File.Exists(pdbPath)) File.Delete(pdbPath); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         /// <summary>

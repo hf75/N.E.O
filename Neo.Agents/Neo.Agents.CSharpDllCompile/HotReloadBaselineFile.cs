@@ -5,16 +5,16 @@ namespace Neo.Agents
     /// <summary>
     /// Written next to every hot-reloadable DLL as <c>&lt;dll&gt;.hotreload.json</c>: what Neo.HotReload
     /// needs later to compute edit-and-continue deltas against exactly this build — the sources
-    /// as they were compiled (with the document paths that went into the PDB) and the references.
-    /// A file, because the DLL path travels back to the hosts through layers that know nothing about
-    /// hot reload, and because the next compile overwrites the DLL the running app was loaded from.
+    /// as they were compiled (with the document paths that went into the embedded PDB) and the
+    /// references. A file, because the DLL path travels back to the hosts through layers that know
+    /// nothing about hot reload, and because the next compile overwrites the DLL the running app was
+    /// loaded from. The debug information itself is embedded in the DLL.
     /// </summary>
     public sealed class HotReloadBaselineFile
     {
         public const string Extension = ".hotreload.json";
 
         public string AssemblyName { get; set; } = "";
-        public string PdbPath { get; set; } = "";
         public List<string> SourcePaths { get; set; } = new();
         public List<string> SourceTexts { get; set; } = new();
         public List<string> ReferencePaths { get; set; } = new();

@@ -14,7 +14,7 @@ This works in the desktop hosts (WPF and Avalonia, every way a new build reaches
 ```
  host (Neo.App / Neo.App.Avalonia / Neo.McpServer)                 plugin window (child process)
  ─────────────────────────────────────────────────                 ─────────────────────────────
- compile  →  debug DLL + portable PDB + <dll>.hotreload.json
+ compile  →  debug DLL (PDB embedded) + <dll>.hotreload.json
  first load: unload/load as always, then HotReloadSession.StartAsync   (loaded from bytes, running)
  next change:
    HotReloadSession.CreateUpdateAsync(new sources)
@@ -35,7 +35,7 @@ This works in the desktop hosts (WPF and Avalonia, every way a new build reaches
    - **new fields with initializers** (`List<string> _tags = new()`) are initialised on every live object of that type — otherwise the first use is a `NullReferenceException`;
    - **changed configuration** (a `readonly` string/colour/number, anything `static readonly`) is applied again — "make the accent blue" shows; mutable fields are your data and keep their value;
    - **statements added to the constructor** ("start the clock") run once on the live control;
-   - **UI code**: when something that runs while the UI is built changed, the app's UI method (`BuildUi()`, `InitializeComponents()`, …) is called again. Before that, the window takes a snapshot of the visual tree (text, selection, checked state, expanded, scroll offset, focus — matched by control name, else by position) and puts it back into the new tree (`UiStateSnapshot.cs` per framework). Timers the UI method replaced are stopped instead of ticking twice.
+   - **UI code**: when something that runs while the UI is built changed, the app's UI method (`BuildUi()`, `InitializeComponents()`, …) is called again. Before that, the window takes a snapshot of the visual tree (text, selection, checked state, expanded, scroll offset, focus — matched by control name and by position, so controls the designer renamed are found again) and puts it back into the new tree (`UiStateSnapshot.cs` per framework). Timers the UI method replaced are stopped instead of ticking twice.
 4. **Anything that cannot be carried over safely ends in a full reload**, never in a half-updated app: rude edits, a constructor change that cannot be replayed, UI changes in an app without a re-runnable UI method, a changed set of references (a new NuGet package), a failure while applying.
 
 ## Writing apps that survive changes
@@ -63,7 +63,7 @@ The system prompts of the desktop hosts and the MCP server teach these rules (`N
 | Session per running app, update computation | `Neo.HotReload/HotReloadSession.cs`, `HotReloadCoordinator.cs` |
 | What living objects miss, helper injection | `Neo.HotReload/StateMigrationAnalyzer.cs` |
 | Roslyn's engine (reflection wrapper) | `Neo.HotReload/RoslynHotReloadService.cs` |
-| Baseline next to every DLL | `Neo.Agents.CSharpDllCompile/HotReloadBaselineFile.cs` (`<dll>.hotreload.json`) |
+| Baseline next to every DLL | `Neo.Agents.CSharpDllCompile/HotReloadBaselineFile.cs` (`<dll>.hotreload.json`); the PDB is embedded in the DLL — Roslyn opens a separate PDB at the path recorded in the DLL and keeps it locked, which blocked the next compile to that path |
 | Applying in the child | `Neo.Shared/HotReloadRuntime.cs`, `MainWindow.HandleHotReload` + `UiStateSnapshot` in both `PluginWindow*.Core` |
 | IPC | `HotReload` / `HotReloadResult`, `HelloMessage.HotReloadCapabilities` in `Neo.IPC/IPC.cs` |
 | Desktop wiring | `AppController.DisplayCompiledDllAsync` |

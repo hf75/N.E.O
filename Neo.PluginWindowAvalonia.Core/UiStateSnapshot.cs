@@ -15,19 +15,22 @@ namespace Neo.PluginWindowAvalonia
     /// selected row, the scroll position, the open tab, the focus. A hot reload that rebuilds the
     /// visual tree takes a snapshot of the old tree and puts these values back into the new one.
     ///
-    /// <para>Controls are matched by <c>Name</c> when they have one, otherwise by their position in
-    /// the tree (type and index among siblings of the same type, all the way up). A control that
-    /// cannot be found again, or that changed its type, is simply left as the new code built it.
-    /// Values are only written when they differ, so change handlers do not fire for nothing.</para>
+    /// <para>Every control is remembered under its position in the tree (type and index among
+    /// siblings of the same type, all the way up) and, when it has one, under its <c>Name</c>. The
+    /// name wins when both versions have it; the position covers controls that gained or lost a name
+    /// in between — switching the designer on names every control. A control that cannot be found
+    /// again, or that changed its type, is left as the new code built it. Values are only written
+    /// when they differ, so change handlers do not fire for nothing.</para>
     /// </summary>
     internal sealed class UiStateSnapshot
     {
         private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
-        private string? _focusedKey;
+        private List<string> _focusedKeys = [];
 
         private sealed record Entry(Type ControlType, Dictionary<string, object?> Values);
 
-        public int Count => _entries.Count;
+        /// <summary>How many controls had a value worth carrying over.</summary>
+        public int Count { get; private set; }
 
         public static UiStateSnapshot Capture(Control root)
         {
@@ -39,10 +42,15 @@ namespace Neo.PluginWindowAvalonia
                 var values = Read(control);
                 if (values == null && !ReferenceEquals(control, focused)) continue;
 
-                var key = KeyOf(control, root);
-                if (key == null) continue;
-                if (values != null) snapshot._entries[key] = new Entry(control.GetType(), values);
-                if (ReferenceEquals(control, focused)) snapshot._focusedKey = key;
+                var keys = KeysOf(control, root);
+                if (keys.Count == 0) continue;
+                if (values != null)
+                {
+                    var entry = new Entry(control.GetType(), values);
+                    foreach (var key in keys) snapshot._entries[key] = entry;
+                    snapshot.Count++;
+                }
+                if (ReferenceEquals(control, focused)) snapshot._focusedKeys = keys;
             }
             return snapshot;
         }
@@ -57,14 +65,16 @@ namespace Neo.PluginWindowAvalonia
             Control? focus = null;
             foreach (var control in Descendants(root).ToList())
             {
-                var key = KeyOf(control, root);
-                if (key == null) continue;
-                if (key == _focusedKey) focus = control;
-                if (_entries.TryGetValue(key, out var entry) && entry.ControlType == control.GetType())
-                {
-                    try { if (Write(control, entry.Values)) restored++; }
-                    catch { /* a value the new control does not accept */ }
-                }
+                var keys = KeysOf(control, root);
+                if (keys.Count == 0) continue;
+                if (focus == null && keys.Any(_focusedKeys.Contains)) focus = control;
+
+                // Name first, then position.
+                var entry = keys.Select(k => _entries.TryGetValue(k, out var e) ? e : null)
+                                .FirstOrDefault(e => e != null && e.ControlType == control.GetType());
+                if (entry == null) continue;
+                try { if (Write(control, entry.Values)) restored++; }
+                catch { /* a value the new control does not accept */ }
             }
 
             try { focus?.Focus(); } catch { /* not focusable any more */ }
@@ -74,17 +84,19 @@ namespace Neo.PluginWindowAvalonia
         private static IEnumerable<Control> Descendants(Control root)
             => root.GetVisualDescendants().OfType<Control>();
 
-        private static string? KeyOf(Control control, Control root)
+        /// <summary>"#name" (own names only — template parts repeat) and the position path; either may be missing.</summary>
+        private static List<string> KeysOf(Control control, Control root)
         {
+            var keys = new List<string>(2);
             if (!string.IsNullOrEmpty(control.Name) && control.TemplatedParent == null)
-                return "#" + control.Name;
+                keys.Add("#" + control.Name);
 
             var segments = new List<string>();
             Visual? current = control;
             while (current != null && !ReferenceEquals(current, root))
             {
                 var parent = current.GetVisualParent();
-                if (parent == null) return null; // not under root
+                if (parent == null) return keys; // not under root
                 var type = current.GetType();
                 int index = 0;
                 foreach (var sibling in parent.GetVisualChildren())
@@ -96,7 +108,8 @@ namespace Neo.PluginWindowAvalonia
                 current = parent;
             }
             segments.Reverse();
-            return string.Join("/", segments);
+            keys.Add(string.Join("/", segments));
+            return keys;
         }
 
         private static Dictionary<string, object?>? Read(Control control) => control switch

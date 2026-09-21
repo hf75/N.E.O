@@ -13,19 +13,22 @@ namespace Neo.PluginWindowWPF
     /// selected row, the scroll position, the open tab, the focus. A hot reload that rebuilds the
     /// visual tree takes a snapshot of the old tree and puts these values back into the new one.
     ///
-    /// <para>Controls are matched by <c>Name</c> when they have one, otherwise by their position in
-    /// the tree (type and index among siblings of the same type, all the way up). A control that
-    /// cannot be found again, or that changed its type, is simply left as the new code built it.
-    /// Values are only written when they differ, so change handlers do not fire for nothing.</para>
+    /// <para>Every control is remembered under its position in the tree (type and index among
+    /// siblings of the same type, all the way up) and, when it has one, under its <c>Name</c>. The
+    /// name wins when both versions have it; the position covers controls that gained or lost a name
+    /// in between — switching the designer on names every control. A control that cannot be found
+    /// again, or that changed its type, is left as the new code built it. Values are only written
+    /// when they differ, so change handlers do not fire for nothing.</para>
     /// </summary>
     internal sealed class UiStateSnapshot
     {
         private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
-        private string? _focusedKey;
+        private List<string> _focusedKeys = new();
 
         private sealed record Entry(Type ControlType, Dictionary<string, object?> Values);
 
-        public int Count => _entries.Count;
+        /// <summary>How many controls had a value worth carrying over.</summary>
+        public int Count { get; private set; }
 
         public static UiStateSnapshot Capture(FrameworkElement root)
         {
@@ -37,10 +40,15 @@ namespace Neo.PluginWindowWPF
                 var values = Read(element);
                 if (values == null && !ReferenceEquals(element, focused)) continue;
 
-                var key = KeyOf(element, root);
-                if (key == null) continue;
-                if (values != null) snapshot._entries[key] = new Entry(element.GetType(), values);
-                if (ReferenceEquals(element, focused)) snapshot._focusedKey = key;
+                var keys = KeysOf(element, root);
+                if (keys.Count == 0) continue;
+                if (values != null)
+                {
+                    var entry = new Entry(element.GetType(), values);
+                    foreach (var key in keys) snapshot._entries[key] = entry;
+                    snapshot.Count++;
+                }
+                if (ReferenceEquals(element, focused)) snapshot._focusedKeys = keys;
             }
             return snapshot;
         }
@@ -55,14 +63,23 @@ namespace Neo.PluginWindowWPF
             FrameworkElement? focus = null;
             foreach (var element in new List<FrameworkElement>(Descendants(root)))
             {
-                var key = KeyOf(element, root);
-                if (key == null) continue;
-                if (key == _focusedKey) focus = element;
-                if (_entries.TryGetValue(key, out var entry) && entry.ControlType == element.GetType())
+                var keys = KeysOf(element, root);
+                if (keys.Count == 0) continue;
+                if (focus == null && keys.Exists(_focusedKeys.Contains)) focus = element;
+
+                // Name first, then position.
+                Entry? entry = null;
+                foreach (var key in keys)
                 {
-                    try { if (Write(element, entry.Values)) restored++; }
-                    catch { /* a value the new control does not accept */ }
+                    if (_entries.TryGetValue(key, out var candidate) && candidate.ControlType == element.GetType())
+                    {
+                        entry = candidate;
+                        break;
+                    }
                 }
+                if (entry == null) continue;
+                try { if (Write(element, entry.Values)) restored++; }
+                catch { /* a value the new control does not accept */ }
             }
 
             try { focus?.Focus(); } catch { /* not focusable any more */ }
@@ -86,17 +103,19 @@ namespace Neo.PluginWindowWPF
             }
         }
 
-        private static string? KeyOf(FrameworkElement element, FrameworkElement root)
+        /// <summary>"#name" (own names only — template parts repeat) and the position path; either may be missing.</summary>
+        private static List<string> KeysOf(FrameworkElement element, FrameworkElement root)
         {
+            var keys = new List<string>(2);
             if (!string.IsNullOrEmpty(element.Name) && element.TemplatedParent == null)
-                return "#" + element.Name;
+                keys.Add("#" + element.Name);
 
             var segments = new List<string>();
             DependencyObject? current = element;
             while (current != null && !ReferenceEquals(current, root))
             {
                 var parent = VisualTreeHelper.GetParent(current);
-                if (parent == null) return null; // not under root
+                if (parent == null) return keys; // not under root
                 var type = current.GetType();
                 int index = 0;
                 for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
@@ -109,7 +128,8 @@ namespace Neo.PluginWindowWPF
                 current = parent;
             }
             segments.Reverse();
-            return string.Join("/", segments);
+            keys.Add(string.Join("/", segments));
+            return keys;
         }
 
         private static Dictionary<string, object?>? Read(FrameworkElement element) => element switch

@@ -8,13 +8,12 @@ public sealed record HotReloadSource(string Path, string Text);
 
 /// <summary>
 /// What the compile step has to hand over so that later code changes can be turned into deltas:
-/// the debug-compiled assembly with its portable PDB (the exact bytes the plugin window loaded),
-/// the sources they were compiled from, and the references used.
+/// the debug-compiled assembly with its embedded portable PDB (the exact bytes the plugin window
+/// loaded), the sources they were compiled from, and the references used.
 /// </summary>
 public sealed record HotReloadBaseline(
     string AssemblyName,
     string AssemblyPath,
-    string PdbPath,
     IReadOnlyList<HotReloadSource> Sources,
     IReadOnlyList<string> ReferencePaths)
 {
@@ -26,11 +25,31 @@ public sealed record HotReloadBaseline(
     {
         var file = HotReloadBaselineFile.TryRead(dllPath);
         if (file == null || file.SourcePaths.Count != file.SourceTexts.Count) return null;
-        if (!File.Exists(dllPath) || !File.Exists(file.PdbPath)) return null;
+        if (!HasEmbeddedPdb(dllPath)) return null;
 
-        return new HotReloadBaseline(file.AssemblyName, dllPath, file.PdbPath,
+        return new HotReloadBaseline(file.AssemblyName, dllPath,
             file.SourcePaths.Zip(file.SourceTexts, (path, text) => new HotReloadSource(path, text)).ToList(),
             file.ReferencePaths);
+    }
+
+    /// <summary>
+    /// Only builds that carry their debug information inside are usable: for anything else Roslyn
+    /// opens the PDB path recorded in the DLL — a file the host overwrites with the next compile —
+    /// and keeps it locked for the whole session (builds of the first hot reload version did that).
+    /// </summary>
+    internal static bool HasEmbeddedPdb(string dllPath)
+    {
+        try
+        {
+            using var stream = File.OpenRead(dllPath);
+            using var reader = new System.Reflection.PortableExecutable.PEReader(stream);
+            return reader.ReadDebugDirectory().Any(e =>
+                e.Type == System.Reflection.PortableExecutable.DebugDirectoryEntryType.EmbeddedPortablePdb && e.DataSize > 0);
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
 
