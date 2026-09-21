@@ -192,6 +192,11 @@ namespace Neo.Agents
                 isRequired: true,
                 description: @"The name of the entrypoint including namespace name."));
 
+            metadata.InputParameters.Add(new InputParameter<List<string>>(
+                name: "HostResolvedDlls",
+                isRequired: false,
+                description: @"Managed DLLs the .NET host itself must resolve: compile references that are also listed, with their versions, in an active deps.json. Required for assemblies that exist in the shared framework in an older version. All of them (and all NuGetDlls) must be deployed next to the executable."));
+
             metadata.InputParameters.Add(new InputParameter<bool>(
                 name: "ForceNetCoreRuntime",
                 isRequired: false,
@@ -282,6 +287,7 @@ namespace Neo.Agents
             var outputPath = GetInput<string>("OutputPath");
             var nuGetDlls = GetInput<List<string>>("NuGetDlls");
             var additionalDlls = GetInput<List<string>>("AdditionalDlls");
+            var hostResolvedDlls = GetInput<List<string>>("HostResolvedDlls");
             var assemblyName = GetInput<string>("AssemblyName");
             var compileType = GetInput<string>("CompileType");
             var appHostApp = GetInput<string>("AppHostApp");
@@ -344,6 +350,24 @@ namespace Neo.Agents
                         throw new FileNotFoundException($"Additional DLL '{dllPath}' wurde nicht gefunden.");
                     }
                     if (!IsManagedAssembly(dllPath))
+                        continue;
+                    references.Add(MetadataReference.CreateFromFile(dllPath));
+                }
+            }
+
+            // DLLs the host resolves through the deps.json are compile references as well.
+            if (hostResolvedDlls != null)
+            {
+                var alreadyReferenced = new HashSet<string>(
+                    (nuGetDlls ?? new List<string>()).Concat(additionalDlls ?? new List<string>())
+                        .Select(d => Path.GetFileName(d) ?? string.Empty),
+                    StringComparer.OrdinalIgnoreCase);
+
+                foreach (var dllPath in hostResolvedDlls)
+                {
+                    if (!File.Exists(dllPath))
+                        throw new FileNotFoundException($"Host-resolved DLL '{dllPath}' wurde nicht gefunden.");
+                    if (!IsManagedAssembly(dllPath) || !alreadyReferenced.Add(Path.GetFileName(dllPath)))
                         continue;
                     references.Add(MetadataReference.CreateFromFile(dllPath));
                 }
@@ -432,7 +456,7 @@ namespace Neo.Agents
             // Generate deps.json for GUI apps and Avalonia apps (ForceNetCoreRuntime).
             // For pure console apps, omitting deps.json lets the host probe the app directory.
             if (compileType != "CONSOLE" || forceNetCore)
-                CreateDepsJsonFile(outputPath, assemblyName, useWindowsDesktopRuntime, nuGetDlls);
+                CreateDepsJsonFile(outputPath, assemblyName, useWindowsDesktopRuntime, nuGetDlls, hostResolvedDlls);
 
             if (result.Success)
             {
@@ -561,26 +585,51 @@ namespace Neo.Agents
             File.WriteAllText(runtimeConfigPath, runtimeConfigContent);
         }
 
-        void CreateDepsJsonFile(string outputDirectory, string projectName, bool isWindows, List<string>? nuGetDlls)
+        void CreateDepsJsonFile(string outputDirectory, string projectName, bool isWindows, List<string>? nuGetDlls, List<string>? hostResolvedDlls = null)
         {
             var major = Environment.Version.Major;
             var versionTag = $"v{major}.0";
             var fwVersion = $"{major}.0.0";
             var fwName = isWindows ? "Microsoft.WindowsDesktop.App.WPF" : "Microsoft.NETCore.App";
 
-            // Build runtime entries for NuGet DLLs so the host can resolve them at runtime
+            // Build runtime entries for NuGet DLLs so the host can resolve them at runtime.
+            //
+            // The versions matter: when an assembly ships both app-local and in the shared framework
+            // (System.Text.Json, System.IO.Pipelines, … brought by a package that is newer than the
+            // runtime), the host picks the higher assemblyVersion/fileVersion — and an entry without
+            // versions always loses against the framework. The app then starts with the old framework
+            // copy loaded and fails later with "manifest definition does not match" as soon as
+            // something asks for the newer one. `dotnet publish` writes the same two properties.
             var runtimeLines = new List<string>();
             runtimeLines.Add($"\"{projectName}.dll\": {{}}");
+
+            var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var dllPath in hostResolvedDlls ?? new List<string>())
+            {
+                var fileName = Path.GetFileName(dllPath);
+                var asset = DescribeRuntimeAsset(dllPath);
+                if (string.IsNullOrEmpty(fileName) || asset == "{}" || !listed.Add(fileName))
+                    continue; // managed assemblies only — a native library has no place on the TPA
+
+                runtimeLines.Add($"\"{fileName}\": {asset}");
+            }
+
+            // Without a "libraries" section the host ignores every entry above: the file is then
+            // documentation only and the app resolves its DLLs itself (the export bootstraps preload
+            // them). That has been the behaviour of all exports and stays the default. The section
+            // is written only when the caller names DLLs the host has to resolve — from then on
+            // the host also insists that every listed file exists next to the executable.
+            bool hostResolvesAssets = listed.Count > 0;
 
             if (nuGetDlls != null)
             {
                 foreach (var dllPath in nuGetDlls)
                 {
                     var fileName = Path.GetFileName(dllPath);
-                    if (!string.IsNullOrEmpty(fileName))
-                    {
-                        runtimeLines.Add($"\"{fileName}\": {{}}");
-                    }
+                    if (string.IsNullOrEmpty(fileName) || !listed.Add(fileName))
+                        continue;
+
+                    runtimeLines.Add($"\"{fileName}\": {DescribeRuntimeAsset(dllPath)}");
                 }
             }
 
@@ -604,10 +653,42 @@ namespace Neo.Agents
                         }
                       }
                     }
-                  }
+                  }" + (hostResolvesAssets ? @",
+                  ""libraries"": {
+                    """ + projectName + @"/1.0.0"": {
+                      ""type"": ""project"",
+                      ""serviceable"": false,
+                      ""sha512"": """"
+                    }
+                  }" : "") + @"
                 }";
 
             File.WriteAllText(depsJsonPath, depsJsonContent);
+        }
+
+        /// <summary>
+        /// The deps.json asset object for a managed DLL: <c>{ "assemblyVersion": …, "fileVersion": … }</c>,
+        /// or <c>{}</c> when the file is not a readable managed assembly (native library, missing file).
+        /// </summary>
+        internal static string DescribeRuntimeAsset(string dllPath)
+        {
+            try
+            {
+                var assemblyVersion = System.Reflection.AssemblyName.GetAssemblyName(dllPath).Version;
+                if (assemblyVersion == null)
+                    return "{}";
+
+                var info = System.Diagnostics.FileVersionInfo.GetVersionInfo(dllPath);
+                var fileVersion = new Version(
+                    Math.Max(0, info.FileMajorPart), Math.Max(0, info.FileMinorPart),
+                    Math.Max(0, info.FileBuildPart), Math.Max(0, info.FilePrivatePart));
+
+                return $"{{ \"assemblyVersion\": \"{assemblyVersion}\", \"fileVersion\": \"{fileVersion}\" }}";
+            }
+            catch
+            {
+                return "{}";
+            }
         }
 
         public string CreateCombinedCode(List<SyntaxTree> syntaxTrees)

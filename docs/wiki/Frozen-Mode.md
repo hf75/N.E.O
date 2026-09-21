@@ -1,6 +1,6 @@
 # Frozen-Mode — N.E.O. apps as standalone MCP servers
 
-> Phase 4 of the [Live-MCP roadmap](../../LIVE_MCP_VISION.md). Available since 2026-04-29 (lokal commitet, ungepusht).
+> Phase 4 of the [Live-MCP roadmap](../../LIVE_MCP_VISION.md). Available since 2026-04-29.
 
 ## TL;DR
 
@@ -41,7 +41,7 @@ What you get in `C:/tmp/my-todo-app/`:
 
 - `my-todo-app.exe` — the executable.
 - Avalonia runtime DLLs (already shipped by the legacy export).
-- `Neo.App.Mcp.dll` plus the ModelContextProtocol + `Microsoft.Extensions.{Hosting,Logging,DependencyInjection}` closure (~5 MB extra).
+- `Neo.App.Mcp.dll` plus its exact dependency closure: ModelContextProtocol, `Microsoft.Extensions.{Hosting,Logging,DependencyInjection,…}` and the app-local BCL assemblies the MCP SDK needs in a newer version than the shared framework (`System.Text.Json`, `System.IO.Pipelines`, …). These are listed with their versions in the app's `.deps.json` so the .NET host prefers them (~5 MB extra).
 
 Adds about **5 MB** to the export vs. `mcpMode=false`.
 
@@ -76,7 +76,7 @@ Everything the Phase 1–3 attribute set already exposes:
 | Attribute | Becomes |
 |---|---|
 | `[McpCallable("…")]` on a method | One MCP tool named `<method_snake>` with a JSON-Schema-typed argument list. |
-| `[McpObservable("…")]` | Property readable via the always-on `read_observable` tool. |
+| `[McpObservable("…")]` | Listed in the manifest (`--mcp-help`). **Not reachable over MCP in Frozen-Mode yet** — the `read_observable` tool exists only in Dev-Mode. Make it `Watchable` (next row) or return the value from a `[McpCallable]` method. |
 | `[McpObservable("…", Watchable = true)]` | Above, plus an MCP resource at `app://<name>` for `resources/subscribe` + push updates. |
 | `[McpTriggerable("…")]` | Reserved for input-pipeline integration. Currently a manifest-only entry. |
 

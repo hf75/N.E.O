@@ -184,9 +184,7 @@ public sealed class CompilationPipeline
 
             // Build source code: user's code + the appropriate wrapper.
             var allCode = sourceCode.ToList();
-            allCode.Add(mcpMode
-                ? GetFrozenModeWrapper(appName)
-                : GetAvaloniaExportWrapper(appName));
+            allCode.Add(GetAvaloniaExportWrapper(appName, mcpMode));
 
             // Resolve non-Avalonia NuGet packages
             var nonAvaloniaPackages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -216,26 +214,34 @@ public sealed class CompilationPipeline
             agent.SetInput("Code", allCode);
             agent.SetInput("OutputPath", exportDir);
             agent.SetInput("AssemblyName", appName);
-            agent.SetInput("MainTypeName", "Neo.Program");
+            agent.SetInput("MainTypeName", ExportHostNamespace + ".Program");
             agent.SetInput("CompileType", compileType);
             agent.SetInput("ForceNetCoreRuntime", true);
             agent.SetInput("AppHostApp", appHostPath);
             agent.SetInput("NuGetDlls", nugetDllPaths);
-            // Compile-time references: Avalonia closure plus Frozen-Mode runtime DLLs when
-            // mcpMode=true (the wrapper calls Neo.App.Mcp.NeoAppMcp.RunStdioAsync).
-            var compileReferences = _avaloniaAdditionalDlls!.ToList();
+
+            // The Frozen-Mode runtime (the bootstrap calls Neo.App.Mcp.NeoAppMcp.RunStdioAsync) carries
+            // BCL assemblies that are newer than the shared framework (System.Text.Json 10, …). Only
+            // the .NET host can prefer those over the framework copies, so they go into an active
+            // deps.json ("HostResolvedDlls") instead of being preloaded by the bootstrap — once the
+            // framework copy is loaded, loading the newer one fails.
             if (mcpMode)
             {
                 if (_neoAppMcpRuntimeDlls == null || _neoAppMcpRuntimeDlls.Count == 0)
                     return new ExportResult(false, null, null,
                         ["mcpMode requested but the Neo.App.Mcp runtime closure is not on disk. " +
                          "Rebuild Neo.McpServer (its bin folder is the canonical source)."]);
-                foreach (var dll in _neoAppMcpRuntimeDlls)
-                {
-                    if (!compileReferences.Any(c => string.Equals(Path.GetFileName(c), Path.GetFileName(dll), StringComparison.OrdinalIgnoreCase)))
-                        compileReferences.Add(dll);
-                }
+                agent.SetInput("HostResolvedDlls", _neoAppMcpRuntimeDlls.ToList());
             }
+
+            // Compile-only references: the Avalonia closure from the plugin window. Anything the
+            // Frozen-Mode runtime already brings (Neo.App.Api.dll) must not be referenced twice.
+            var hostResolvedNames = new HashSet<string>(
+                mcpMode ? _neoAppMcpRuntimeDlls!.Select(d => Path.GetFileName(d)!) : [],
+                StringComparer.OrdinalIgnoreCase);
+            var compileReferences = _avaloniaAdditionalDlls!
+                .Where(d => !hostResolvedNames.Contains(Path.GetFileName(d)))
+                .ToList();
             agent.SetInput("AdditionalDlls", compileReferences);
 
             await agent.ExecuteAsync(ct);
@@ -285,38 +291,97 @@ public sealed class CompilationPipeline
         }
     }
 
+    // Namespace of the generated bootstrap program. It must not be 'Neo', and its Application
+    // class must not be called 'App': a type Neo.App shadows the Neo.App namespace of Neo.App.Api,
+    // and every exported app whose code says 'using Neo.App;' (Ai.Trigger, Live-MCP) stops compiling.
+    internal const string ExportHostNamespace = "NeoExportHost";
+
     /// <summary>
-    /// Phase 4B Frozen-Mode wrapper: same Avalonia bootstrap as
-    /// <see cref="GetAvaloniaExportWrapper"/> with two extras —
+    /// Source of the program that turns a <c>DynamicUserControl</c> into a standalone Avalonia
+    /// application: preload the DLLs next to the exe, find the control by reflection, show it in
+    /// a window.
+    ///
+    /// <para>With <paramref name="mcpMode"/> (Frozen-Mode, Phase 4B) the same program also understands
     /// <list type="bullet">
-    ///   <item><c>--mcp-help</c> arg: dump the manifest to stderr via
+    ///   <item><c>--mcp-help</c>: dump the Live-MCP manifest to stderr via
     ///         <c>NeoAppMcp.DumpManifest</c> and exit before starting the GUI. Cheap CI smoke test.</item>
-    ///   <item><c>--mcp</c> arg: start the embedded stdio MCP server on a background Task once
-    ///         the UserControl is instantiated. Cancellation is tied to the desktop lifetime so
-    ///         closing the window tears down the JSON-RPC loop. <c>--headless</c> is intentionally
-    ///         not handled in v1; users who want a no-window mode close the window manually
-    ///         (<c>--mcp-help</c> covers the no-startup case).</item>
+    ///   <item><c>--mcp</c>: start the embedded stdio MCP server on a background Task once the
+    ///         UserControl exists. Cancellation is tied to the desktop lifetime so closing the window
+    ///         tears down the JSON-RPC loop. <c>--headless</c> is intentionally not handled in v1.</item>
     /// </list>
+    /// One template for both modes, so the bootstrap cannot drift apart between them.</para>
     /// </summary>
-    private static string GetFrozenModeWrapper(string windowTitle)
+    internal static string GetAvaloniaExportWrapper(string windowTitle, bool mcpMode)
     {
         var escapedTitle = windowTitle.Replace("\"", "\\\"");
+
+        var mcpUsings = mcpMode ? "using Neo.App.Mcp;" : string.Empty;
+
+        var mcpHelpBranch = !mcpMode ? string.Empty : $$"""
+
+            // --mcp-help: dump manifest before starting Avalonia. Cheap diagnostics path.
+            if (args.Any(a => string.Equals(a, "--mcp-help", StringComparison.OrdinalIgnoreCase)))
+                return DumpManifest();
+""";
+
+        var mcpHelpers = !mcpMode ? string.Empty : $$"""
+
+        // Separate methods for the same reason as StartAvalonia: nothing that names a
+        // Neo.App.Mcp or Avalonia type may be JIT-compiled before the preloader has run.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static int DumpManifest()
+        {
+            var ctrl = CreateUserControl();
+            if (ctrl == null)
+            {
+                Console.Error.WriteLine("DynamicUserControl not found in any loaded assembly.");
+                return 1;
+            }
+            NeoAppMcp.DumpManifest(ctrl);
+            return 0;
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        internal static void StartMcpServer(UserControl ctrl, CancellationToken ct)
+        {
+            Console.Error.WriteLine("[{{escapedTitle}}] --mcp mode: starting embedded stdio MCP server.");
+            _ = Task.Run(async () =>
+            {
+                try { await NeoAppMcp.RunStdioAsync(ctrl, options: null, ct); }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[{{escapedTitle}}] MCP host crashed: {ex}");
+                }
+            });
+        }
+""";
+
+        var mcpStartBranch = !mcpMode ? string.Empty : $$"""
+
+                if (ctrl != null && _args.Any(a => string.Equals(a, "--mcp", StringComparison.OrdinalIgnoreCase)))
+                    Program.StartMcpServer(ctrl, _mcpCts.Token);
+""";
+
         return $$"""
 using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.Themes.Fluent;
-using Neo.App.Mcp;
+{{mcpUsings}}
 
-namespace Neo
+namespace {{ExportHostNamespace}}
 {
     public static class Program
     {
@@ -339,50 +404,41 @@ namespace Neo
                 }
                 catch { }
             }
-
-            // --mcp-help: dump manifest before starting Avalonia. Cheap diagnostics path.
-            if (args.Any(a => string.Equals(a, "--mcp-help", StringComparison.OrdinalIgnoreCase)))
-            {
-                var ctrl = CreateUserControl();
-                if (ctrl == null)
-                {
-                    Console.Error.WriteLine("DynamicUserControl not found in any loaded assembly.");
-                    return 1;
-                }
-                NeoAppMcp.DumpManifest(ctrl);
-                return 0;
-            }
-
+{{mcpHelpBranch}}
+            // Call Avalonia startup in a separate method so JIT doesn't resolve
+            // Avalonia types until AFTER the preloader has run
             return StartAvalonia(args);
         }
 
-        // Must be a separate method — JIT resolves type references at method entry, so
-        // touching Avalonia inside Main would cause early loading before the preloader runs.
+        // Must be a separate method — JIT resolves type references at method entry
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         private static int StartAvalonia(string[] args)
         {
-            return AppBuilder.Configure(() => new App(args))
+            return AppBuilder.Configure(() => new ExportHostApp(args))
                 .UsePlatformDetect()
                 .LogToTrace()
                 .StartWithClassicDesktopLifetime(args);
         }
 
+        // Find DynamicUserControl in any namespace
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         internal static UserControl? CreateUserControl()
         {
-            var t = AppDomain.CurrentDomain.GetAssemblies()
+            var controlType = AppDomain.CurrentDomain.GetAssemblies()
                 .SelectMany(a => { try { return a.GetTypes(); } catch { return Array.Empty<Type>(); } })
-                .FirstOrDefault(x => x.Name == "DynamicUserControl" && typeof(UserControl).IsAssignableFrom(x));
-            return t == null ? null : (UserControl)Activator.CreateInstance(t)!;
+                .FirstOrDefault(t => t.Name == "DynamicUserControl" && typeof(UserControl).IsAssignableFrom(t));
+            return controlType == null ? null : (UserControl)Activator.CreateInstance(controlType)!;
         }
+{{mcpHelpers}}
     }
 
-    public class App : Application
+    public class ExportHostApp : Application
     {
         private readonly string[] _args;
         private readonly CancellationTokenSource _mcpCts = new();
 
-        public App() : this(Array.Empty<string>()) { }
-        public App(string[] args) { _args = args; }
+        public ExportHostApp() : this(Array.Empty<string>()) { }
+        public ExportHostApp(string[] args) { _args = args; }
 
         public override void Initialize()
         {
@@ -395,6 +451,12 @@ namespace Neo
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
                 var ctrl = Program.CreateUserControl();
+                if (ctrl != null)
+                {
+                    ctrl.HorizontalAlignment = HorizontalAlignment.Stretch;
+                    ctrl.VerticalAlignment = VerticalAlignment.Stretch;
+                }
+
                 desktop.MainWindow = new Window
                 {
                     Title = "{{escapedTitle}}",
@@ -412,139 +474,9 @@ namespace Neo
                 };
 
                 desktop.Exit += (_, _) => _mcpCts.Cancel();
-
-                if (ctrl != null && _args.Any(a => string.Equals(a, "--mcp", StringComparison.OrdinalIgnoreCase)))
-                {
-                    Console.Error.WriteLine("[{{escapedTitle}}] --mcp mode: starting embedded stdio MCP server.");
-                    _ = Task.Run(async () =>
-                    {
-                        try { await NeoAppMcp.RunStdioAsync(ctrl, options: null, _mcpCts.Token); }
-                        catch (OperationCanceledException) { }
-                        catch (Exception ex)
-                        {
-                            Console.Error.WriteLine($"[{{escapedTitle}}] MCP host crashed: {ex}");
-                        }
-                    });
-                }
+{{mcpStartBranch}}
             }
             base.OnFrameworkInitializationCompleted();
-        }
-    }
-}
-""";
-    }
-
-    /// <summary>
-    /// Generates the Avalonia app wrapper code that turns a DynamicUserControl into a standalone application.
-    /// This is a simplified version of ExportWindowBaseCode.CreateBaseCodeForExportAvalonia.
-    /// </summary>
-    private static string GetAvaloniaExportWrapper(string windowTitle)
-    {
-        var escapedTitle = windowTitle.Replace("\"", "\\\"");
-        return $$"""
-using System;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Runtime.InteropServices;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Layout;
-using Avalonia.Media;
-using Avalonia.Threading;
-using Avalonia.Themes.Fluent;
-
-namespace Neo
-{
-    public static class Program
-    {
-        [STAThread]
-        public static void Main(string[] args)
-        {
-            TaskScheduler.UnobservedTaskException += (s, e) => { e.SetObserved(); };
-            AppDomain.CurrentDomain.UnhandledException += (s, e) => { };
-
-            // Preload all DLLs from the app directory BEFORE any Avalonia types are touched
-            string baseDir = AppContext.BaseDirectory;
-            foreach (string dll in Directory.EnumerateFiles(baseDir, "*.dll"))
-            {
-                try
-                {
-                    var name = AssemblyName.GetAssemblyName(dll);
-                    if (!AppDomain.CurrentDomain.GetAssemblies().Any(a =>
-                        AssemblyName.ReferenceMatchesDefinition(name, a.GetName())))
-                        Assembly.LoadFrom(dll);
-                }
-                catch { }
-            }
-
-            // Call Avalonia startup in a separate method so JIT doesn't resolve
-            // Avalonia types until AFTER the preloader has run
-            StartAvalonia(args);
-        }
-
-        // Must be a separate method — JIT resolves type references at method entry
-        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        private static void StartAvalonia(string[] args)
-        {
-            AppBuilder.Configure<App>()
-                .UsePlatformDetect()
-                .LogToTrace()
-                .StartWithClassicDesktopLifetime(args);
-        }
-    }
-
-    public class App : Application
-    {
-        public override void Initialize()
-        {
-            Styles.Add(new FluentTheme());
-            RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Default;
-        }
-
-        public override void OnFrameworkInitializationCompleted()
-        {
-            if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-                desktop.MainWindow = new MainWindow();
-            base.OnFrameworkInitializationCompleted();
-        }
-    }
-
-    public class MainWindow : Window
-    {
-        public MainWindow()
-        {
-            Title = "{{escapedTitle}}";
-            Width = 1024;
-            Height = 768;
-            WindowStartupLocation = WindowStartupLocation.CenterScreen;
-
-            // Find DynamicUserControl in any namespace
-            var controlType = AppDomain.CurrentDomain.GetAssemblies()
-                .SelectMany(a => { try { return a.GetTypes(); } catch { return Array.Empty<Type>(); } })
-                .FirstOrDefault(t => t.Name == "DynamicUserControl" && typeof(UserControl).IsAssignableFrom(t));
-
-            if (controlType != null)
-            {
-                var control = (UserControl)Activator.CreateInstance(controlType)!;
-                control.HorizontalAlignment = HorizontalAlignment.Stretch;
-                control.VerticalAlignment = VerticalAlignment.Stretch;
-                Content = control;
-            }
-            else
-            {
-                Content = new TextBlock
-                {
-                    Text = "Error: DynamicUserControl not found.",
-                    FontSize = 24,
-                    Foreground = Brushes.Red,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-            }
         }
     }
 }
@@ -617,9 +549,14 @@ namespace Neo
     /// project reference to Neo.App.Mcp, so its own bin folder is the canonical source —
     /// see Neo.McpServer.csproj for the rationale.
     ///
-    /// <para>The closure is allow-listed by file-name prefix rather than scanned wholesale,
-    /// because McpServer's bin also contains Anthropic / OpenAI SDKs and other unrelated
-    /// dependencies that must NOT land in a frozen TODO app.</para>
+    /// <para>McpServer's bin also contains Anthropic / OpenAI SDKs, Roslyn and other unrelated
+    /// dependencies that must NOT land in a frozen TODO app, so the folder is not copied
+    /// wholesale. The exact closure comes from the dependency graph in the <c>.deps.json</c> next
+    /// to the running executable, starting at the Neo.App.Mcp library. That graph is the only
+    /// reliable source: the MCP SDK also brings app-local BCL assemblies (System.Text.Json 10,
+    /// System.IO.Pipelines, …) that are newer than the shared framework — a frozen app exported
+    /// without them starts its window and then dies the moment the MCP server comes up.
+    /// A file-name allow-list is the fallback for deployments without a deps.json.</para>
     /// </summary>
     internal static List<string> DiscoverNeoAppMcpRuntime()
     {
@@ -638,26 +575,95 @@ namespace Neo
             "Microsoft.Extensions.FileSystemGlobbing",
             "Microsoft.Extensions.Caching.",
             "Microsoft.Extensions.Primitives",
-            "System.Composition."
+            "System.Diagnostics.DiagnosticSource.", "System.Diagnostics.EventLog.",
+            "System.IO.Pipelines.", "System.Net.ServerSentEvents.",
+            "System.Text.Encodings.Web.", "System.Text.Json."
         };
 
-        var dlls = new List<string>();
-
-        // Production: scan McpServer's own bin (alongside the running exe).
+        // Production: McpServer's own bin (alongside the running exe). Dev-time fallback: walk up
+        // to the repo root and use Neo.McpServer's bin output.
         var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        CollectMatching(baseDir, prefixes, dlls);
-        if (dlls.Count > 0) return dlls;
-
-        // Dev-time fallback: walk up to the repo root and scan Neo.McpServer's bin output.
+        var candidateDirs = new List<string> { baseDir };
         foreach (var config in new[] { "Debug", "Release" })
+            candidateDirs.Add(Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
+                "Neo.McpServer", "bin", config, "net9.0")));
+
+        foreach (var dir in candidateDirs)
         {
-            var devDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
-                "Neo.McpServer", "bin", config, "net9.0"));
-            CollectMatching(devDir, prefixes, dlls);
+            var fromGraph = CollectFromDependencyGraph(dir);
+            if (fromGraph.Count > 0) return fromGraph;
+        }
+
+        var dlls = new List<string>();
+        foreach (var dir in candidateDirs)
+        {
+            CollectMatching(dir, prefixes, dlls);
             if (dlls.Count > 0) return dlls;
         }
 
         return dlls;
+
+        // Walks "<anything>.deps.json" in the folder from the Neo.App.Mcp library downwards and
+        // returns the runtime assemblies of that sub-graph which exist in the folder. Avalonia and
+        // its own closure are skipped: they ship through the plugin-window path, including the
+        // desktop backend and the native libraries this graph does not know about.
+        static List<string> CollectFromDependencyGraph(string dir)
+        {
+            var result = new List<string>();
+            if (!Directory.Exists(dir)) return result;
+
+            foreach (var depsFile in Directory.GetFiles(dir, "*.deps.json"))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(depsFile));
+                    if (!doc.RootElement.TryGetProperty("targets", out var targets)) continue;
+
+                    foreach (var target in targets.EnumerateObject())
+                    {
+                        var libraries = target.Value.EnumerateObject()
+                            .ToDictionary(l => l.Name.Split('/')[0], l => l.Value, StringComparer.OrdinalIgnoreCase);
+                        if (!libraries.ContainsKey("Neo.App.Mcp")) continue;
+
+                        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        var files = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+                        var queue = new Queue<string>();
+                        queue.Enqueue("Neo.App.Mcp");
+
+                        while (queue.Count > 0)
+                        {
+                            var name = queue.Dequeue();
+                            if (!visited.Add(name) || IsAvaloniaClosure(name)) continue;
+                            if (!libraries.TryGetValue(name, out var library)) continue;
+
+                            if (library.TryGetProperty("runtime", out var runtime))
+                                foreach (var asset in runtime.EnumerateObject())
+                                    files.Add(Path.GetFileName(asset.Name));
+
+                            if (library.TryGetProperty("dependencies", out var dependencies))
+                                foreach (var dependency in dependencies.EnumerateObject())
+                                    queue.Enqueue(dependency.Name);
+                        }
+
+                        result.AddRange(files.Select(f => Path.Combine(dir, f)).Where(File.Exists));
+                        if (result.Count > 0) return result;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[CompilationPipeline] deps.json not usable ({depsFile}): {ex.Message}");
+                }
+            }
+
+            return result;
+        }
+
+        static bool IsAvaloniaClosure(string libraryName) =>
+            libraryName.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase) ||
+            libraryName.StartsWith("MicroCom", StringComparison.OrdinalIgnoreCase) ||
+            libraryName.StartsWith("SkiaSharp", StringComparison.OrdinalIgnoreCase) ||
+            libraryName.StartsWith("HarfBuzzSharp", StringComparison.OrdinalIgnoreCase) ||
+            libraryName.StartsWith("Tmds.DBus", StringComparison.OrdinalIgnoreCase);
 
         static void CollectMatching(string dir, string[] prefixes, List<string> sink)
         {
@@ -687,9 +693,12 @@ namespace Neo
             if (dlls.Count > 0) return dlls;
         }
 
-        // 2. Relative to this executable (deployed side-by-side)
+        // 2. Relative to this executable (deployed side-by-side with the plugin window).
+        //    The marker must be a DLL only the plugin window brings: the server's own bin contains
+        //    Avalonia.Base.dll too (via Neo.App.Mcp), but no desktop backend and no Fluent theme —
+        //    taking it for a side-by-side deployment breaks export_app.
         var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        var candidate = Path.Combine(baseDir, "Avalonia.Base.dll");
+        var candidate = Path.Combine(baseDir, "Avalonia.Desktop.dll");
         if (File.Exists(candidate))
         {
             dlls.AddRange(Directory.GetFiles(baseDir, "*.dll"));

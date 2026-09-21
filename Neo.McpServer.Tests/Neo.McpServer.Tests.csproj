@@ -19,5 +19,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Neo.McpServer\Neo.McpServer.csproj" />
+
+    <!-- Build-order only: the export pipeline takes its Avalonia reference assemblies from this
+         project's bin folder (CompilationPipeline.DiscoverAvaloniaFromPluginWindow). -->
+    <ProjectReference Include="..\Neo.PluginWindowAvalonia\Neo.PluginWindowAvalonia.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 </Project>
