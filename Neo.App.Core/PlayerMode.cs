@@ -37,6 +37,15 @@ namespace Neo.App
         /// <summary>The name the app carries in titles and folder names.</summary>
         public string Name => Title;
 
+        /// <summary>What the app window shows its user once, the first time the app appears.</summary>
+        public const string HintText = "Ctrl+Shift+N: change this app with N.E.O.";
+
+        /// <summary>The first line in N.E.O.'s chat when it is called up in a living app.</summary>
+        public static string Greeting(PlayerProject player)
+            => $"This is {player.Title}, a living app. Describe what you want changed — the app is patched while it runs, " +
+               "and every change is saved. Ctrl+Shift+Z undoes the last one" +
+               (player.OriginalFile != null ? ", ↺ brings the app back to the version you received." : ".");
+
         /// <summary>True when the project's code is Avalonia; false for WPF; null when the manifest does not say (the host's setting applies).</summary>
         public bool? UsesAvalonia => Framework?.ToLowerInvariant() switch { "avalonia" => true, "wpf" => false, _ => null };
 

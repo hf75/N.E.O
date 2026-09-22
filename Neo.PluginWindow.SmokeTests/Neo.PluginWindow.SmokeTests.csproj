@@ -13,6 +13,7 @@
   <PropertyGroup>
     <TargetFramework>$(NeoTargetFrameworkWindows)</TargetFramework>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
@@ -46,5 +47,9 @@
     <ProjectReference Include="..\Neo.PluginWindowAvalonia.MCP\Neo.PluginWindowAvalonia.MCP.csproj" ReferenceOutputAssembly="false" Private="false" />
     <ProjectReference Include="..\Neo.PluginWindowWPF\Neo.PluginWindowWPF.csproj" ReferenceOutputAssembly="false" Private="false" />
     <ProjectReference Include="..\Neo.PluginWindowWPF.MCP\Neo.PluginWindowWPF.MCP.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <!-- The desktop hosts, for the living app tests (started as processes, driven through UI Automation). -->
+    <ProjectReference Include="..\Neo.App.Avalonia\Neo.App.Avalonia.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\Neo.App\Neo.App.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\Neo.App.Core\Neo.App.Core.csproj" />
   </ItemGroup>
 </Project>

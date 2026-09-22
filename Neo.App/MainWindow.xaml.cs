@@ -389,7 +389,10 @@ namespace Neo.App
             BtnResetOriginal.Visibility = player.OriginalFile != null ? Visibility.Visible : Visibility.Collapsed;
 
             if (_appController.ChildProcessService is ChildProcessService svc)
+            {
                 svc.HostToggleRequested += TogglePlayerPanel;
+                svc.ChildWindowHint = PlayerProject.HintText;
+            }
         }
 
         /// <summary>Loads the project into the app area and hides everything else — the window is the app.</summary>
@@ -405,6 +408,10 @@ namespace Neo.App
                 return;
             }
             _appController.AutoSaveProjectPath = player.ProjectFile;
+
+            // The import filled the chat with template code and history; a living app's user starts clean.
+            _appController.Logger.Clear();
+            _appController.Logger.LogMessage(PlayerProject.Greeting(player), BubbleType.Info);
         }
 
         /// <summary>Ctrl+Shift+N: N.E.O.'s panel beside the app, or away again.</summary>

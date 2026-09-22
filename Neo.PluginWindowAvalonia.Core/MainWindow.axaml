@@ -21,5 +21,11 @@
             </StackPanel>
         </Border>
 
+        <!-- One-line hint over the app, e.g. how to call N.E.O. up in a living app; goes away by itself or on click -->
+        <Border x:Name="HintBanner" IsVisible="False" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                Margin="0,0,0,18" Padding="14,8" CornerRadius="16" Background="#D0202020" ZIndex="100">
+            <TextBlock x:Name="HintText" Foreground="White" FontSize="13"/>
+        </Border>
+
 </Grid>
 </Window>

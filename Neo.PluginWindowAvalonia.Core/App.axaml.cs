@@ -139,6 +139,7 @@ namespace Neo.PluginWindowAvalonia
 
             // Ctrl+Shift+N: the user calls the host up (or puts it away) — in any mode.
             MainWin.HostToggleRequested += () => _ = SafeSendAsync(new IpcEnvelope(IpcTypes.ToggleHostWindow, "", "{}"));
+            MainWin.Hint = GetArgValue(args, "--hint");
 
             lifetime.MainWindow = MainWin;
 

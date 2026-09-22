@@ -112,6 +112,9 @@ namespace Neo.PluginWindowWPF
 
             // Ctrl+Shift+N: the user calls the host up (or puts it away).
             MainWin.HostToggleRequested += () => _ = SafeSendAsync(new IpcEnvelope(IpcTypes.ToggleHostWindow, "", "{}"));
+            for (int i = 0; i < e.Args.Length - 1; i++)
+                if (string.Equals(e.Args[i], "--hint", StringComparison.OrdinalIgnoreCase))
+                    MainWin.Hint = e.Args[i + 1];
 
             this.MainWindow = MainWin;
             MainWin.Show();

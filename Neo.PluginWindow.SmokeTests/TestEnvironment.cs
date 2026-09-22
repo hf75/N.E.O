@@ -22,6 +22,13 @@ internal static class TestEnvironment
 
     public static string HeadExe(string headProject) => Path.Combine(HeadBinDir(headProject), headProject + ".exe");
 
+    /// <summary>The built desktop host: "Neo.App" (WPF) or "Neo.App.Avalonia".</summary>
+    public static string HostExe(string hostProject)
+    {
+        var tfm = hostProject == "Neo.App" ? WindowsTfm : PortableTfm;
+        return Path.Combine(RepoRoot, hostProject, "bin", Configuration, tfm, hostProject + ".exe");
+    }
+
     private static readonly Lazy<string> AvaloniaPluginDll = new(() => Compile(
         "avalonia",
         """

@@ -10,9 +10,9 @@ Both desktop hosts export and play living apps. They differ in one thing: under 
 
 | | |
 |---|---|
-| Start | Only the app window, titled after the app. No splash screen, no N.E.O. |
+| Start | Only the app window, titled after the app. No splash screen, no N.E.O. — just a one-time line at the bottom: *Ctrl+Shift+N: change this app with N.E.O.* |
 | **Ctrl+Shift+N** | Avalonia host: N.E.O. appears docked beside the app (left, or right when there is no room) and follows the app window; closing the N.E.O. window puts it away too. WPF host: N.E.O.'s panel appears inside the window, beside the app. The same shortcut in either place puts it away again. |
-| A prompt | Works exactly as in N.E.O.: the app is patched in place when possible, reloaded otherwise. Every version that reaches the window is saved to the project file, so the next start shows it. |
+| A prompt | N.E.O.'s chat opens with one line explaining the app instead of the import's history. Prompts work exactly as in N.E.O.: the app is patched in place when possible, reloaded otherwise. Every version that reaches the window is saved to the project file, so the next start shows it. |
 | Undo / History / Code editor | As in N.E.O. (`Ctrl+Shift+Z`, History, `Ctrl+Shift+C`). Import, Export and Clear are hidden — the app *is* the project. |
 | ↺ Reset to original | Back to the exported version. The user's own changes are discarded (the history stays in the chat until the next start). |
 | Closing the app window | Ends the app, N.E.O. included. (WPF host: Alt+F4 inside the embedded app is ignored; the window's own close button ends it.) |
@@ -51,7 +51,7 @@ The living app **is** N.E.O.: the same executable, started in **player mode**. A
 
 Code map: `Neo.App.Core/PlayerMode.cs` (detection, manifest, `LivingAppExporter`), `Neo.App.Avalonia/MainWindow.axaml.cs` (`RunAsPlayerAsync`, `ConfigurePlayerMode`, toggling and docking), `Neo.App.Avalonia/AvaloniaChildProcessService.cs` (`DockChildToHost`, `ChildWindowBounds`, `HostToggleRequested`, `ChildExited`), `Neo.App/MainWindow.xaml.cs` (`ConfigurePlayerWindow`, `RunAsPlayerAsync`, `TogglePlayerPanel`), `Neo.App/ChildProcessService.cs` (`HostToggleRequested`), the children's `App` (`--title`, `--icon`, bounds reports, `Dock`, `ToggleHostWindow`), `Neo.IPC/IPC.cs`.
 
-Tests: `Neo.App.Core.Tests/PlayerModeTests` (detection, manifest, export layout, reset), `Neo.PluginWindow.SmokeTests/PluginWindowSmokeTests` (bounds reports, `Dock=false`, clean close). The end-to-end path — export through the real host, start the exported `.exe`, change it through the code editor, autosave, reset, close — was verified with UI automation against the real windows, for both hosts.
+Tests: `Neo.App.Core.Tests/PlayerModeTests` (detection, manifest, export layout, reset), `Neo.PluginWindow.SmokeTests/PluginWindowSmokeTests` (bounds reports, `Dock=false`, clean close), `Neo.PluginWindow.SmokeTests/LivingAppSmokeTests` (both real hosts started with `--play`, driven through UI Automation: only the app with its hint, Ctrl+Shift+N from both sides, state kept, close ends the host). The end-to-end path — export through the real host, start the exported `.exe`, change it through the code editor, autosave, reset, close — was verified with UI automation against the real windows, for both hosts.
 
 ## Limits
 

@@ -248,6 +248,10 @@ namespace Neo.App
                 return;
             }
             _appController.AutoSaveProjectPath = Player.ProjectFile;
+
+            // The import filled the chat with template code and history; a living app's user starts clean.
+            _appController.Logger.Clear();
+            _appController.Logger.LogMessage(PlayerProject.Greeting(Player), BubbleType.Info);
         }
 
         private void ConfigurePlayerMode()
@@ -264,6 +268,7 @@ namespace Neo.App
             svc.TreatCloseAsCrash = false;
             svc.ChildWindowTitle = player.Title;
             svc.ChildWindowIcon = player.IconFile;
+            svc.ChildWindowHint = PlayerProject.HintText;
             svc.HostToggleRequested += () => Dispatcher.UIThread.Post(ToggleHostWindow);
             svc.ChildWindowBoundsChanged += _ => Dispatcher.UIThread.Post(() => { if (IsVisible) PlaceBesideApp(); });
             svc.ChildExited += () => Dispatcher.UIThread.Post(ShutdownPlayer);

@@ -56,6 +56,9 @@ namespace Neo.App
         public string? ChildWindowTitle { get; set; }
         public string? ChildWindowIcon { get; set; }
 
+        /// <summary>A line the app window shows for a few seconds once the app is first loaded.</summary>
+        public string? ChildWindowHint { get; set; }
+
         /// <summary>The app window's last reported screen bounds (position in pixels, size in DIPs); null before it reported.</summary>
         public ParentWindowBoundsMessage? ChildWindowBounds { get; private set; }
 
@@ -148,6 +151,8 @@ namespace Neo.App
                 childArgs += $" --title \"{ChildWindowTitle.Replace("\"", "")}\"";
             if (!string.IsNullOrWhiteSpace(ChildWindowIcon) && File.Exists(ChildWindowIcon))
                 childArgs += $" --icon \"{ChildWindowIcon}\"";
+            if (!string.IsNullOrWhiteSpace(ChildWindowHint))
+                childArgs += $" --hint \"{ChildWindowHint.Replace("\"", "")}\"";
 
             var psi = new ProcessStartInfo
             {

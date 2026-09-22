@@ -14,6 +14,7 @@
 | **Ctrl+Shift+C** | Toggle code editor | Yes | Yes |
 | **Ctrl+2** | Cycle view mode | Default / Prompt-Only / Content-Only | Default / Prompt-Only |
 | **Ctrl+Shift+F** | Toggle fullscreen | WPF: content-only view | Avalonia: Live Preview fullscreen |
+| **Ctrl+Shift+N** | Living app: show / hide N.E.O. (works inside the app window too) | Panel inside the window | N.E.O. window docked beside the app |
 | **F11** | Toggle main window fullscreen | — | Yes |
 | **Escape** | Cancel current operation / exit fullscreen / close code editor | Yes | Yes |
 

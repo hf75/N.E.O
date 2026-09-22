@@ -29,6 +29,9 @@ namespace Neo.App
         /// <summary>The user pressed Ctrl+Shift+N in the app (player mode: show or hide N.E.O.'s panel).</summary>
         public event Action? HostToggleRequested;
 
+        /// <summary>A line the app shows for a few seconds once it is first loaded (player mode).</summary>
+        public string? ChildWindowHint { get; set; }
+
         //
         // Deps
         //
@@ -123,13 +126,17 @@ namespace Neo.App
             if (_crossplatformSettings.UseAvalonia == true)
                 childWindowAsmToStart = "Neo.PluginWindowAvalonia.exe";
 
+            string childArgs = $"--pipe \"{pipeName}\" --parentPid {Environment.ProcessId}";
+            if (!string.IsNullOrWhiteSpace(ChildWindowHint))
+                childArgs += $" --hint \"{ChildWindowHint.Replace("\"", "")}\"";
+
             if (_useSandboxing)
             {
                 _currentAcProfile = AppContainerProfile.CreateNewGuid();
                 _pipeServer = new PipeServer(pipeName, _currentAcProfile.Sid);
                 _childProcess = ProcessFactory.StartInAppContainer(
                     childWindowAsmToStart,
-                    $"--pipe \"{pipeName}\" --parentPid {Environment.ProcessId}",
+                    childArgs,
                     _sandboxSettings,
                     _currentAcProfile);
             }
@@ -138,7 +145,7 @@ namespace Neo.App
                 _pipeServer = new PipeServer(pipeName);
                 _childProcess = ProcessFactory.StartProcess(
                     childWindowAsmToStart,
-                    $"--pipe \"{pipeName}\" --parentPid {Environment.ProcessId}",
+                    childArgs,
                     false,
                     SandboxSettings.MaximumSecurity);
             }

@@ -55,6 +55,22 @@ namespace Neo.PluginWindowAvalonia
         /// </summary>
         public event Action? HostToggleRequested;
 
+        /// <summary>Text shown over the app for a few seconds once it is first loaded (the host passes it); null: none.</summary>
+        public string? Hint { get; set; }
+        private bool _hintShown;
+
+        private void ShowHintOnce()
+        {
+            if (_hintShown || string.IsNullOrWhiteSpace(Hint)) return;
+            _hintShown = true;
+            HintText.Text = Hint;
+            HintBanner.IsVisible = true;
+            HintBanner.PointerPressed += (_, _) => HintBanner.IsVisible = false;
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+            timer.Tick += (_, _) => { timer.Stop(); HintBanner.IsVisible = false; };
+            timer.Start();
+        }
+
         private void OnKeyDown(object? sender, global::Avalonia.Input.KeyEventArgs e)
         {
             if (e.Key == global::Avalonia.Input.Key.N
@@ -226,6 +242,7 @@ namespace Neo.PluginWindowAvalonia
                     HasEverLoadedControl = true;
                     WaitOverlay.IsVisible = false;
                     StopWaitTimer();
+                    ShowHintOnce();
                 }
                 else
                 {
@@ -235,6 +252,7 @@ namespace Neo.PluginWindowAvalonia
                         HasEverLoadedControl = true;
                         WaitOverlay.IsVisible = false;
                         StopWaitTimer();
+                        ShowHintOnce();
                     });
                 }
             }

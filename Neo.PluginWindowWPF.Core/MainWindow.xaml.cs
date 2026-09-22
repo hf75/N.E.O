@@ -66,6 +66,22 @@ namespace Neo.PluginWindowWPF
         /// <summary>Ctrl+Shift+N: the user wants the host (N.E.O.) shown or hidden — in player mode the host hides behind this window.</summary>
         public event Action? HostToggleRequested;
 
+        /// <summary>Text shown over the app for a few seconds once it is first loaded (the host passes it); null: none.</summary>
+        public string? Hint { get; set; }
+        private bool _hintShown;
+
+        private void ShowHintOnce()
+        {
+            if (_hintShown || string.IsNullOrWhiteSpace(Hint)) return;
+            _hintShown = true;
+            HintText.Text = Hint;
+            HintBanner.Visibility = Visibility.Visible;
+            HintBanner.MouseDown += (_, _) => HintBanner.Visibility = Visibility.Collapsed;
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+            timer.Tick += (_, _) => { timer.Stop(); HintBanner.Visibility = Visibility.Collapsed; };
+            timer.Start();
+        }
+
         private void OnKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.N && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
@@ -234,6 +250,7 @@ namespace Neo.PluginWindowWPF
                     HasEverLoadedControl = true;
                     WaitOverlay.Visibility = Visibility.Collapsed;
                     StopWaitTimer();
+                    ShowHintOnce();
                 }
                 else
                 {
@@ -243,6 +260,7 @@ namespace Neo.PluginWindowWPF
                         HasEverLoadedControl = true;
                         WaitOverlay.Visibility = Visibility.Collapsed;
                         StopWaitTimer();
+                        ShowHintOnce();
                     }, DispatcherPriority.Send);
                 }
             }

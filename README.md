@@ -77,6 +77,7 @@ Open <http://localhost:5099>. Full guide: [docs/wiki/Web-App.md](docs/wiki/Web-A
 - **Prompt → code → live UI in seconds.** Claude/GPT/Gemini writes C#; Roslyn compiles; a collectible `AssemblyLoadContext` loads it into a plugin window (desktop) or the same WASM runtime (web).
 - **Iterate.** Follow-up prompts see the previous code and produce full updates (desktop/MCP also support unified-diff patches).
 - **[Hot reload](docs/wiki/Hot-Reload.md)** — the next prompt patches the *running* app (desktop and MCP): the file you loaded, the text you typed, the selected row are still there when the new feature appears.
+- **[Living apps](docs/wiki/Living-Apps.md)** — export an app that keeps being built by the person using it: a normal desktop app until they press Ctrl+Shift+N, then N.E.O. slides in beside it, patches the running app, saves the change, and can reset to the version they received.
 - **Branching undo/redo**, **export to standalone `.exe`** (Win/Linux/macOS), **AppContainer sandbox** (WPF).
 - **Session save/load** as `.neo` files — same format across desktop, MCP, and Web App.
 - **Built-in AI capabilities**: image generation (Gemini), image analysis (Gemini), speech-to-text (Whisper), text-to-speech (OpenAI TTS).
