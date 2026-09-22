@@ -162,6 +162,7 @@ public class SettingsModelTests
 /// We test the serialization logic by doing a Save+Load roundtrip on the real path,
 /// and we test corrupt-file handling by writing a temporary corrupt file.
 /// </summary>
+[Collection("SettingsFolder")]
 public class SettingsServiceTests
 {
     // ── Save + Load roundtrip ───────────────────────────────────────

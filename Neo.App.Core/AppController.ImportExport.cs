@@ -1,6 +1,7 @@
 ﻿using Neo.Agents;
 using Neo.Agents.Core;
 using Neo.IPC;
+using Neo.Collab;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Newtonsoft.Json;
@@ -147,13 +148,23 @@ namespace Neo.App
 
         public async Task ImportProjectAsync(string assemblyPath)
         {
+            await RunSharedChangeAsync(StateKinds.Import, "importing a project", false, async () =>
+            {
+                await ImportProjectCoreAsync(assemblyPath);
+                return true;
+            });
+        }
+
+        /// <param name="announce">The chat line on success; null: "App '…' successfully imported!".</param>
+        private async Task ImportProjectCoreAsync(string assemblyPath, string? announce = null)
+        {
             // The project file is what is being read here; it is written again only once the
             // imported state is in place (the build below runs before that).
             var autoSave = AutoSaveProjectPath;
             AutoSaveProjectPath = null;
 
             // 0. Clear everything
-            await ClearSessionAsync();
+            await ClearSessionCoreAsync();
 
             // 1. Prüfen, ob die App bereit ist.
             if (CurrentStatus != AppStatus.Idle) { AutoSaveProjectPath = autoSave; return; }
@@ -214,7 +225,7 @@ namespace Neo.App
                 if (success)
                 {
                     Logger.LogHistory(resxData.Code!);
-                    Logger.LogMessage($"App '{Path.GetFileNameWithoutExtension(assemblyPath)}' successfully imported!", BubbleType.Answer);
+                    Logger.LogMessage(announce ?? $"App '{Path.GetFileNameWithoutExtension(assemblyPath)}' successfully imported!", BubbleType.Answer);
 
                     if (!string.IsNullOrEmpty(resxData.History))
                     {

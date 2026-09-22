@@ -66,9 +66,24 @@ namespace Neo.App
         public IAppExportService AppExportService { get; }
         public IAppInstallerService AppInstallerService { get; }
         public ICompilationService CompilationService { get; }
-        public INuGetPackageService NugetPackageService { get; }
+        public INuGetPackageService NugetPackageService { get; private set; } = null!;
         public IChildProcessService ChildProcessService { get; }
-        public string NuGetPackageDirectory = null!;
+
+        private string _nuGetPackageDirectory = null!;
+
+        /// <summary>
+        /// Where NuGet packages go. Setting it (player mode does, after construction) moves the
+        /// package service there too — it used to keep downloading into the old folder.
+        /// </summary>
+        public string NuGetPackageDirectory
+        {
+            get => _nuGetPackageDirectory;
+            set
+            {
+                _nuGetPackageDirectory = value;
+                NugetPackageService = new NuGetPackageService(value, _coreRefPath, _desktopRefPath);
+            }
+        }
         public List<string> GrantedFolders { get; set; } = new();
         private List<string> DefaultNugets { get; set; } = new();
 
@@ -133,15 +148,20 @@ namespace Neo.App
             _view = view;
             _platformServices = platformServices ?? throw new ArgumentNullException(nameof(platformServices));
 
-            Logger = view.CreateLogger(AppState);
+            // Records what a change writes to the chat, for the others in a shared session.
+            _chat = new SessionChatRecorder(view.CreateLogger(AppState));
+            Logger = _chat;
 
             Settings = SettingsService.Load();
 
+            // The hosts embed these helper sources; without them (a test process) generated apps
+            // simply get no AI-query/Python helpers.
             var hostAssembly = System.Reflection.Assembly.GetEntryAssembly() ?? GetType().Assembly;
-            AgentHelperCode = EmbeddedResourceReader.GetEmbeddedResourceContent(hostAssembly, "AgentHelper.cs");
-
-            PythonHelperCode["PythonHost.cs"] = EmbeddedResourceReader.GetEmbeddedResourceContent(hostAssembly, "PythonHost.cs");
-            PythonHelperCode["PythonModuleLoader.cs"] = EmbeddedResourceReader.GetEmbeddedResourceContent(hostAssembly, "PythonModuleLoader.cs");
+            AgentHelperCode = TryReadEmbedded(hostAssembly, "AgentHelper.cs");
+            if (TryReadEmbedded(hostAssembly, "PythonHost.cs") is { } pythonHost)
+                PythonHelperCode["PythonHost.cs"] = pythonHost;
+            if (TryReadEmbedded(hostAssembly, "PythonModuleLoader.cs") is { } moduleLoader)
+                PythonHelperCode["PythonModuleLoader.cs"] = moduleLoader;
 
             // Auto-discover plugin agents (ImageGen, STT, etc.)
             PluginAgents = DiscoverPluginAgents();
@@ -255,11 +275,12 @@ namespace Neo.App
             _coreRefPath = DotNetRuntimeFinder.GetHighestRuntimePath(DotNetRuntimeType.NetCoreApp, dotnetMajor);
             _desktopRefPath = DotNetRuntimeFinder.GetHighestRuntimePath(DotNetRuntimeType.WindowsDesktopApp, dotnetMajor);
 
-            NuGetPackageDirectory = Path.Combine(
+            // A second N.E.O. running at the same time gets folders of its own (InstanceFolder).
+            var instanceRoot = InstanceFolder.Acquire(Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                _view.AppName,
-                "NuGetPackages"
-            );
+                _view.AppName));
+
+            NuGetPackageDirectory = Path.Combine(instanceRoot, "NuGetPackages");
 
             //PythonModulesDirectory = Path.Combine(
             //    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -267,17 +288,13 @@ namespace Neo.App
             //    "PythonModules"
             //);
 
-            DllPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                _view.AppName,
-                "DynamicUserControl.dll"
-            );
+            DllPath = Path.Combine(instanceRoot, "DynamicUserControl.dll");
 
             AppImportService = new AppImportService();
             AppExportService = new AppExportService(_coreRefPath, _desktopRefPath, _platformServices);
             AppInstallerService = new AppInstallerService(AppExportService, _platformServices);
             CompilationService = new CompilationService(_coreRefPath, _desktopRefPath);
-            NugetPackageService = new NuGetPackageService(NuGetPackageDirectory, _coreRefPath, _desktopRefPath);
+            // (NugetPackageService was created with NuGetPackageDirectory above.)
             ChildProcessService = _view.CreateChildProcessService();
             ChildProcessService.ChildProcessCrashed += HandleChildProcessCrashed;
             ChildProcessService.ChildLogReceived += (log) => Debug.WriteLine($"[Child Log] {log.Message}");
@@ -285,6 +302,12 @@ namespace Neo.App
             RecreatePromptToDllSession(preserveState: false);
 
             _undoRedo = new UndoRedoManager(AppState);
+        }
+
+        private static string? TryReadEmbedded(System.Reflection.Assembly assembly, string name)
+        {
+            try { return EmbeddedResourceReader.GetEmbeddedResourceContent(assembly, name); }
+            catch (FileNotFoundException) { return null; }
         }
 
         /// <summary>

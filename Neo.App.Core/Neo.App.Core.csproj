@@ -23,6 +23,7 @@
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.NugetLoader\Neo.Agents.NugetLoader.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.PowerShell\Neo.Agents.PowerShell.csproj" />
     <ProjectReference Include="..\Neo.App.Api\Neo.App.Api.csproj" />
+    <ProjectReference Include="..\Neo.Collab\Neo.Collab.csproj" />
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
     <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
     <ProjectReference Include="..\Neo.HotReload\Neo.HotReload.csproj" />

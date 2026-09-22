@@ -1,6 +1,7 @@
 ﻿using Neo.Agents;
 using Neo.Agents.Core;
 using Neo.IPC;
+using Neo.Collab;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Newtonsoft.Json;
@@ -26,7 +27,9 @@ namespace Neo.App
             await CompileAndShowAsync( VirtualProjectFiles.GetSourceCodeAsStrings() );
         }
 
-        public async Task<bool> Undo()
+        public Task<bool> Undo() => RunSharedChangeAsync(StateKinds.Undo, "undoing the last change", false, UndoCoreAsync);
+
+        private async Task<bool> UndoCoreAsync()
         {
             if (CurrentStatus != AppStatus.Idle) return false;
             try
@@ -40,7 +43,9 @@ namespace Neo.App
             }
         }
 
-        public async Task<bool> Redo()
+        public Task<bool> Redo() => RunSharedChangeAsync(StateKinds.Redo, "redoing a change", false, RedoCoreAsync);
+
+        private async Task<bool> RedoCoreAsync()
         {
             if (CurrentStatus != AppStatus.Idle) return false;
             try
@@ -54,7 +59,10 @@ namespace Neo.App
             }
         }
 
-        public async Task<bool> CheckoutHistoryAsync(HistoryNode node)
+        public Task<bool> CheckoutHistoryAsync(HistoryNode node) =>
+            RunSharedChangeAsync(StateKinds.Checkout, "going to another version from the history", false, () => CheckoutHistoryCoreAsync(node));
+
+        private async Task<bool> CheckoutHistoryCoreAsync(HistoryNode node)
         {
             if (CurrentStatus != AppStatus.Idle) return false;
 
@@ -71,6 +79,15 @@ namespace Neo.App
 
         // In AppController.cs
         public async Task ClearSessionAsync(string reason = "Clearing...")
+        {
+            await RunSharedChangeAsync(StateKinds.Clear, "clearing the session", false, async () =>
+            {
+                await ClearSessionCoreAsync(reason);
+                return true;
+            });
+        }
+
+        private async Task ClearSessionCoreAsync(string reason = "Clearing...")
         {
             // 1. Prüfen, ob die App bereit ist.
             if (CurrentStatus != AppStatus.Idle) { Debug.WriteLine("[ClearSession] Skipped: not Idle"); return; }
@@ -165,6 +182,15 @@ namespace Neo.App
         }
 
         public async Task ApplyManualCodeEditAsync(string newCode)
+        {
+            await RunSharedChangeAsync(StateKinds.Edit, "editing the code", false, async () =>
+            {
+                await ApplyManualCodeEditCoreAsync(newCode);
+                return true;
+            });
+        }
+
+        private async Task ApplyManualCodeEditCoreAsync(string newCode)
         {
             if (CurrentStatus != AppStatus.Idle) return;
 

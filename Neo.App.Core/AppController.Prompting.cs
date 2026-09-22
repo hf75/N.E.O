@@ -1,6 +1,7 @@
 ﻿using Neo.Agents;
 using Neo.Agents.Core;
 using Neo.IPC;
+using Neo.Collab;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Newtonsoft.Json;
@@ -82,9 +83,8 @@ namespace Neo.App
 
         private void RecreatePromptToDllSession(bool preserveState)
         {
-            if (AiAgent == null)
-                return;
-
+            // Also without an AI agent: the project (code editor, shared sessions) must exist; a
+            // prompt then fails with "AI agent is not configured" (ExecuteGeneralPrompt says so first).
             var referenceDirs = new List<string>();
             if (!string.IsNullOrWhiteSpace(_coreRefPath)) referenceDirs.Add(_coreRefPath);
             if (!string.IsNullOrWhiteSpace(_desktopRefPath)) referenceDirs.Add(_desktopRefPath);
@@ -259,7 +259,18 @@ namespace Neo.App
 
         // In AppController.cs
 
-        public async Task ExecutePromptAsync(string prompt)
+        /// <summary>Runs a prompt. False when it could not start (busy, or someone else in the shared session is changing the app) — keep the text then.</summary>
+        public Task<bool> ExecutePromptAsync(string prompt)
+        {
+            if (CurrentStatus != AppStatus.Idle) return Task.FromResult(false);
+            return RunSharedChangeAsync(StateKinds.Prompt, "working on a prompt: " + Truncate(ToSingleLine(prompt), 80), false, async () =>
+            {
+                await ExecutePromptCoreAsync(prompt);
+                return true;
+            }, title: prompt);
+        }
+
+        private async Task ExecutePromptCoreAsync(string prompt)
         {
             if (CurrentStatus != AppStatus.Idle) return;
 

@@ -153,6 +153,7 @@ namespace Neo.App
             SettingsService.Save(preSettings);
 
             _appController = new AppController(this, new AvaloniaPlatformServices());
+            _appController.SharingChanged += () => global::Avalonia.Threading.Dispatcher.UIThread.Post(UpdateShareButton);
 
             if (Player != null)
             {
@@ -592,8 +593,9 @@ namespace Neo.App
                     return;
 
                 string prompt = txtPrompt.Text;
-                await _appController.ExecutePromptAsync(prompt);
-                txtPrompt.Clear();
+                // Not started (someone else in the shared session is changing the app): keep the text.
+                if (await _appController.ExecutePromptAsync(prompt))
+                    txtPrompt.Clear();
                 txtPrompt.Focus();
                 e.Handled = true;
             }
@@ -633,6 +635,47 @@ namespace Neo.App
         {
             _appController.SwitchAI();
             Title = titleBase + " " + $"[{_appController.AiAgent?.Name}]";
+        }
+
+        // ─── Shared session ─────────────────────────────────────────────
+
+        private Views.ShareSessionWindow? _shareWindow;
+
+        private void Button_Click_Share(object? sender, RoutedEventArgs e)
+        {
+            if (_shareWindow != null)
+            {
+                _shareWindow.Activate();
+                return;
+            }
+            try
+            {
+                EnsureVisibleForDialog();
+                _shareWindow = new Views.ShareSessionWindow(_appController);
+                _shareWindow.Closed += (_, _) => _shareWindow = null;
+                _shareWindow.Show(this);
+            }
+            catch (Exception ex)
+            {
+                _shareWindow = null;
+                _appController.Logger.LogMessage("The share dialog could not be opened: " + ex, BubbleType.CompletionError);
+            }
+        }
+
+        /// <summary>Green while others are connected; the tooltip says who.</summary>
+        private void UpdateShareButton()
+        {
+            var session = _appController.Sharing;
+            if (session?.IsConnected == true)
+            {
+                BtnShare.Foreground = global::Avalonia.Media.Brushes.SeaGreen;
+                ToolTip.SetTip(BtnShare, "Shared session: " + string.Join(", ", session.Participants));
+            }
+            else
+            {
+                BtnShare.ClearValue(ForegroundProperty);
+                ToolTip.SetTip(BtnShare, session == null ? "Share session" : "Share session (waiting for someone to join)");
+            }
         }
 
         // ─── Toolbar Button Handlers ────────────────────────────────────

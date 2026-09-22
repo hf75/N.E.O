@@ -113,13 +113,13 @@ public class LivingAppSmokeTests : IDisposable
             // Ctrl+Shift+N inside the app: N.E.O. comes …
             app.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit)).SetFocus();
             await Task.Delay(300);
-            System.Windows.Forms.SendKeys.SendWait("^+n");
+            TopLevelWindows.Keys(app, "^+n");
             (await WaitForAsync(() => NeoVisible(host.Id, wpf) ? new object() : null, 10, "N.E.O. after Ctrl+Shift+N")).Should().NotBeNull();
             NeoPrompt(host.Id, wpf)!.SetFocus();
 
             // … and goes again, from N.E.O.'s side.
             await Task.Delay(300);
-            System.Windows.Forms.SendKeys.SendWait("^+n");
+            TopLevelWindows.Keys(NeoWindow(host.Id, wpf)!, "^+n");
             await Task.Delay(1200);
             NeoVisible(host.Id, wpf).Should().BeFalse("the same shortcut puts N.E.O. away");
             AppWindow("Notes", wpf, withContent: true)!.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "• Milch kaufen"))
@@ -133,15 +133,14 @@ public class LivingAppSmokeTests : IDisposable
             {
                 window.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit)).SetFocus();
                 await Task.Delay(300);
-                System.Windows.Forms.SendKeys.SendWait("%{F4}");
+                TopLevelWindows.Keys(window, "%{F4}");
             }
             host.WaitForExit(15000).Should().BeTrue("the host exits with the app window");
         }
         finally
         {
             try { if (!host.HasExited) host.Kill(entireProcessTree: true); } catch { }
-            foreach (var name in new[] { "Neo.PluginWindowAvalonia", "Neo.PluginWindowWPF" })
-                foreach (var p in Process.GetProcessesByName(name)) { try { p.Kill(); } catch { } }
+            TopLevelWindows.KillChildrenOf(host.Id); // only this host's app window, never another N.E.O.'s
         }
     }
 
@@ -164,11 +163,11 @@ public class LivingAppSmokeTests : IDisposable
         => wpf ? NeoPrompt(hostPid, wpf) is { } prompt && !prompt.Current.IsOffscreen
                : FindWindow(w => w.Pid == hostPid && w.Title.StartsWith("N.E.O. ·")) != null;
 
-    private static AutomationElement? NeoPrompt(int hostPid, bool wpf)
-    {
-        var window = wpf ? FindWindow(w => w.Pid == hostPid) : FindWindow(w => w.Pid == hostPid && w.Title.StartsWith("N.E.O. ·"));
-        return window?.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "txtPrompt"));
-    }
+    private static AutomationElement? NeoWindow(int hostPid, bool wpf) =>
+        wpf ? FindWindow(w => w.Pid == hostPid) : FindWindow(w => w.Pid == hostPid && w.Title.StartsWith("N.E.O. ·"));
+
+    private static AutomationElement? NeoPrompt(int hostPid, bool wpf) =>
+        NeoWindow(hostPid, wpf)?.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "txtPrompt"));
 
     private static AutomationElement? FindWindow(Func<(int Pid, string Title), bool> predicate) => TopLevelWindows.Find(predicate);
 

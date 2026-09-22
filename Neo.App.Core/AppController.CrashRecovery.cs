@@ -1,6 +1,7 @@
 ﻿using Neo.Agents;
 using Neo.Agents.Core;
 using Neo.IPC;
+using Neo.Collab;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Newtonsoft.Json;
@@ -57,7 +58,14 @@ namespace Neo.App
         // reads it when it hands the update to the window.
         private (bool Active, string? Action) _inPlaceRepair;
 
-        private async Task PerformAutomaticRepairAsync(ErrorMessage err)
+        private Task PerformAutomaticRepairAsync(ErrorMessage err) =>
+            RunSharedChangeAsync(StateKinds.Repair, "repairing the app after an error", false, async () =>
+            {
+                await PerformAutomaticRepairCoreAsync(err);
+                return true;
+            });
+
+        private async Task PerformAutomaticRepairCoreAsync(ErrorMessage err)
         {
             // In place only when the app is still there to be patched.
             bool inPlace = err.Recoverable && ChildProcessService.HasLoadedControl && _hotReload.HasRunningApp;

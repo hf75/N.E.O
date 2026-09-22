@@ -53,6 +53,10 @@ Code map: `Neo.App.Core/PlayerMode.cs` (detection, manifest, `LivingAppExporter`
 
 Tests: `Neo.App.Core.Tests/PlayerModeTests` (detection, manifest, export layout, reset), `Neo.PluginWindow.SmokeTests/PluginWindowSmokeTests` (bounds reports, `Dock=false`, clean close), `Neo.PluginWindow.SmokeTests/LivingAppSmokeTests` (both real hosts started with `--play`, driven through UI Automation: only the app with its hint, Ctrl+Shift+N from both sides, state kept, close ends the host). The end-to-end path — export through the real host, start the exported `.exe`, change it through the code editor, autosave, reset, close — was verified with UI automation against the real windows, for both hosts.
 
+## Getting help from afar
+
+In a living app, Ctrl+Shift+N → **Share** invites someone who knows N.E.O. into the session ([[Shared Sessions]]): they change the app from their PC while its user keeps working in it. Only code travels; the user's data stays on their PC.
+
 ## Living apps on the app network
 
 A living app is on the [[App Network]] under its title (or the name in its `[AppInfo]`): other N.E.O. apps on the machine can call what it offers, and a prompt inside it can use the other running apps — "take the customer from the CRM app".

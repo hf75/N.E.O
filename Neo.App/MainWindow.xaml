@@ -203,6 +203,9 @@
                 <!-- Export Button -->
                 <Button x:Name="BtnExport" ToolTip="Export" Margin="8,0,0,0" Content="&#xEDE1;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Export"></Button>
 
+                <!-- Share Button: invite people into this session, or join theirs -->
+                <Button x:Name="BtnShare" ToolTip="Share session" Margin="8,0,0,0" Content="&#xE72D;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Share"></Button>
+
                 <!-- SANDBOX HUB -->
                 <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
                     <ToggleButton x:Name="BtnSandboxHub" ToolTip="Sandbox Controls" IsChecked="False">

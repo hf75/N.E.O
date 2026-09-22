@@ -596,38 +596,31 @@ public class DesktopHotReloadSmokeTests : IDisposable
 
     /// <summary>
     /// Clicks a button in the child's window as the user would: found through UI Automation, clicked
-    /// with the mouse. The tree is walked by hand and the click is a real one — Avalonia's provider
-    /// throws on a FindFirst over descendants, and its InvokePattern does not click.
+    /// with the mouse — only when the window is in front and nothing covers the button
+    /// (<see cref="TopLevelWindows.Click"/>). The tree is walked by hand and the click is a real one:
+    /// Avalonia's provider throws on a FindFirst over descendants, and its InvokePattern does not click.
     /// </summary>
     private static bool ClickButton(int processId, string name)
     {
         for (int attempt = 0; attempt < 30; attempt++)
         {
+            System.Windows.Automation.AutomationElement? window = null, button = null;
             try
             {
-                var window = TopLevelWindows.Find(w => w.Pid == processId);
-                var button = window == null ? null : Descendants(window).FirstOrDefault(e =>
+                window = TopLevelWindows.Find(w => w.Pid == processId);
+                button = window == null ? null : Descendants(window).FirstOrDefault(e =>
                     e.Current.ControlType == System.Windows.Automation.ControlType.Button && e.Current.Name == name);
-                if (button != null && !button.Current.BoundingRectangle.IsEmpty)
-                {
-                    var r = button.Current.BoundingRectangle;
-                    SetForegroundWindow((IntPtr)window!.Current.NativeWindowHandle);
-                    SetCursorPos((int)(r.X + r.Width / 2), (int)(r.Y + r.Height / 2));
-                    mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
-                    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-                    return true;
-                }
             }
             catch (Exception) { /* the window is still coming up; its automation tree is not ready yet */ }
+            if (window != null && button != null && !button.Current.BoundingRectangle.IsEmpty)
+            {
+                TopLevelWindows.Click(window, button); // throws rather than click into another window
+                return true;
+            }
             Thread.Sleep(200);
         }
         return false;
     }
-
-    private const uint MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004;
-    [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
-    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
-    [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
 
     private static IEnumerable<System.Windows.Automation.AutomationElement> Descendants(System.Windows.Automation.AutomationElement root)
     {

@@ -301,6 +301,7 @@ namespace Neo.App
             }
 
             _appController = new AppController(this, new WpfPlatformServices());
+            _appController.SharingChanged += () => Dispatcher.BeginInvoke(UpdateShareButton);
 
             if (Player != null)
             {
@@ -907,9 +908,9 @@ namespace Neo.App
                 // Der neue, saubere Aufruf:
                 string prompt = txtPrompt.Text;
 
-                await _appController.ExecutePromptAsync(prompt);
-
-                txtPrompt.Clear();
+                // Not started (someone else in the shared session is changing the app): keep the text.
+                if (await _appController.ExecutePromptAsync(prompt))
+                    txtPrompt.Clear();
                 txtPrompt.Focus();
 
                 e.Handled = true;
@@ -1045,6 +1046,38 @@ namespace Neo.App
         }
 
         // In MainWindow.xaml.cs
+        // ─── Shared session ─────────────────────────────────────────────
+
+        private ShareSessionWindow? _shareWindow;
+
+        private void Button_Click_Share(object sender, RoutedEventArgs e)
+        {
+            if (_shareWindow != null)
+            {
+                _shareWindow.Activate();
+                return;
+            }
+            _shareWindow = new ShareSessionWindow(_appController) { Owner = this };
+            _shareWindow.Closed += (_, _) => _shareWindow = null;
+            _shareWindow.Show();
+        }
+
+        /// <summary>Green while others are connected; the tooltip says who.</summary>
+        private void UpdateShareButton()
+        {
+            var session = _appController.Sharing;
+            if (session?.IsConnected == true)
+            {
+                BtnShare.Foreground = System.Windows.Media.Brushes.SeaGreen;
+                BtnShare.ToolTip = "Shared session: " + string.Join(", ", session.Participants);
+            }
+            else
+            {
+                BtnShare.ClearValue(ForegroundProperty);
+                BtnShare.ToolTip = session == null ? "Share session" : "Share session (waiting for someone to join)";
+            }
+        }
+
         private async void Button_Click_Export(object sender, RoutedEventArgs e)
         {
             // Die UI-Logik (Dialog anzeigen) bleibt hier.

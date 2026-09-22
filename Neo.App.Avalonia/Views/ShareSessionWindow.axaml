@@ -1,0 +1,84 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Neo.App.Views.ShareSessionWindow"
+        Title="Share session"
+        FontFamily="Inter, Segoe UI, sans-serif"
+        Width="600"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+    <Window.Styles>
+        <Style Selector="TextBlock.heading">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,14,0,4"/>
+        </Style>
+        <Style Selector="TextBlock.hint">
+            <Setter Property="Foreground" Value="#666666"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+        <Style Selector="TextBox.code">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, monospace"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="AcceptsReturn" Value="False"/>
+            <Setter Property="MinHeight" Value="44"/>
+        </Style>
+        <Style Selector="Button">
+            <Setter Property="MinWidth" Value="130"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+        </Style>
+    </Window.Styles>
+
+    <StackPanel Margin="18,12,18,16">
+        <Grid ColumnDefinitions="Auto,*">
+            <TextBlock Text="Your name" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <TextBox x:Name="NameBox" Grid.Column="1" Watermark="how the others see you"/>
+        </Grid>
+
+        <!-- Invite -->
+        <TextBlock Classes="heading" Text="Invite someone"/>
+        <TextBlock Classes="hint" Text="Create an invitation and send it to the person (chat, e-mail, …). They send you a reply code back — paste it here. Each person needs their own invitation."/>
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+            <TextBox x:Name="InviteOut" Classes="code" IsReadOnly="True" Watermark="the invitation appears here"/>
+            <StackPanel Grid.Column="1">
+                <Button x:Name="BtnCreateInvite" Content="Create invitation" Click="CreateInvite_Click"/>
+                <Button x:Name="BtnCopyInvite" Content="Copy" Margin="8,6,0,0" IsEnabled="False" Click="CopyInvite_Click"/>
+            </StackPanel>
+        </Grid>
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBox x:Name="ReplyIn" Classes="code" Watermark="paste the reply code here" IsEnabled="False"/>
+            <Button x:Name="BtnConnect" Grid.Column="1" Content="Connect" IsEnabled="False" Click="Connect_Click"/>
+        </Grid>
+
+        <!-- Join -->
+        <TextBlock Classes="heading" Text="Join someone's session"/>
+        <TextBlock Classes="hint" Text="Paste the invitation you received and send the reply code back. Your current app is replaced by theirs."/>
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+            <TextBox x:Name="InviteIn" Classes="code" Watermark="paste the invitation here"/>
+            <Button x:Name="BtnJoin" Grid.Column="1" Content="Create reply" Click="Join_Click"/>
+        </Grid>
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBox x:Name="ReplyOut" Classes="code" IsReadOnly="True" Watermark="your reply code appears here"/>
+            <Button x:Name="BtnCopyReply" Grid.Column="1" Content="Copy" IsEnabled="False" Click="CopyReply_Click"/>
+        </Grid>
+
+        <!-- Status -->
+        <Border Margin="0,16,0,0" Padding="10,8" CornerRadius="6" Background="#F3F4F6">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="StatusText" TextWrapping="Wrap" Text="Not shared."/>
+                    <TextBlock x:Name="ErrorText" TextWrapping="Wrap" Foreground="#B42318" IsVisible="False" Margin="0,4,0,0"/>
+                </StackPanel>
+                <Button x:Name="BtnLeave" Grid.Column="1" Content="Leave" IsVisible="False" VerticalAlignment="Center" Click="Leave_Click"/>
+            </Grid>
+        </Border>
+
+        <TextBlock Classes="hint" Margin="0,10,0,0"
+                   Text="⚠ What the others change runs as code on this PC, with your rights. Share only with people you trust. Codes go straight from PC to PC; no server of ours is involved."/>
+    </StackPanel>
+</Window>

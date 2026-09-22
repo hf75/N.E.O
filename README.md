@@ -78,6 +78,7 @@ Open <http://localhost:5099>. Full guide: [docs/wiki/Web-App.md](docs/wiki/Web-A
 - **Iterate.** Follow-up prompts see the previous code and produce full updates (desktop/MCP also support unified-diff patches).
 - **[Hot reload](docs/wiki/Hot-Reload.md)** — the next prompt patches the *running* app (desktop and MCP): the file you loaded, the text you typed, the selected row are still there when the new feature appears.
 - **[Heal in place](docs/wiki/Hot-Reload.md#heal-in-place)** — an app that throws while you use it is not restarted: it stays up with your data, the AI fixes the code, the fix is patched into the running app and the failed click is done again.
+- **[Shared sessions](docs/wiki/Shared-Sessions.md)** — build one app together over the internet: an invitation code and a reply code connect two N.E.O.s directly (WebRTC, no server). One person changes the app at a time; every change is hot-reloaded into everybody's running app, and each person keeps their own data.
 - **[App network](docs/wiki/App-Network.md)** — apps that use each other: every running N.E.O. app (preview, living app, MCP preview) offers its `[McpCallable]` methods and `[McpObservable]` values to the others; "show the total from the Sales app and keep it up to date" gives you a dashboard that follows the other window. The AI is told which apps are running.
 - **[Living apps](docs/wiki/Living-Apps.md)** — export an app that keeps being built by the person using it: a normal desktop app until they press Ctrl+Shift+N, then N.E.O. slides in beside it, patches the running app, saves the change, and can reset to the version they received.
 - **Branching undo/redo**, **export to standalone `.exe`** (Win/Linux/macOS), **AppContainer sandbox** (WPF).
@@ -124,7 +125,7 @@ Everything lives in [docs/wiki/](docs/wiki/Home.md). Start with [Home](docs/wiki
 - [Excel MCP](docs/wiki/Excel-MCP.md) — live Excel integration
 - [Channels](docs/wiki/Channels.md) — generated apps that push prompts back to Claude
 - [Architecture](docs/wiki/Architecture.md) — how the projects fit together
-- [Features Overview](docs/wiki/Features-Overview.md) · [Hot Reload](docs/wiki/Hot-Reload.md) · [Living Apps](docs/wiki/Living-Apps.md) · [App Network](docs/wiki/App-Network.md) · [Export and Import](docs/wiki/Export-and-Import.md) · [Settings](docs/wiki/Settings-and-Configuration.md) · [Shortcuts](docs/wiki/Keyboard-Shortcuts.md) · [Troubleshooting](docs/wiki/Troubleshooting.md)
+- [Features Overview](docs/wiki/Features-Overview.md) · [Hot Reload](docs/wiki/Hot-Reload.md) · [Living Apps](docs/wiki/Living-Apps.md) · [App Network](docs/wiki/App-Network.md) · [Shared Sessions](docs/wiki/Shared-Sessions.md) · [Export and Import](docs/wiki/Export-and-Import.md) · [Settings](docs/wiki/Settings-and-Configuration.md) · [Shortcuts](docs/wiki/Keyboard-Shortcuts.md) · [Troubleshooting](docs/wiki/Troubleshooting.md)
 
 ## License
 

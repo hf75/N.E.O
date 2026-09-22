@@ -29,6 +29,21 @@ namespace Neo.App
         private string _lmStudioModel = "";
         private string _lmStudioEndpoint = "http://localhost:1234/v1/";
         private string _exportBasePath = "";
+        private string _sessionName = "";
+
+        /// <summary>The name others see in a shared session.</summary>
+        public string SessionName
+        {
+            get => _sessionName;
+            set
+            {
+                if (_sessionName != value)
+                {
+                    _sessionName = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         public int AiCodeGenerationAttempts
         {
@@ -283,11 +298,15 @@ namespace Neo.App
         private const string AppFolderName = "Neo";
         private const string SettingsFileName = "settings.json";
 
+        /// <summary>Overrides the settings folder (tests, portable setups).</summary>
+        public const string FolderEnvironmentVariable = "NEO_SETTINGS_DIR";
+
         public static string GetSettingsFolderPath()
         {
-            var folder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                AppFolderName);
+            var overridden = Environment.GetEnvironmentVariable(FolderEnvironmentVariable);
+            var folder = !string.IsNullOrWhiteSpace(overridden)
+                ? overridden
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppFolderName);
 
             if (!Directory.Exists(folder))
                 Directory.CreateDirectory(folder);
