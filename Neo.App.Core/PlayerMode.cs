@@ -22,6 +22,9 @@ namespace Neo.App
 
         /// <summary>Window icon (.ico), relative to the manifest; null: the default.</summary>
         public string? Icon { get; set; }
+
+        /// <summary>"avalonia" or "wpf": the UI framework the project's code is written for.</summary>
+        public string? Framework { get; set; }
     }
 
     /// <summary>
@@ -29,10 +32,13 @@ namespace Neo.App
     /// the app window. The user works with the app; Ctrl+Shift+N calls N.E.O. up beside it, and
     /// every change is saved back to the project the app was started from.
     /// </summary>
-    public sealed record PlayerProject(string ProjectFile, string? OriginalFile, string Title, string? IconFile)
+    public sealed record PlayerProject(string ProjectFile, string? OriginalFile, string Title, string? IconFile, string? Framework = null)
     {
         /// <summary>The name the app carries in titles and folder names.</summary>
         public string Name => Title;
+
+        /// <summary>True when the project's code is Avalonia; false for WPF; null when the manifest does not say (the host's setting applies).</summary>
+        public bool? UsesAvalonia => Framework?.ToLowerInvariant() switch { "avalonia" => true, "wpf" => false, _ => null };
 
         /// <summary>
         /// Player mode is entered when <see cref="PlayerManifest.FileName"/> lies next to the
@@ -47,7 +53,7 @@ namespace Neo.App
                 var project = Path.GetFullPath(args[i + 1]);
                 var name = Path.GetFileNameWithoutExtension(project);
                 var original = Path.Combine(Path.GetDirectoryName(project)!, name + ".original.resx");
-                return new PlayerProject(project, File.Exists(original) ? original : null, name, null);
+                return new PlayerProject(project, File.Exists(original) ? original : null, name, null, FrameworkOf(project));
             }
 
             var manifestPath = Path.Combine(baseDirectory, PlayerManifest.FileName);
@@ -63,12 +69,30 @@ namespace Neo.App
                     projectFile,
                     manifest.Original != null && File.Exists(Resolve(manifest.Original)) ? Resolve(manifest.Original) : null,
                     string.IsNullOrWhiteSpace(manifest.Title) ? Path.GetFileNameWithoutExtension(projectFile) : manifest.Title,
-                    manifest.Icon != null && File.Exists(Resolve(manifest.Icon)) ? Resolve(manifest.Icon) : null);
+                    manifest.Icon != null && File.Exists(Resolve(manifest.Icon)) ? Resolve(manifest.Icon) : null,
+                    manifest.Framework ?? FrameworkOf(projectFile));
             }
             catch
             {
                 return null;
             }
+        }
+
+        /// <summary>
+        /// "avalonia" or "wpf" from the project's code (its usings), for projects without a manifest
+        /// entry. The hosts share one settings file, and a host must not run WPF code in an Avalonia
+        /// child because the other host was used last.
+        /// </summary>
+        public static string? FrameworkOf(string projectFile)
+        {
+            try
+            {
+                var code = JsonConvert.DeserializeObject<ResxData>(File.ReadAllText(projectFile))?.Code ?? "";
+                if (code.Contains("using Avalonia", StringComparison.Ordinal)) return "avalonia";
+                if (code.Contains("using System.Windows", StringComparison.Ordinal)) return "wpf";
+            }
+            catch { /* unreadable: the host's setting applies */ }
+            return null;
         }
 
         /// <summary>Puts the original project back; the next load shows the app as it was exported.</summary>
@@ -89,14 +113,15 @@ namespace Neo.App
     {
         /// <param name="targetDirectory">Where the app goes; the project file (<c>&lt;name&gt;.resx</c>) must already be there.</param>
         /// <returns>The path of the app's executable.</returns>
-        public static string Export(string targetDirectory, string appName, string? iconPath, IPlatformServices platform)
-            => Export(targetDirectory, appName, iconPath, platform,
+        /// <param name="framework">"avalonia" or "wpf": what the project's code is written for (a host that can run both needs to know).</param>
+        public static string Export(string targetDirectory, string appName, string? iconPath, IPlatformServices platform, string framework)
+            => Export(targetDirectory, appName, iconPath, platform, framework,
                 AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar),
                 Environment.ProcessPath ?? throw new InvalidOperationException("The host executable is unknown."));
 
         /// <param name="hostDirectory">The running host's folder.</param>
         /// <param name="hostExe">The running host's executable, inside <paramref name="hostDirectory"/>.</param>
-        public static string Export(string targetDirectory, string appName, string? iconPath, IPlatformServices platform,
+        public static string Export(string targetDirectory, string appName, string? iconPath, IPlatformServices platform, string framework,
             string hostDirectory, string hostExe)
         {
             Directory.CreateDirectory(targetDirectory);
@@ -134,6 +159,7 @@ namespace Neo.App
                 Original = Path.GetFileName(originalFile),
                 Title = appName,
                 Icon = iconName,
+                Framework = framework,
             };
             File.WriteAllText(Path.Combine(targetDirectory, PlayerManifest.FileName), JsonConvert.SerializeObject(manifest, Formatting.Indented));
             return exePath;

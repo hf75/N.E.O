@@ -32,12 +32,13 @@ public class PlayerModeTests : IDisposable
     public void Play_argument_plays_that_project_and_finds_an_original_next_to_it()
     {
         var project = Path.Combine(_dir, "Notes.resx");
-        File.WriteAllText(project, "{}");
+        File.WriteAllText(project, "{\"Code\":\"using System.Windows;\nclass DynamicUserControl {}\"}");
 
         var player = PlayerProject.Detect(["--play", project], _dir)!;
         player.ProjectFile.Should().Be(project);
         player.Title.Should().Be("Notes");
         player.OriginalFile.Should().BeNull("nothing to reset to");
+        player.UsesAvalonia.Should().BeFalse("the code says System.Windows — whatever the shared settings say");
 
         File.WriteAllText(Path.Combine(_dir, "Notes.original.resx"), "{}");
         PlayerProject.Detect(["--play", project], _dir)!.OriginalFile.Should().EndWith("Notes.original.resx");
@@ -98,7 +99,7 @@ public class PlayerModeTests : IDisposable
         var icon = Path.Combine(_dir, "notes.ico");
         File.WriteAllText(icon, "ico");
 
-        var exe = LivingAppExporter.Export(target, "Notes", icon, new FakePlatform(), host, Path.Combine(host, exeName));
+        var exe = LivingAppExporter.Export(target, "Notes", icon, new FakePlatform(), "avalonia", host, Path.Combine(host, exeName));
 
         exe.Should().Be(Path.Combine(target, OperatingSystem.IsWindows() ? "Notes.exe" : "Notes"));
         File.Exists(exe).Should().BeTrue();
@@ -117,6 +118,7 @@ public class PlayerModeTests : IDisposable
         player.ProjectFile.Should().Be(Path.Combine(target, "Notes.resx"));
         player.OriginalFile.Should().Be(Path.Combine(target, "Notes.original.resx"));
         player.IconFile.Should().Be(Path.Combine(target, "Notes.ico"));
+        player.UsesAvalonia.Should().BeTrue();
     }
 
     private sealed class FakePlatform : IPlatformServices

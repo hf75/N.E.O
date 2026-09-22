@@ -63,8 +63,26 @@ namespace Neo.PluginWindowWPF
             StartWaitTimer();
         }
 
+        /// <summary>Ctrl+Shift+N: the user wants the host (N.E.O.) shown or hidden — in player mode the host hides behind this window.</summary>
+        public event Action? HostToggleRequested;
+
         private void OnKeyDown(object sender, KeyEventArgs e)
         {
+            if (e.Key == Key.N && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                HostToggleRequested?.Invoke();
+                e.Handled = true;
+                return;
+            }
+
+            // Embedded in a host window (no frame of its own): Alt+F4 would close only this
+            // process and leave the host with a broken pipe. The host's own close button ends both.
+            if (e.Key == Key.System && e.SystemKey == Key.F4 && WindowStyle == WindowStyle.None)
+            {
+                e.Handled = true;
+                return;
+            }
+
             // Escape or Ctrl+Shift+F exits fullscreen
             if (WindowState == WindowState.Maximized && WindowStyle == WindowStyle.None)
             {

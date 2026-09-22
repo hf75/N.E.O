@@ -18,6 +18,9 @@ namespace Neo.App
         public bool InstallStartMenu { get; private set; }
         public bool RequiresExport { get; private set; }
 
+        /// <summary>Export the app as a living app (see <see cref="LivingAppExporter"/>).</summary>
+        public bool LivingApp { get; private set; }
+
         public string ProjectFullPath =>
             string.IsNullOrWhiteSpace(BasePathTextBox.Text) || string.IsNullOrWhiteSpace(ProjectNameTextBox.Text)
                 ? string.Empty
@@ -115,6 +118,7 @@ namespace Neo.App
             InstallStartMenu = installStartMenu;
 
             RequiresExport = requiresExport;
+            LivingApp = requiresExport && cbLivingApp.IsChecked == true;
 
             DialogResult = true;
             Close();

@@ -10,7 +10,7 @@ Click the **Export** button in the toolbar to open the Export Dialog.
 - **Output Directory**: Where to save the exported files
 - **Custom Icon**: Optional `.ico` file for the executable
 - **Shortcuts**: Create Windows Start Menu and/or Desktop shortcuts (WPF host only)
-- **Living app** (Avalonia host): instead of a compiled executable, ship N.E.O. itself hidden behind the app — its user changes the app with prompts (`Ctrl+Shift+N`) and keeps every change. See [[Living Apps]].
+- **Living app**: instead of a compiled executable, ship N.E.O. itself hidden behind the app — its user changes the app with prompts (`Ctrl+Shift+N`) and keeps every change. See [[Living Apps]].
 
 ### What Gets Exported
 

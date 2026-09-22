@@ -26,6 +26,9 @@ namespace Neo.App
         public event Func<CrashReason, ErrorMessage, Task>? ChildProcessCrashed;
         public event Action<LogMessage>? ChildLogReceived;
 
+        /// <summary>The user pressed Ctrl+Shift+N in the app (player mode: show or hide N.E.O.'s panel).</summary>
+        public event Action? HostToggleRequested;
+
         //
         // Deps
         //
@@ -908,9 +911,14 @@ namespace Neo.App
                             _ = _dispatcher.InvokeAsync(() => ChildProcessCrashed?.Invoke(CrashReason.UnhandledException, err));
                             break;
 
+                        case IpcTypes.ToggleHostWindow:
+                            _ = _dispatcher.InvokeAsync(() => HostToggleRequested?.Invoke());
+                            break;
+
                         // Leere Cases für bekannte, aber hier nicht behandelte Nachrichten.
                         case IpcTypes.Hello:
                         case IpcTypes.CursorVisible:
+                        case IpcTypes.ChildWindowBounds:
                             break;
 
                         default:

@@ -110,6 +110,9 @@ namespace Neo.PluginWindowWPF
                 MainWin.ResizeMode = ResizeMode.NoResize;
             }
 
+            // Ctrl+Shift+N: the user calls the host up (or puts it away).
+            MainWin.HostToggleRequested += () => _ = SafeSendAsync(new IpcEnvelope(IpcTypes.ToggleHostWindow, "", "{}"));
+
             this.MainWindow = MainWin;
             MainWin.Show();
 

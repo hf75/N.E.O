@@ -121,8 +121,7 @@ namespace Neo.PluginWindowAvalonia
                 catch { /* icon not critical */ }
 
                 // The host may run hidden behind this window (player mode): it needs to know where
-                // the window is to dock next to it, and when the user calls it up.
-                MainWin.HostToggleRequested += () => _ = SafeSendAsync(new IpcEnvelope(IpcTypes.ToggleHostWindow, "", "{}"));
+                // the window is to dock next to it.
                 var boundsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
                 boundsTimer.Tick += (_, _) => { boundsTimer.Stop(); _ = SendWindowBoundsAsync(); };
                 void BoundsChanged(object? _, EventArgs __) { boundsTimer.Stop(); boundsTimer.Start(); }
@@ -137,6 +136,9 @@ namespace Neo.PluginWindowAvalonia
                 MainWin.WindowDecorations = WindowDecorations.None;
                 MainWin.CanResize = false;
             }
+
+            // Ctrl+Shift+N: the user calls the host up (or puts it away) — in any mode.
+            MainWin.HostToggleRequested += () => _ = SafeSendAsync(new IpcEnvelope(IpcTypes.ToggleHostWindow, "", "{}"));
 
             lifetime.MainWindow = MainWin;
 

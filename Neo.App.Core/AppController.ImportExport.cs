@@ -97,7 +97,8 @@ namespace Neo.App
                 {
                     try
                     {
-                        var exe = await Task.Run(() => LivingAppExporter.Export(result.ExportDirectory, assemblyName, iconFullPath, _platformServices));
+                        var framework = exportSettings.UseAvalonia ? "avalonia" : "wpf";
+                        var exe = await Task.Run(() => LivingAppExporter.Export(result.ExportDirectory, assemblyName, iconFullPath, _platformServices, framework));
                         Logger.LogMessage($"Exported living app to {exe} — its user changes it with Ctrl+Shift+N.", BubbleType.CompletionSuccess);
                         result = result with { ExportedOrSavedPath = exe };
                     }

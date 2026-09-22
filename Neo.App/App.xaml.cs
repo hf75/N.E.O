@@ -17,6 +17,26 @@ namespace Neo.App
         {
             base.OnStartup(e);
 
+            // A living app: this executable was exported with a project next to it (or was
+            // started with --play). No splash — the window is the app.
+            var player = PlayerProject.Detect(e.Args, AppContext.BaseDirectory);
+            if (player != null)
+            {
+                try
+                {
+                    var playerWindow = new MainWindow { Player = player };
+                    this.MainWindow = playerWindow;
+                    playerWindow.Show();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[OnStartup] Player mode failed: {ex}");
+                    System.Windows.MessageBox.Show($"Failed to start {player.Title}: {ex.Message}", "Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Shutdown(1);
+                }
+                return;
+            }
+
             try
             {
                 // Run splash on its own STA thread so its animation is independent

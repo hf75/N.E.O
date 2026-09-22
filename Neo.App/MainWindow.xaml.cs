@@ -282,9 +282,36 @@ namespace Neo.App
             Application.Current.Shutdown();
         }
 
+        // ── Player mode ─────────────────────────────────────────────────
+        // The host plays a project as a living app: this window shows only the app (content-only
+        // view), Ctrl+Shift+N — in the app or here — brings N.E.O.'s panel in and out, and every
+        // change is saved back to the project. See PlayerProject.
+
+        /// <summary>Set before the window is shown when the host runs as a living app; null in the normal mode.</summary>
+        public PlayerProject? Player { get; init; }
+
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            if (Player is { UsesAvalonia: { } usesAvalonia })
+            {
+                // The project's code decides the child, not this machine's last setting.
+                var settings = SettingsService.Load();
+                settings.UseAvalonia = usesAvalonia;
+                SettingsService.Save(settings);
+            }
+
             _appController = new AppController(this, new WpfPlatformServices());
+
+            if (Player != null)
+            {
+                // Its own build folders: a living app must not compile over a running N.E.O. (or
+                // another living app) on the same machine.
+                var playerRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    AppName, "Players", Player.Name);
+                _appController.DllPath = Path.Combine(playerRoot, "DynamicUserControl.dll");
+                _appController.NuGetPackageDirectory = Path.Combine(playerRoot, "NuGetPackages");
+                ConfigurePlayerWindow();
+            }
 
             if (_appController.AvailableAgents.Count == 0)
             {
@@ -303,9 +330,10 @@ namespace Neo.App
                 // Achtung: PreloadMandatoryNugetPacks immer nach FileHelper.ClearDirectory(NuGetPackageDirectory) ausführen!
                 await _appController.PreloadMandatoryNugetPacks();
 
-                // Fenstertitel setzen
+                // Fenstertitel setzen (a living app keeps its own name)
                 titleBase = Title; // Aktuellen Titel als Basis speichern
-                Title = titleBase + " " + $"[{_appController.AiAgent?.Name}]";
+                if (Player == null)
+                    Title = titleBase + " " + $"[{_appController.AiAgent?.Name}]";
 
                 CrossplatformSettings cps = new CrossplatformSettings()
                 {
@@ -325,6 +353,9 @@ namespace Neo.App
                 Activate();
 
                 txtPrompt.Focus();
+
+                if (Player != null)
+                    await RunAsPlayerAsync();
             }
             catch (Exception ex)
             {
@@ -337,6 +368,63 @@ namespace Neo.App
 
                 Application.Current.Shutdown();
             }
+        }
+
+        // ─── Player mode ────────────────────────────────────────────────
+
+        private void ConfigurePlayerWindow()
+        {
+            var player = Player!;
+            Title = player.Title;
+            Width = 960;
+            Height = 700;
+            if (player.IconFile != null)
+            {
+                try { Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri(player.IconFile)); }
+                catch { /* the default icon then */ }
+            }
+            BtnImport.Visibility = Visibility.Collapsed;
+            BtnExport.Visibility = Visibility.Collapsed;
+            BtnClear.Visibility = Visibility.Collapsed;
+            BtnResetOriginal.Visibility = player.OriginalFile != null ? Visibility.Visible : Visibility.Collapsed;
+
+            if (_appController.ChildProcessService is ChildProcessService svc)
+                svc.HostToggleRequested += TogglePlayerPanel;
+        }
+
+        /// <summary>Loads the project into the app area and hides everything else — the window is the app.</summary>
+        private async Task RunAsPlayerAsync()
+        {
+            var player = Player!;
+            SetViewMode(ViewMode.ContentOnly);
+            await _appController.ImportProjectAsync(player.ProjectFile);
+            if (!_appController.ChildProcessService.HasLoadedControl)
+            {
+                // The project does not build on this machine: show what went wrong.
+                SetViewMode(ViewMode.Default);
+                return;
+            }
+            _appController.AutoSaveProjectPath = player.ProjectFile;
+        }
+
+        /// <summary>Ctrl+Shift+N: N.E.O.'s panel beside the app, or away again.</summary>
+        private void TogglePlayerPanel()
+        {
+            if (Player == null || isCycleViewLocked) return;
+            SetViewMode(_currentViewMode == ViewMode.ContentOnly ? ViewMode.Default : ViewMode.ContentOnly);
+        }
+
+        private async void Button_Click_ResetOriginal(object sender, RoutedEventArgs e)
+        {
+            if (Player == null) return;
+            if (!Player.ResetToOriginal())
+            {
+                _appController.Logger.LogMessage("There is no original to go back to.", BubbleType.CompletionError);
+                return;
+            }
+            _appController.Logger.LogMessage("Back to the app as it was exported.", BubbleType.Info);
+            await _appController.ImportProjectAsync(Player.ProjectFile);
+            txtPrompt.Focus();
         }
 
         private string GetUserControlBaseCode()
@@ -722,7 +810,8 @@ namespace Neo.App
         private void SwitchAI()
         {
             _appController.SwitchAI();
-            Title = titleBase + " " + $"[{_appController.AiAgent?.Name}]";
+            if (Player == null)
+                Title = titleBase + " " + $"[{_appController.AiAgent?.Name}]";
         }
 
         private async void MainWindow_GlobalKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -739,6 +828,13 @@ namespace Neo.App
             if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
                 (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
             {
+                if (e.Key == Key.N && Player != null)
+                {
+                    TogglePlayerPanel();
+                    e.Handled = true;
+                    return;
+                }
+
                 if (e.Key == Key.C)
                 {
                     if (_isCodeEditorActive)
@@ -969,7 +1065,7 @@ namespace Neo.App
                         cpe = CrossPlatformExport.OSX;
                 }
 
-                ExportSettings exportSettings = new ExportSettings(cpe, _appController.Settings.UsePython);
+                ExportSettings exportSettings = new ExportSettings(cpe, _appController.Settings.UsePython, UseAvalonia: _appController.Settings.UseAvalonia);
 
                 await _appController.ExportProjectAsync(
                     dialog.ProjectName!,
@@ -978,8 +1074,9 @@ namespace Neo.App
                     dialog.RequiresExport,
                     exportSettings,
                     dialog.ExportIcoFullPath,
-                    dialog.InstallStartMenu,
-                    dialog.InstallDesktop
+                    installDesktop: dialog.InstallDesktop,
+                    installStartmenu: dialog.InstallStartMenu,
+                    livingApp: dialog.LivingApp
                 );
             }
 

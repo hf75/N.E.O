@@ -115,7 +115,8 @@
                         </Button>
                     </Grid>
                                        
-                    <CheckBox Style="{StaticResource RoundedCheckBox}" Name="cbInstallDesktop" Margin="0,12,0,0" Content="Create Desktop Shortcut"></CheckBox>
+                    <CheckBox Style="{StaticResource RoundedCheckBox}" Name="cbLivingApp" Margin="0,12,0,0" Content="Living app (its user can keep changing it with Ctrl+Shift+N)" ToolTip="Ships N.E.O. itself behind the app. Needs the .NET runtime and an AI key on the user's machine."></CheckBox>
+                    <CheckBox Style="{StaticResource RoundedCheckBox}" Name="cbInstallDesktop" Margin="0,6,0,0" Content="Create Desktop Shortcut"></CheckBox>
                     <CheckBox Style="{StaticResource RoundedCheckBox}" Name="cbInstallStartMenu" Margin="0,6,0,0" Content="Create Startmenu Shortcut"></CheckBox>                    
                     
                     <!-- Modus -->

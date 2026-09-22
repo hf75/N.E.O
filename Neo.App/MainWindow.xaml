@@ -198,10 +198,10 @@
 
             <StackPanel Grid.Row="1" Orientation="Horizontal" Name="optionsHub">
                 <!-- Import Button -->
-                <Button ToolTip="Import" Margin="8,0,0,0" Content="&#xE8B5;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Import"></Button>
+                <Button x:Name="BtnImport" ToolTip="Import" Margin="8,0,0,0" Content="&#xE8B5;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Import"></Button>
 
                 <!-- Export Button -->
-                <Button ToolTip="Export" Margin="8,0,0,0" Content="&#xEDE1;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Export"></Button>
+                <Button x:Name="BtnExport" ToolTip="Export" Margin="8,0,0,0" Content="&#xEDE1;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Export"></Button>
 
                 <!-- SANDBOX HUB -->
                 <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
@@ -277,7 +277,10 @@
                 <Button ToolTip="History" Margin="8,0,0,0" Content="&#xE81C;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_HistoryRails"></Button>
 
                 <!-- Clear Button -->
-                <Button ToolTip="Clear" Margin="8,0,0,0" Content="&#xE894;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Clear"></Button>
+                <Button x:Name="BtnClear" ToolTip="Clear" Margin="8,0,0,0" Content="&#xE894;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_Clear"></Button>
+
+                <!-- Player mode only: back to the app as it was exported -->
+                <Button x:Name="BtnResetOriginal" ToolTip="Reset to original (discard all changes made in this app)" Visibility="Collapsed" Margin="8,0,0,0" Content="&#xE777;" Style="{StaticResource MinimalistButtonStyle}" Click="Button_Click_ResetOriginal"></Button>
 
             </StackPanel>
 
