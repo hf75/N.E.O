@@ -41,7 +41,7 @@
                     Background="#80FFFFFF" IsVisible="False" ZIndex="9998">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                     <TextBlock HorizontalAlignment="Center" Margin="0,20"
-                               Text="A runtime error occured."
+                               Text="A runtime error occurred."
                                FontSize="24" FontWeight="Bold" Foreground="Red"/>
                     <TextBlock HorizontalAlignment="Center" Margin="0,20"
                                Text="I am repairing the code. Please wait ..."

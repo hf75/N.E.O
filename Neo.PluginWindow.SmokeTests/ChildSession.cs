@@ -19,6 +19,7 @@ internal sealed class ChildSession : IAsyncDisposable
     private readonly TaskCompletionSource<bool> _hello = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly ConcurrentQueue<string> _logs = new();
     private readonly ConcurrentQueue<string> _errors = new();
+    private readonly ConcurrentQueue<ErrorMessage> _errorMessages = new();
     private readonly ConcurrentDictionary<string, int> _frameCounts = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, TaskCompletionSource<IpcEnvelope>> _pending = new(StringComparer.Ordinal);
     private Process? _child;
@@ -34,8 +35,14 @@ internal sealed class ChildSession : IAsyncDisposable
 
     public int LoadExecutedCount => Volatile.Read(ref _loadExecuted);
     public IReadOnlyCollection<string> Errors => _errors.ToArray();
+
+    /// <summary>The error frames as the child sent them (recoverable, failed action, …).</summary>
+    public IReadOnlyList<ErrorMessage> ErrorMessages => _errorMessages.ToArray();
     public IReadOnlyCollection<string> Logs => _logs.ToArray();
     public bool ChildIsAlive => _child is { HasExited: false };
+
+    /// <summary>For driving the child's window like a user would (UI Automation).</summary>
+    public int ProcessId => _child?.Id ?? 0;
 
     /// <summary>What the child reported in its Hello: null means it cannot hot reload.</summary>
     public string? HotReloadCapabilities { get; private set; }
@@ -224,6 +231,7 @@ internal sealed class ChildSession : IAsyncDisposable
                         case IpcTypes.Error:
                             var err = Json.FromJson<ErrorMessage>(env.PayloadJson);
                             _errors.Enqueue($"{err?.ExceptionType}: {err?.Message}");
+                            if (err != null) _errorMessages.Enqueue(err);
                             break;
                     }
                 },

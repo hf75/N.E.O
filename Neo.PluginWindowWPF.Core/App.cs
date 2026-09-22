@@ -112,6 +112,7 @@ namespace Neo.PluginWindowWPF
 
             // Ctrl+Shift+N: the user calls the host up (or puts it away).
             MainWin.HostToggleRequested += () => _ = SafeSendAsync(new IpcEnvelope(IpcTypes.ToggleHostWindow, "", "{}"));
+            MainWin.TrackUserActions();
             for (int i = 0; i < e.Args.Length - 1; i++)
                 if (string.Equals(e.Args[i], "--hint", StringComparison.OrdinalIgnoreCase))
                     MainWin.Hint = e.Args[i + 1];
@@ -427,7 +428,19 @@ namespace Neo.PluginWindowWPF
                         try
                         {
                             var request = Json.FromJson<HotReloadRequest>(env.PayloadJson)!;
-                            var details = await Dispatcher.InvokeAsync(() => MainWin.HandleHotReload(request));
+                            var details = await Dispatcher.InvokeAsync(() =>
+                            {
+                                var d = MainWin.HandleHotReload(request);
+                                _repairPending = false;
+                                if (request.IsRepair)
+                                {
+                                    // Heal in place: the fix is in, the app never stopped — do the failed thing again.
+                                    var replayed = request.ReplayAction != null ? MainWin.ReplayAction(request.ReplayAction) : null;
+                                    MainWin.ShowBanner(replayed != null ? "Fixed in place — your data stays; the action was done again." : "Fixed in place — your data stays.", "#D01F7A3F", 6);
+                                    if (replayed != null) d += $", action '{replayed}' replayed";
+                                }
+                                return d;
+                            });
                             result = new HotReloadResultMessage(true, Details: details);
                             await SendLogAsync(LogLevel.Info, "Hot reload applied: " + details, "Child");
                         }
@@ -443,7 +456,8 @@ namespace Neo.PluginWindowWPF
 
                 case IpcTypes.UnloadControl:
                     {
-                        await Dispatcher.InvokeAsync(() => MainWin.UnloadUserControlPlugin());
+                        _repairPending = false;
+                        await Dispatcher.InvokeAsync(() => { MainWin.HideBanner(); MainWin.UnloadUserControlPlugin(); });
                         await SafeSendAsync(new IpcEnvelope(
                             IpcTypes.Ack, env.CorrelationId,
                             Json.ToJson(new AckMessage("Control unloaded."))
@@ -735,6 +749,9 @@ namespace Neo.PluginWindowWPF
             TrySendErrorSynchronous_BestEffort("UnhandledException", ex, e.IsTerminating);
         }
 
+        // One error per repair: a throwing timer or render loop must not flood the host while it works.
+        private volatile bool _repairPending;
+
         private void MainWindow_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
             // A delegate that still points at code a hot reload retired (a lambda the new version no
@@ -746,17 +763,51 @@ namespace Neo.PluginWindowWPF
                 return;
             }
 
-            TrySendErrorSynchronous_BestEffort("DispatcherUnhandledException", e.Exception, false);
+            // The app is still here with everything the user did: report the error as recoverable,
+            // say which action ran into it, and show what is going on over the app.
             e.Handled = true;
+            if (_repairPending) return;
+            _repairPending = true;
+            var action = MainWin.FailedActionAddress();
+            var method = FailingAppMethod(e.Exception);
+            MainWin.ShowBanner($"Error{(method != null ? " in " + method : "")}: {Trim(e.Exception.Message)} — repairing, your data stays…", "#D0B02A2A", 0);
+            TrySendErrorSynchronous_BestEffort("DispatcherUnhandledException", e.Exception, false, recoverable: true, action, method);
         }
 
         private void TaskScheduler_UnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
         {
-            TrySendErrorSynchronous_BestEffort("UnobservedTaskException", e.Exception, false);
             e.SetObserved();
+            if (_repairPending) return;
+            _repairPending = true;
+            var method = FailingAppMethod(e.Exception);
+            Dispatcher.BeginInvoke(() => MainWin.ShowBanner($"Error{(method != null ? " in " + method : "")}: {Trim(e.Exception.Message)} — repairing, your data stays…", "#D0B02A2A", 0));
+            TrySendErrorSynchronous_BestEffort("UnobservedTaskException", e.Exception, false, recoverable: true, null, method);
         }
 
-        private void TrySendErrorSynchronous_BestEffort(string context, Exception ex, bool isTerminating)
+        private static string Trim(string message) => message.Length > 90 ? message[..87] + "…" : message;
+
+        /// <summary>"DynamicUserControl.LoadRow": the app's own method the exception was thrown in, from the stack.</summary>
+        private string? FailingAppMethod(Exception? exception)
+        {
+            var plugin = MainWin.GetLoadedUserControl()?.GetType().Assembly;
+            for (var ex = exception; ex != null && plugin != null; ex = ex.InnerException)
+            {
+                foreach (var frame in new System.Diagnostics.StackTrace(ex).GetFrames())
+                {
+                    var m = frame.GetMethod();
+                    if (m?.DeclaringType?.Assembly != plugin) continue;
+                    var type = m.DeclaringType;
+                    while (type?.DeclaringType != null && type.Name.StartsWith("<")) type = type.DeclaringType; // closure classes
+                    var name = m.Name;
+                    if (name.StartsWith("<") && name.IndexOf('>') is > 1 and var close) name = name[1..close];   // lambda → its method
+                    return $"{type?.Name}.{name}";
+                }
+            }
+            return null;
+        }
+
+        private void TrySendErrorSynchronous_BestEffort(string context, Exception ex, bool isTerminating,
+            bool recoverable = false, string? failedAction = null, string? failedMethod = null)
         {
             if (_client == null || !_client.IsConnected)
             {
@@ -770,7 +821,10 @@ namespace Neo.PluginWindowWPF
                     ExceptionType: ex.GetType().FullName,
                     StackTrace: ex.ToString(),
                     Context: isTerminating ? $"{context} (IsTerminating=true)" : context,
-                    Level: LogLevel.Error
+                    Level: LogLevel.Error,
+                    Recoverable: recoverable && !isTerminating,
+                    FailedAction: failedAction,
+                    FailedMethod: failedMethod
                 );
                 _client.SendAsync(new IpcEnvelope(IpcTypes.Error, "", Json.ToJson(payload)))
                     .Wait(TimeSpan.FromMilliseconds(100));

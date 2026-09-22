@@ -28,7 +28,7 @@ N.E.O. comes in three flavours that share the same core: a **desktop host** (WPF
 ### Building with Neo
 
 - [[Features Overview]] — All features at a glance
-- [[Hot Reload]] — Refine a running app without losing its state
+- [[Hot Reload]] — Refine a running app without losing its state; heal it in place when it throws
 - [[Living Apps]] — Export an app its user keeps changing with prompts (Ctrl+Shift+N inside the app)
 - [[Export and Import]] — Save, share, and export as `.exe`
 - [[Live-MCP]] — Every generated app is an MCP server (Claude calls into it, reads state, subscribes)

@@ -331,7 +331,7 @@
                 <Border x:Name="RepairOverlay" Background="#80FFFFFF" Visibility="Collapsed">
                     <Grid>
                         <StackPanel HorizontalAlignment="Center">
-                            <TextBlock HorizontalAlignment="Center" Margin="0, 20" Text="A runtime error occured."  FontFamily="Segoe UI Semilight" FontSize="24" FontWeight="Bold" Foreground="Red"/>
+                            <TextBlock HorizontalAlignment="Center" Margin="0, 20" Text="A runtime error occurred."  FontFamily="Segoe UI Semilight" FontSize="24" FontWeight="Bold" Foreground="Red"/>
                             <TextBlock HorizontalAlignment="Center" Margin="0, 20" Text="I am repairing the code. Please wait ..."  FontFamily="Segoe UI Semilight" FontSize="24" FontWeight="Bold" Foreground="Red"/>                            
                         </StackPanel>
                         <!--<Button x:Name="AbortRepairButton" Content="Cancel repair &amp; Reset" Click="AbortRepairButton_Click"  Visibility="Visible" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="20" Padding="10,5"/>-->

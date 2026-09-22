@@ -170,24 +170,7 @@ public class LivingAppSmokeTests : IDisposable
         return window?.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "txtPrompt"));
     }
 
-    // Visible top-level windows via Win32: owned windows are not always UIA root children.
-    private static AutomationElement? FindWindow(Func<(int Pid, string Title), bool> predicate)
-    {
-        AutomationElement? found = null;
-        EnumWindows((hwnd, _) =>
-        {
-            if (found != null || !IsWindowVisible(hwnd)) return true;
-            GetWindowThreadProcessId(hwnd, out var pid);
-            var title = new StringBuilder(512);
-            GetWindowText(hwnd, title, title.Capacity);
-            if (predicate((pid, title.ToString())))
-            {
-                try { found = AutomationElement.FromHandle(hwnd); } catch { }
-            }
-            return true;
-        }, IntPtr.Zero);
-        return found;
-    }
+    private static AutomationElement? FindWindow(Func<(int Pid, string Title), bool> predicate) => TopLevelWindows.Find(predicate);
 
     private static async Task<T> WaitForAsync<T>(Func<T?> probe, int seconds, string what) where T : class
     {
@@ -199,12 +182,6 @@ public class LivingAppSmokeTests : IDisposable
         }
         throw new TimeoutException("not found: " + what);
     }
-
-    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
-    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out int processId);
-    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
 
     public void Dispose()
     {

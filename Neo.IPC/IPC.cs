@@ -157,12 +157,21 @@ namespace Neo.IPC
     }
 
     // Fehler mit vollständiger Exception + Level
+    /// <param name="Recoverable">
+    /// The process survived the error (a handler threw; the app is still there with its state), so
+    /// the host may repair it in place instead of restarting it.
+    /// </param>
+    /// <param name="FailedAction">The user action that ran into the error, when known — a control address such as "save" or "Button:2"; the host asks for it to be replayed after the repair.</param>
+    /// <param name="FailedMethod">The app's method the error was thrown in, for the message to the user.</param>
     public record ErrorMessage(
         string Message,
         string? ExceptionType = null,
         string? StackTrace = null,
         string? Context = null,
-        LogLevel Level = LogLevel.Error
+        LogLevel Level = LogLevel.Error,
+        bool Recoverable = false,
+        string? FailedAction = null,
+        string? FailedMethod = null
     );
 
     // Allgemeine Log-Nachricht
@@ -339,11 +348,15 @@ namespace Neo.IPC
     /// <param name="StateSteps">See <see cref="HotReloadStateStep"/>; run after the deltas, before the UI is rebuilt.</param>
     /// <param name="RebuildUi">Call the app's UI build method again so changed UI code becomes visible.</param>
     /// <param name="RebuildMethodName">Name of that method on the loaded control (parameterless).</param>
+    /// <param name="IsRepair">This update fixes the error the app just reported (heal in place): the window shows it as such.</param>
+    /// <param name="ReplayAction">After a successful repair, the action that failed is performed again (a control address, see <see cref="ErrorMessage.FailedAction"/>).</param>
     public record HotReloadRequest(
         List<HotReloadDeltaMessage> Deltas,
         List<HotReloadStateStep> StateSteps,
         bool RebuildUi,
-        string? RebuildMethodName);
+        string? RebuildMethodName,
+        bool IsRepair = false,
+        string? ReplayAction = null);
 
     /// <param name="Success">False: nothing usable happened, the host must fall back to a full reload.</param>
     /// <param name="Details">What the child did, for logs ("3 fields initialised, UI rebuilt, 5 values carried over").</param>

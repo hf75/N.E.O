@@ -59,4 +59,4 @@ Tests: `Neo.App.Core.Tests/PlayerModeTests` (detection, manifest, export layout,
 - Settings (model, keys, export path) are shared with a N.E.O. installation on the same machine.
 - A new NuGet package the user asks for is downloaded at that moment (internet needed), as in N.E.O.
 - Two living apps started at the same time each have their own build folder; the NuGet package folder is per app as well.
-- Rude edits and crashes still lose the in-memory state, as described in [[Hot Reload]]; the data the app keeps in files is unaffected.
+- An error while using the app is healed in place — red banner, fix, green banner, the click done again ([[Hot Reload]], *Heal in place*). Rude edits, and errors whose fix cannot be patched in, still lose the in-memory state; the data the app keeps in files is unaffected.

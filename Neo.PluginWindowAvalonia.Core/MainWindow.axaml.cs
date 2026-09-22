@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Neo.Shared;
 
 namespace Neo.PluginWindowAvalonia
@@ -58,17 +59,85 @@ namespace Neo.PluginWindowAvalonia
         /// <summary>Text shown over the app for a few seconds once it is first loaded (the host passes it); null: none.</summary>
         public string? Hint { get; set; }
         private bool _hintShown;
+        private DispatcherTimer? _bannerTimer;
 
         private void ShowHintOnce()
         {
             if (_hintShown || string.IsNullOrWhiteSpace(Hint)) return;
             _hintShown = true;
-            HintText.Text = Hint;
+            ShowBanner(Hint, "#D0202020", 10);
+        }
+
+        /// <summary>One line over the app: a hint, "repairing", "fixed". Goes away by itself or on click; 0 seconds: stays.</summary>
+        public void ShowBanner(string text, string background, int seconds)
+        {
+            HintText.Text = text;
+            HintBanner.Background = global::Avalonia.Media.Brush.Parse(background);
             HintBanner.IsVisible = true;
-            HintBanner.PointerPressed += (_, _) => HintBanner.IsVisible = false;
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
-            timer.Tick += (_, _) => { timer.Stop(); HintBanner.IsVisible = false; };
-            timer.Start();
+            _bannerTimer?.Stop();
+            if (seconds <= 0) return;
+            _bannerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
+            _bannerTimer.Tick += (_, _) => { _bannerTimer.Stop(); HintBanner.IsVisible = false; };
+            _bannerTimer.Start();
+        }
+
+        public void HideBanner()
+        {
+            _bannerTimer?.Stop();
+            HintBanner.IsVisible = false;
+        }
+
+        // ── Heal in place: which action ran into the error, and doing it again after the fix ──
+
+        private WeakReference<Avalonia.Controls.Control>? _lastClicked;
+        private DateTime _lastClickedAt;
+
+        /// <summary>
+        /// Remembers the last button the user clicked (every button, handled or not). A class handler:
+        /// it runs before the app's own Click handlers, so the click is known even when the handler throws
+        /// and the event never bubbles up to this window.
+        /// </summary>
+        public void TrackUserActions()
+        {
+            Avalonia.Controls.Button.ClickEvent.Raised.Subscribe(new global::Avalonia.Reactive.AnonymousObserver<(object, global::Avalonia.Interactivity.RoutedEventArgs)>(t =>
+            {
+                if (t.Item2.Source is Avalonia.Controls.Control c) { _lastClicked = new WeakReference<Avalonia.Controls.Control>(c); _lastClickedAt = DateTime.UtcNow; }
+            }));
+        }
+
+        /// <summary>
+        /// The address ("save" or "Button:2") of the button clicked just before an error was thrown —
+        /// the action the host replays after the repair. Null when the error did not follow a click.
+        /// </summary>
+        public string? FailedActionAddress()
+        {
+            if (_lastClicked == null || (DateTime.UtcNow - _lastClickedAt) > TimeSpan.FromSeconds(1)) return null;
+            if (!_lastClicked.TryGetTarget(out var control) || GetLoadedUserControl() is not { } root) return null;
+            if (!string.IsNullOrEmpty(control.Name) && control.TemplatedParent == null) return control.Name;
+            var sameType = root.GetVisualDescendants().OfType<Avalonia.Controls.Control>().Where(c => c.GetType() == control.GetType()).ToList();
+            int index = sameType.IndexOf(control);
+            return index >= 0 ? $"{control.GetType().Name}:{index}" : null;
+        }
+
+        /// <summary>Performs the action again on the repaired app. Returns what was replayed, or null.</summary>
+        public string? ReplayAction(string address)
+        {
+            if (GetLoadedUserControl() is not { } root) return null;
+            var target = FindControlInTree(root, address);
+            if (target is not Avalonia.Controls.Button button) return null;
+            button.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+            return address;
+        }
+
+        private static Avalonia.Controls.Control? FindControlInTree(Avalonia.Controls.Control root, string target)
+        {
+            var all = root.GetVisualDescendants().OfType<Avalonia.Controls.Control>().ToList();
+            var byName = all.FirstOrDefault(c => string.Equals(c.Name, target, StringComparison.OrdinalIgnoreCase));
+            if (byName != null) return byName;
+            var parts = target.Split(':', 2);
+            int index = parts.Length > 1 && int.TryParse(parts[1], out var i) ? i : 0;
+            var byType = all.Where(c => c.GetType().Name.Equals(parts[0], StringComparison.OrdinalIgnoreCase)).ToList();
+            return index < byType.Count ? byType[index] : null;
         }
 
         private void OnKeyDown(object? sender, global::Avalonia.Input.KeyEventArgs e)

@@ -69,17 +69,99 @@ namespace Neo.PluginWindowWPF
         /// <summary>Text shown over the app for a few seconds once it is first loaded (the host passes it); null: none.</summary>
         public string? Hint { get; set; }
         private bool _hintShown;
+        private DispatcherTimer? _bannerTimer;
 
         private void ShowHintOnce()
         {
             if (_hintShown || string.IsNullOrWhiteSpace(Hint)) return;
             _hintShown = true;
-            HintText.Text = Hint;
+            ShowBanner(Hint, "#D0202020", 10);
+        }
+
+        /// <summary>One line over the app: a hint, "repairing", "fixed". Goes away by itself or on click; 0 seconds: stays.</summary>
+        public void ShowBanner(string text, string background, int seconds)
+        {
+            HintText.Text = text;
+            HintBanner.Background = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString(background)!;
             HintBanner.Visibility = Visibility.Visible;
-            HintBanner.MouseDown += (_, _) => HintBanner.Visibility = Visibility.Collapsed;
-            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
-            timer.Tick += (_, _) => { timer.Stop(); HintBanner.Visibility = Visibility.Collapsed; };
-            timer.Start();
+            _bannerTimer?.Stop();
+            if (seconds <= 0) return;
+            _bannerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
+            _bannerTimer.Tick += (_, _) => { _bannerTimer.Stop(); HintBanner.Visibility = Visibility.Collapsed; };
+            _bannerTimer.Start();
+        }
+
+        public void HideBanner()
+        {
+            _bannerTimer?.Stop();
+            HintBanner.Visibility = Visibility.Collapsed;
+        }
+
+        // ── Heal in place: which action ran into the error, and doing it again after the fix ──
+
+        private WeakReference<FrameworkElement>? _lastClicked;
+        private DateTime _lastClickedAt;
+
+        /// <summary>Remembers the last button the user clicked (every button, handled or not).</summary>
+        public void TrackUserActions()
+        {
+            // A class handler: it runs before the app's own Click handlers, so the click is known even
+            // when the handler throws and the event never bubbles up to this window.
+            EventManager.RegisterClassHandler(typeof(System.Windows.Controls.Primitives.ButtonBase), System.Windows.Controls.Primitives.ButtonBase.ClickEvent, new RoutedEventHandler((_, e) =>
+            {
+                if (e.OriginalSource is FrameworkElement c) { _lastClicked = new WeakReference<FrameworkElement>(c); _lastClickedAt = DateTime.UtcNow; }
+            }), handledEventsToo: true);
+        }
+
+        /// <summary>
+        /// The address ("save" or "Button:2") of the button clicked just before an error was thrown —
+        /// the action the host replays after the repair. Null when the error did not follow a click.
+        /// </summary>
+        public string? FailedActionAddress()
+        {
+            if (_lastClicked == null || (DateTime.UtcNow - _lastClickedAt) > TimeSpan.FromSeconds(1)) return null;
+            if (!_lastClicked.TryGetTarget(out var control) || GetLoadedUserControl() is not FrameworkElement root) return null;
+            if (!string.IsNullOrEmpty(control.Name) && control.TemplatedParent == null) return control.Name;
+            var sameType = Descendants(root).Where(c => c.GetType() == control.GetType()).ToList();
+            int index = sameType.IndexOf(control);
+            return index >= 0 ? $"{control.GetType().Name}:{index}" : null;
+        }
+
+        /// <summary>Performs the action again on the repaired app. Returns what was replayed, or null.</summary>
+        public string? ReplayAction(string address)
+        {
+            if (GetLoadedUserControl() is not FrameworkElement root) return null;
+            if (FindControlInTree(root, address) is not System.Windows.Controls.Primitives.ButtonBase button) return null;
+            button.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            return address;
+        }
+
+        private static IEnumerable<FrameworkElement> Descendants(DependencyObject root)
+        {
+            var pending = new Stack<DependencyObject>();
+            pending.Push(root);
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                int count = current is System.Windows.Media.Visual ? System.Windows.Media.VisualTreeHelper.GetChildrenCount(current) : 0;
+                for (int i = 0; i < count; i++)
+                {
+                    var child = System.Windows.Media.VisualTreeHelper.GetChild(current, i);
+                    if (child is FrameworkElement element) yield return element;
+                    pending.Push(child);
+                }
+            }
+        }
+
+        private static FrameworkElement? FindControlInTree(FrameworkElement root, string target)
+        {
+            var all = Descendants(root).ToList();
+            var byName = all.FirstOrDefault(c => string.Equals(c.Name, target, StringComparison.OrdinalIgnoreCase));
+            if (byName != null) return byName;
+            var parts = target.Split(':', 2);
+            int index = parts.Length > 1 && int.TryParse(parts[1], out var i) ? i : 0;
+            var byType = all.Where(c => c.GetType().Name.Equals(parts[0], StringComparison.OrdinalIgnoreCase)).ToList();
+            return index < byType.Count ? byType[index] : null;
         }
 
         private void OnKeyDown(object sender, KeyEventArgs e)

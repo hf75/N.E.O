@@ -42,6 +42,18 @@ This works in the desktop hosts (WPF and Avalonia, every way a new build reaches
 5. **Anything that cannot be carried over safely ends in a full reload**, never in a half-updated app: rude edits, a constructor change that cannot be replayed, UI changes in an app without a re-runnable UI method, a removed source file, a changed package version, a failure while applying.
 6. **No waiting for it.** After a full load the build is copied synchronously (the next compile overwrites the path) and Roslyn's session is prepared in the background while the app is already shown; the hosts compose Roslyn's workspace services once at start-up. The next change waits for the session only if it comes faster than that.
 
+## Heal in place
+
+An app that throws while you use it is not restarted either. The desktop hosts repair it **in the running instance**:
+
+1. The window catches the exception on the UI thread (and unobserved task exceptions), keeps the app alive, and shows a red banner: *"Something went wrong (NullReferenceException in LoadRows) — N.E.O. is repairing this app in place, your data stays."* It reports the error to the host as *recoverable*, together with the method it was thrown in and the button clicked right before it (`Neo.IPC.ErrorMessage.Recoverable / FailedMethod / FailedAction`). Further errors are held back until the repair is through.
+2. The host (`AppController.PerformAutomaticRepairAsync`) asks the AI for the fix as it always did, but tells it that the app is still running and will be patched: fix it inside the failing method, change method bodies only. The chat says `The app ran into an error in LoadRows: … — repairing it in place, your data stays.`
+3. The fix is hot-reloaded as a *repair* (`HotReloadRequest.IsRepair`). The window applies it, **does the failed click again** on the repaired app (`ReplayAction`), shows a green banner *"Fixed. What you were doing was done again."*, and the chat reports `Repaired in place. The app kept running, and the failed action was done again.`
+
+Only when the app cannot be patched — no hot reload session for it, or the fix is a rude edit — does the old path run: restart, fix, load fresh. Living apps ([[Living Apps]]) heal the same way; the person using the app only sees the two banners.
+
+Limits: the action done again is a button click (anything else that failed is fixed but not repeated — do it again yourself); the click must have happened within a second before the error, otherwise it is left alone. A handler that changed half the app's state before it threw is not rolled back — the fix runs on the state as it is.
+
 ## Writing apps that survive changes
 
 The system prompts of the desktop hosts and the MCP server teach these rules (`Neo.AssemblyForge.Core/HotReloadGuidance.cs`):
@@ -73,5 +85,6 @@ The system prompts of the desktop hosts and the MCP server teach these rules (`N
 | New dependencies before an update | `Neo.App.Core/SentFileLedger.cs` (desktop), `PreviewSessionManager.TryHotReloadAsync` (MCP); the child resolves them lazily from its live assembly dictionaries |
 | IPC | `HotReload` / `HotReloadResult`, `HelloMessage.HotReloadCapabilities` in `Neo.IPC/IPC.cs` |
 | Desktop wiring | `AppController.DisplayCompiledDllAsync` |
+| Heal in place | `AppController.CrashRecovery.cs` (`_inPlaceRepair`), `App.*.cs` in both `PluginWindow*.Core` (recoverable errors, banners), `MainWindow.TrackUserActions / FailedActionAddress / ReplayAction` |
 | MCP wiring | `PreviewSessionManager.UpdateAsync` |
-| Tests | `Neo.HotReload.Tests` (engine: packages, new files, subscriptions), `Neo.PluginWindow.SmokeTests/DesktopHotReloadSmokeTests` (both desktop heads: state, routed-event handlers, new package, selection and tree state), `Neo.McpServer.Tests/HotReloadProcessTests` (server end to end) |
+| Tests | `Neo.HotReload.Tests` (engine: packages, new files, subscriptions), `Neo.PluginWindow.SmokeTests/DesktopHotReloadSmokeTests` (both desktop heads: state, routed-event handlers, new package, selection and tree state, a crash healed in place with the click done again), `Neo.McpServer.Tests/HotReloadProcessTests` (server end to end) |

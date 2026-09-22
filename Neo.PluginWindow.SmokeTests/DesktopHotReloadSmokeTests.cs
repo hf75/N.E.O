@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using FluentAssertions;
 using Neo.Agents;
 using Neo.HotReload;
+using Neo.IPC;
 using Neo.Shared;
 using Xunit;
 
@@ -485,6 +486,158 @@ public class DesktopHotReloadSmokeTests : IDisposable
             await Task.Delay(100);
         }
         return false;
+    }
+
+    [Theory]
+    [MemberData(nameof(DesktopHeads))]
+    public async Task A_crash_is_healed_in_the_running_app_and_the_failed_click_is_done_again(string head, string launchArgs)
+    {
+        // Heal in place: the user's click throws. The window survives, reports the error as
+        // recoverable with the action that failed, and shows what is going on. The host fixes the
+        // code and hot-reloads it as a repair: the same instance, the typed text still there, and
+        // the click is done again — this time it works.
+        bool wpf = head.Contains("WPF", StringComparison.Ordinal);
+        var dllPath = Path.Combine(_directory, "DynamicUserControl.dll");
+        var v1 = wpf ? WpfCrashV1 : AvaloniaCrashV1;
+
+        await using var child = await ChildSession.StartAsync(TestEnvironment.HeadExe(head), launchArgs,
+            new Dictionary<string, string> { [HotReloadRuntime.EnvironmentVariable] = HotReloadRuntime.EnvironmentValue });
+        using var hotReload = new HotReloadCoordinator();
+
+        await CompileAsync(v1, dllPath, wpf);
+        await child.LoadAsync(dllPath);
+        (await child.WaitForLoadsAsync(1)).Should().BeTrue(string.Join(" | ", child.Errors));
+        (await hotReload.StartAsync(dllPath, child.HotReloadCapabilities)).Should().BeNull();
+        // The embedded WPF head starts at 0×0; give it a size so its controls can be clicked.
+        await child.SendControlAsync(IpcTypes.PositionWindow, Json.ToJson(new ParentWindowBoundsMessage(200, 200, 500, 400, true)));
+        await Task.Delay(800);
+
+        (await child.SetPropertyAsync("note", "Text", "typed by the user"))!.Success.Should().BeTrue();
+
+        // The click that throws (a real click through UI Automation, as the user would).
+        ClickButton(child.ProcessId, "Load rows").Should().BeTrue("the button must be found and clicked");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.Elapsed < TimeSpan.FromSeconds(10) && child.ErrorMessages.Count == 0) await Task.Delay(100);
+
+        child.ChildIsAlive.Should().BeTrue("the window survives a throwing handler");
+        child.ErrorMessages.Should().HaveCount(1);
+        var error = child.ErrorMessages[0];
+        error.Recoverable.Should().BeTrue("the process is still there with the user's data");
+        error.FailedAction.Should().Be("load", "the button clicked right before the error");
+        error.FailedMethod.Should().Contain("DynamicUserControl", "the app's own method the error was thrown in");
+        error.ExceptionType.Should().Contain("NullReference");
+
+        // The fix, hot-reloaded as a repair with the failed action replayed.
+        await CompileAsync(v1.Replace("_rows.Add(", "(_rows ??= new()).Add("), dllPath, wpf);
+        var attempt = await hotReload.TryAsync(dllPath, request => child.HotReloadAsync(request with { IsRepair = true, ReplayAction = error.FailedAction }));
+
+        attempt.Applied.Should().BeTrue(attempt.Message);
+        attempt.Message.Should().Contain("action 'load' replayed");
+        child.LoadExecutedCount.Should().Be(1, "the app was patched, not loaded again");
+        var tree = await child.InspectVisualTreeAsync();
+        Property(tree, "status", "Text").Should().Be("1 rows", "the replayed click ran the fixed handler");
+        Property(tree, "note", "Text").Should().Be("typed by the user", "nothing the user did was lost");
+
+        await Task.Delay(300);
+        child.ErrorMessages.Should().HaveCount(1, "no further errors after the repair");
+    }
+
+    private const string AvaloniaCrashV1 = """
+        using System.Collections.Generic;
+        using Avalonia;
+        using Avalonia.Controls;
+
+        public class DynamicUserControl : UserControl
+        {
+            private List<string>? _rows;            // the bug: never created
+            private TextBlock _status = new();
+
+            public DynamicUserControl() { BuildUi(); }
+
+            private void BuildUi()
+            {
+                _status = new TextBlock { Name = "status", Text = "no rows" };
+                var load = new Button { Name = "load", Content = "Load rows" };
+                load.Click += (_, _) => { _rows.Add("row"); _status.Text = _rows.Count + " rows"; };
+                Content = new StackPanel
+                {
+                    Margin = new Thickness(16),
+                    Children = { new TextBox { Name = "note" }, load, _status }
+                };
+            }
+        }
+        """;
+
+    private const string WpfCrashV1 = """
+        using System.Collections.Generic;
+        using System.Windows;
+        using System.Windows.Controls;
+
+        public class DynamicUserControl : UserControl
+        {
+            private List<string>? _rows;            // the bug: never created
+            private TextBlock _status = new();
+
+            public DynamicUserControl() { BuildUi(); }
+
+            private void BuildUi()
+            {
+                _status = new TextBlock { Name = "status", Text = "no rows" };
+                var load = new Button { Name = "load", Content = "Load rows" };
+                load.Click += (_, _) => { _rows.Add("row"); _status.Text = _rows.Count + " rows"; };
+                var panel = new StackPanel { Margin = new Thickness(16) };
+                panel.Children.Add(new TextBox { Name = "note" });
+                panel.Children.Add(load);
+                panel.Children.Add(_status);
+                Content = panel;
+            }
+        }
+        """;
+
+    /// <summary>
+    /// Clicks a button in the child's window as the user would: found through UI Automation, clicked
+    /// with the mouse. The tree is walked by hand and the click is a real one — Avalonia's provider
+    /// throws on a FindFirst over descendants, and its InvokePattern does not click.
+    /// </summary>
+    private static bool ClickButton(int processId, string name)
+    {
+        for (int attempt = 0; attempt < 30; attempt++)
+        {
+            try
+            {
+                var window = TopLevelWindows.Find(w => w.Pid == processId);
+                var button = window == null ? null : Descendants(window).FirstOrDefault(e =>
+                    e.Current.ControlType == System.Windows.Automation.ControlType.Button && e.Current.Name == name);
+                if (button != null && !button.Current.BoundingRectangle.IsEmpty)
+                {
+                    var r = button.Current.BoundingRectangle;
+                    SetForegroundWindow((IntPtr)window!.Current.NativeWindowHandle);
+                    SetCursorPos((int)(r.X + r.Width / 2), (int)(r.Y + r.Height / 2));
+                    mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+                    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                    return true;
+                }
+            }
+            catch (Exception) { /* the window is still coming up; its automation tree is not ready yet */ }
+            Thread.Sleep(200);
+        }
+        return false;
+    }
+
+    private const uint MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004;
+    [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
+
+    private static IEnumerable<System.Windows.Automation.AutomationElement> Descendants(System.Windows.Automation.AutomationElement root)
+    {
+        var child = System.Windows.Automation.TreeWalker.ControlViewWalker.GetFirstChild(root);
+        while (child != null)
+        {
+            yield return child;
+            foreach (var deeper in Descendants(child)) yield return deeper;
+            child = System.Windows.Automation.TreeWalker.ControlViewWalker.GetNextSibling(child);
+        }
     }
 
     [Fact]

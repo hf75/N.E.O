@@ -166,10 +166,13 @@ namespace Neo.App
             if (!ChildProcessService.HasLoadedControl)
                 await _hotReload.ResetAsync();
             bool couldHotReload = _hotReload.HasRunningApp;
-            var attempt = await _hotReload.TryAsync(compiledUserControlDllPath, request => ChildProcessService.HotReloadAsync(request,
+            var repair = _inPlaceRepair;
+            var attempt = await _hotReload.TryAsync(compiledUserControlDllPath, request => ChildProcessService.HotReloadAsync(
+                request with { IsRepair = repair.Active, ReplayAction = repair.Active ? repair.Action : null },
                 (AppState.NuGetDlls ?? new List<string>()).Concat(AdditionalDlls).ToList()));
             if (attempt.Applied)
             {
+                _inPlaceRepair = default; // healed: PerformAutomaticRepairAsync reports it that way
                 Logger.LogMessage(attempt.Message, BubbleType.Info);
                 await _view.HideFrostedSnapshotAsync();
                 ChildProcessService.ShowChild();

@@ -275,8 +275,10 @@ namespace Neo.App
 
                             case IpcTypes.Error:
                                 var errMsg = Json.FromJson<ErrorMessage>(env.PayloadJson);
+                                // Not awaited: a repair in place hot-reloads into this very child and
+                                // waits for its answer, which this loop has to keep reading.
                                 if (errMsg != null && ChildProcessCrashed != null)
-                                    await ChildProcessCrashed.Invoke(CrashReason.UnhandledException, errMsg);
+                                    _ = Dispatcher.UIThread.InvokeAsync(() => ChildProcessCrashed.Invoke(CrashReason.UnhandledException, errMsg));
                                 break;
 
                             case IpcTypes.ChildWindowBounds:

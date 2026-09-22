@@ -51,23 +51,43 @@ namespace Neo.App
             }
         }
 
+        // Heal in place: the app reported an error it survived. It keeps running with the user's
+        // data while the AI fixes the code; the fix is hot-reloaded into the same instance and the
+        // failed action is done again. Set for the duration of the repair; DisplayCompiledDllAsync
+        // reads it when it hands the update to the window.
+        private (bool Active, string? Action) _inPlaceRepair;
+
         private async Task PerformAutomaticRepairAsync(ErrorMessage err)
         {
+            // In place only when the app is still there to be patched.
+            bool inPlace = err.Recoverable && ChildProcessService.HasLoadedControl && _hotReload.HasRunningApp;
             try
             {
                 // 1. Status setzen und UI blockieren.
                 _view.ShowRepairOverlay();
-                await SetStatusAsync(AppStatus.Repairing, true, "Attempting automatic repair...");
+                await SetStatusAsync(AppStatus.Repairing, true, inPlace ? "Repairing the running app..." : "Attempting automatic repair...");
 
                 // 2. Logik ausführen
-                await ChildProcessService.RestartAsync();
-                ChildProcessService.HideChild();
+                if (inPlace)
+                {
+                    _inPlaceRepair = (true, err.FailedAction);
+                    var where = err.FailedMethod != null ? $" in {err.FailedMethod}" : "";
+                    Logger.LogMessage($"The app ran into an error{where}: {err.Message} — repairing it in place, your data stays.", BubbleType.Info);
+                }
+                else
+                {
+                    await ChildProcessService.RestartAsync();
+                    ChildProcessService.HideChild();
+                    Logger.LogMessage("The application crashed. Attempting an automatic repair...", BubbleType.Info);
+                }
 
-                Logger.LogMessage("The application crashed. Attempting an automatic repair...", BubbleType.Info);
                 string exceptionMessage = $"{err.Message}\n\nType: {err.ExceptionType}\n\nStack Trace:\n{err.StackTrace}";
                 LastErrorMsg = exceptionMessage;
 
-                string repairPrompt = "Please fix the previous error.";
+                string repairPrompt = inPlace
+                    ? "Please fix the previous error. The app is still running with the user's data and will be patched in place: " +
+                      "fix it inside the failing method (change method bodies only, add members if needed), so that the fix can be applied without a restart."
+                    : "Please fix the previous error.";
 
                 if (err.ExceptionType != null &&
                     err.ExceptionType.Contains("Python", StringComparison.OrdinalIgnoreCase))
@@ -82,7 +102,9 @@ namespace Neo.App
 
                 _view.ClearPrompt();
 
-                Logger.LogMessage("Automatic repair successful. The application has been restored.", BubbleType.Info);                            
+                Logger.LogMessage(inPlace && !_inPlaceRepair.Active
+                    ? "Repaired in place. The app kept running, and the failed action was done again."
+                    : "Automatic repair successful. The application has been restored.", BubbleType.Info);                            
             }
             catch (OperationCanceledException)
             {
@@ -92,6 +114,7 @@ namespace Neo.App
             finally
             {
                 // 3. UI aufräumen und Status zurücksetzen
+                _inPlaceRepair = default;
                 ChildProcessService.ShowChild();
                 _view.HideRepairOverlay();
                 await SetStatusAsync(AppStatus.Idle, false);
