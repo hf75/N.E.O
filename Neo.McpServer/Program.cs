@@ -241,7 +241,11 @@ builder.Services
             "what the user typed or selected survive. The tool result says \"Hot reload (generation n)\" or\n" +
             "\"Hot reload not possible — <reason>\" (then the app was restarted and starts empty). Rules for code that\n" +
             "survives updates:\n" +
-            Neo.AssemblyForge.AvaloniaGuidance.AsMarkdownList(Neo.AssemblyForge.HotReloadGuidance.Rules);
+            Neo.AssemblyForge.AvaloniaGuidance.AsMarkdownList(Neo.AssemblyForge.HotReloadGuidance.Rules) +
+            "\n=== APP NETWORK (apps that use each other) ===\n" +
+            "Every running N.E.O. app on this machine (previews, living apps, other hosts) can offer methods and values\n" +
+            "to the other apps and use theirs; `list_running_apps` shows who is there right now.\n" +
+            Neo.AssemblyForge.AvaloniaGuidance.AsMarkdownList(Neo.AssemblyForge.AppNetworkGuidance.Rules);
     })
     .WithStdioServerTransport()
     .WithToolsFromAssembly()

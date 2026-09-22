@@ -29,6 +29,7 @@
       available for the export pipeline.
     -->
     <ProjectReference Include="..\Neo.App.Mcp\Neo.App.Mcp.csproj" />
+    <ProjectReference Include="..\Neo.App.Api\Neo.App.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>

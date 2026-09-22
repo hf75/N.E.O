@@ -38,6 +38,9 @@ namespace Neo.App
         object? CaptureChildScreenshot();
 
         bool HasLoadedControl { get; }
+
+        /// <summary>The plugin window's process id, null while there is none.</summary>
+        int? ChildProcessId { get; }
         void HideChild();
         void ShowChild();
 

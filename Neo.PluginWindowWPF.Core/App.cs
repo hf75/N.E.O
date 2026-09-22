@@ -114,8 +114,14 @@ namespace Neo.PluginWindowWPF
             MainWin.HostToggleRequested += () => _ = SafeSendAsync(new IpcEnvelope(IpcTypes.ToggleHostWindow, "", "{}"));
             MainWin.TrackUserActions();
             for (int i = 0; i < e.Args.Length - 1; i++)
+            {
                 if (string.Equals(e.Args[i], "--hint", StringComparison.OrdinalIgnoreCase))
                     MainWin.Hint = e.Args[i + 1];
+                if (string.Equals(e.Args[i], "--app-name", StringComparison.OrdinalIgnoreCase))
+                    _appName = e.Args[i + 1];
+                if (string.Equals(e.Args[i], "--title", StringComparison.OrdinalIgnoreCase))
+                    _appName ??= e.Args[i + 1];
+            }
 
             this.MainWindow = MainWin;
             MainWin.Show();
@@ -178,6 +184,7 @@ namespace Neo.PluginWindowWPF
 
         protected override async void OnExit(ExitEventArgs e)
         {
+            try { Neo.App.AppNetwork.Unpublish(); } catch (Exception ex) { Debug.WriteLine($"[OnExit] Unpublish failed: {ex.Message}"); }
             try { _hb?.Stop(); } catch (Exception ex) { Debug.WriteLine($"[OnExit] Timer stop failed: {ex.Message}"); }
             try { _ipcCts.Cancel(); } catch (Exception ex) { Debug.WriteLine($"[OnExit] CTS cancel failed: {ex.Message}"); }
             try { if (_client != null) await _client.DisposeAsync(); } catch (Exception ex) { Debug.WriteLine($"[OnExit] Client dispose failed: {ex.Message}"); }
@@ -304,6 +311,7 @@ namespace Neo.PluginWindowWPF
                                 IpcTypes.Ack, env.CorrelationId,
                                 Json.ToJson(new AckMessage("Loaded (bytes/in-memory)"))
                             ));
+                            await PublishOnAppNetworkAsync();
                         }
                         catch (Exception ex)
                         {
@@ -443,6 +451,7 @@ namespace Neo.PluginWindowWPF
                             });
                             result = new HotReloadResultMessage(true, Details: details);
                             await SendLogAsync(LogLevel.Info, "Hot reload applied: " + details, "Child");
+                            await PublishOnAppNetworkAsync();
                         }
                         catch (Exception ex)
                         {
@@ -458,6 +467,7 @@ namespace Neo.PluginWindowWPF
                     {
                         _repairPending = false;
                         await Dispatcher.InvokeAsync(() => { MainWin.HideBanner(); MainWin.UnloadUserControlPlugin(); });
+                        Neo.App.AppNetwork.Unpublish();
                         await SafeSendAsync(new IpcEnvelope(
                             IpcTypes.Ack, env.CorrelationId,
                             Json.ToJson(new AckMessage("Control unloaded."))
@@ -721,6 +731,33 @@ namespace Neo.PluginWindowWPF
             await _sendLock.WaitAsync();
             try { await _client.SendAsync(env); }
             finally { _sendLock.Release(); }
+        }
+
+        /// <summary>The name the host gave this app for the app network (<c>--app-name</c>); null: the window title.</summary>
+        private string? _appName;
+
+        /// <summary>
+        /// Puts the loaded app on the app network (<see cref="Neo.App.Apps"/>): other N.E.O. apps on
+        /// this machine can call its [McpCallable] methods and read its [McpObservable] values. Called
+        /// after every load and every live update — the offer may have changed. Never throws.
+        /// </summary>
+        private async Task PublishOnAppNetworkAsync()
+        {
+            try
+            {
+                var (control, title) = await Dispatcher.InvokeAsync(() => (MainWin.GetLoadedUserControl(), MainWin.Title));
+                if (control == null) return;
+                var name = _appName ?? (string.IsNullOrWhiteSpace(title) ? "N.E.O. app" : title);
+                var app = Neo.App.AppNetwork.Publish(control, name,
+                    f => Dispatcher.InvokeAsync(f).Task);
+                if (app.Methods.Count > 0 || app.Values.Count > 0)
+                    await SendLogAsync(LogLevel.Info,
+                        $"On the app network as '{app.Name}': {app.Methods.Count} method(s), {app.Values.Count} value(s).", "AppNetwork");
+            }
+            catch (Exception ex)
+            {
+                await SendLogAsync(LogLevel.Warn, "App network: could not publish the app — " + ex.Message, "AppNetwork");
+            }
         }
 
         private Task SendLogAsync(LogLevel level, string message, string? category = null, string? details = null)

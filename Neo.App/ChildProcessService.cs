@@ -59,6 +59,11 @@ namespace Neo.App
         private bool _allowChildIsVisible = true;
         public bool HasLoadedControl { get; private set; }
 
+        public int? ChildProcessId
+        {
+            get { try { return _childProcess is { HasExited: false } p ? p.Id : null; } catch { return null; } }
+        }
+
         // What the current child process has received (it keeps every assembly until it exits).
         private readonly SentFileLedger _sentFiles = new();
 

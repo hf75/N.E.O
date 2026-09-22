@@ -22,6 +22,18 @@ namespace Neo.McpServer.Tools;
 [McpServerToolType]
 public sealed class LiveMcpTools
 {
+    [McpServerTool(Name = "list_running_apps")]
+    [Description("Lists every N.E.O. app running on this machine that is on the app network — previews of this " +
+        "server, apps in the desktop hosts, exported living apps — with the methods ([McpCallable]) and values " +
+        "([McpObservable]) each one offers. Generated code reaches them with Apps.CallAsync / Apps.ReadAsync / " +
+        "Apps.Watch (namespace Neo.App). Use the names exactly as listed.")]
+    public static string ListRunningApps()
+    {
+        var apps = Neo.App.Apps.Running(includeSelf: true);
+        if (apps.Count == 0) return "No N.E.O. app is on the app network right now.";
+        return string.Join("\n\n", apps.Select(a => a.Describe() + "\n  (process " + a.ProcessId + ")"));
+    }
+
     [McpServerTool(Name = "inspect_app_api")]
     [Description("Lists the Live-MCP manifest of a running preview app: callable methods, " +
         "observable properties, and triggerable controls (with their [McpCallable]/[McpObservable]/" +

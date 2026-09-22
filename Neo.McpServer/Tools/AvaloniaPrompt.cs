@@ -51,6 +51,9 @@ public static class AvaloniaPrompt
             "## Live updates (hot reload)\n\n" +
             "update_preview and patch_preview patch the running app in place when they can; the result says \"Hot reload (generation n)\" or \"Hot reload not possible — <reason>\". Follow these rules so the user keeps their state:\n\n" +
             AvaloniaGuidance.AsMarkdownList(HotReloadGuidance.Rules) + "\n" +
+            "## App network (apps that use each other)\n\n" +
+            "Every running N.E.O. app on this machine can offer methods and values to the others and use theirs. `list_running_apps` shows who is there right now.\n\n" +
+            AvaloniaGuidance.AsMarkdownList(AppNetworkGuidance.Rules) + "\n" +
             "## Code Structure Template\n\n" +
             "```csharp\n" +
             "using Avalonia;\n" +
@@ -127,6 +130,9 @@ public static class AvaloniaPrompt
             "## Live updates (hot reload)\n\n" +
             "update_preview and patch_preview patch the running app in place when they can; the result says \"Hot reload (generation n)\" or \"Hot reload not possible — <reason>\". Follow these rules so the user keeps their state:\n\n" +
             AvaloniaGuidance.AsMarkdownList(HotReloadGuidance.Rules) + "\n" +
+            "## App network (apps that use each other)\n\n" +
+            "Every running N.E.O. app on this machine can offer methods and values to the others and use theirs. `list_running_apps` shows who is there right now.\n\n" +
+            AvaloniaGuidance.AsMarkdownList(AppNetworkGuidance.Rules) + "\n" +
             "## Code Structure Template\n\n" +
             "```csharp\n" +
             "using System;\n" +

@@ -127,30 +127,15 @@ public class PluginWindowSmokeTests
     }
 
     [Fact]
-    public async Task Avalonia_desktop_head_runs_without_NeoAppApi_next_to_it()
+    public void The_Avalonia_desktop_host_ships_the_app_network_api_next_to_its_child()
     {
-        // Neo.App.Avalonia copies only Neo.PluginWindowAvalonia.* into its bin folder, so the child
-        // runs there without Neo.App.Api.dll. The shared window library references Neo.App.Ai for the
-        // MCP head; if that reference ever leaks into a code path the desktop head JIT-compiles,
-        // the child stays alive but never connects — and the Avalonia desktop host is dead.
-        var source = TestEnvironment.HeadBinDir("Neo.PluginWindowAvalonia");
-        var deployed = Path.Combine(Path.GetTempPath(), "neo_smoke_deploy_" + Guid.NewGuid().ToString("N")[..8]);
-        CopyDirectory(source, deployed, skipFile: name => name.StartsWith("Neo.App.Api.", StringComparison.OrdinalIgnoreCase));
-
-        try
-        {
-            File.Exists(Path.Combine(deployed, "Neo.App.Api.dll")).Should().BeFalse();
-
-            await using var child = await ChildSession.StartAsync(
-                Path.Combine(deployed, "Neo.PluginWindowAvalonia.exe"), "--standalone");
-            await child.LoadAsync(TestEnvironment.PluginFor("Neo.PluginWindowAvalonia"));
-            (await child.WaitForLoadsAsync(1)).Should().BeTrue(Describe(child, "load"));
-            child.Errors.Should().BeEmpty();
-        }
-        finally
-        {
-            try { Directory.Delete(deployed, recursive: true); } catch { /* child may still release files */ }
-        }
+        // Neo.App.Avalonia copies only the child's own assemblies into its bin folder. The child
+        // publishes every loaded app on the app network with Neo.App.Api, and generated code calls
+        // other apps with it — without the DLL next to the child, the head could not handle a
+        // single frame and the desktop host would be dead.
+        var hostBin = Path.GetDirectoryName(TestEnvironment.HostExe("Neo.App.Avalonia"))!;
+        File.Exists(Path.Combine(hostBin, "Neo.PluginWindowAvalonia.exe")).Should().BeTrue();
+        File.Exists(Path.Combine(hostBin, "Neo.App.Api.dll")).Should().BeTrue("the host's CopyChildOutputs target copies it");
     }
 
     [Fact]
@@ -195,19 +180,6 @@ public class PluginWindowSmokeTests
     private static string Describe(ChildSession child, string step)
         => $"{step} should be reported as executed. Child errors: [{string.Join(" | ", child.Errors)}] " +
            $"logs: [{string.Join(" | ", child.Logs)}]";
-
-    private static void CopyDirectory(string source, string target, Func<string, bool> skipFile)
-    {
-        foreach (var dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
-            Directory.CreateDirectory(Path.Combine(target, Path.GetRelativePath(source, dir)));
-        Directory.CreateDirectory(target);
-
-        foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
-        {
-            if (skipFile(Path.GetFileName(file))) continue;
-            File.Copy(file, Path.Combine(target, Path.GetRelativePath(source, file)), overwrite: true);
-        }
-    }
 }
 
 [CollectionDefinition("PluginWindowProcesses", DisableParallelization = true)]

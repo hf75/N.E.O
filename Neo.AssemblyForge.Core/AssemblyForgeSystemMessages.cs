@@ -47,6 +47,9 @@ public static class AssemblyForgeSystemMessages
         // The C# UserControl is patched in place on the next change; React UIs live in the web view.
         if (!useReact)
             system += " " + HotReloadGuidance.Notes;
+        // Desktop apps talk to each other over named pipes; the browser build cannot.
+        if (neoHost && !useReact)
+            system += " " + AppNetworkGuidance.Notes;
 
         system += CommonCoreSystemMessage;
         if (neoHost)

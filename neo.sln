@@ -93,6 +93,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.HotReload", "Neo.HotRel
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.HotReload.Tests", "Neo.HotReload.Tests\Neo.HotReload.Tests.csproj", "{8E8271A9-7086-46D5-8F7A-67C496D728C9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.App.Api.Tests", "Neo.App.Api.Tests\Neo.App.Api.Tests.csproj", "{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -607,6 +609,18 @@ Global
 		{8E8271A9-7086-46D5-8F7A-67C496D728C9}.Release|x64.Build.0 = Release|Any CPU
 		{8E8271A9-7086-46D5-8F7A-67C496D728C9}.Release|x86.ActiveCfg = Release|Any CPU
 		{8E8271A9-7086-46D5-8F7A-67C496D728C9}.Release|x86.Build.0 = Release|Any CPU
+		{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}.Debug|x64.Build.0 = Debug|Any CPU
+		{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}.Debug|x86.Build.0 = Debug|Any CPU
+		{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}.Release|x64.ActiveCfg = Release|Any CPU
+		{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}.Release|x64.Build.0 = Release|Any CPU
+		{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}.Release|x86.ActiveCfg = Release|Any CPU
+		{76BD4500-24E0-44C9-9FB0-B2FB47469A0C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

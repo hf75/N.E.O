@@ -1,5 +1,7 @@
 # Live-MCP — every generated app is an MCP server
 
+> The same `[McpCallable]` / `[McpObservable]` attributes put an app on the [[App Network]], where other N.E.O. apps on the machine call it directly — no Claude in between.
+
 > Generated apps don't just run in N.E.O. — they can be MCP servers themselves. Claude Code can call into a running app's methods, read its state, even subscribe to property changes. Combined with [[Channels]] (`Ai.Trigger`) the loop is fully bidirectional: Claude drives the app, the app drives Claude.
 
 ## The shift

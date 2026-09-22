@@ -29,6 +29,8 @@ public class ToolSurfaceTests
         "list_windows", "close_all_windows", "position_window", "layout_windows",
         // Live-MCP
         "inspect_app_api", "invoke_method", "read_observable", "raise_event", "simulate_input",
+        // app network
+        "list_running_apps",
     ];
 
     [Fact]

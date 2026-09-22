@@ -59,6 +59,27 @@ namespace Neo.App
             return files;
         }
 
+        /// <summary>
+        /// The apps on the app network right now, described for the prompt — every N.E.O. app on
+        /// this machine except the one in our own window (the AI is writing that one).
+        /// </summary>
+        private List<string> OtherRunningApps()
+        {
+            try
+            {
+                var ownPid = ChildProcessService?.ChildProcessId;
+                return Neo.App.Apps.Running(includeSelf: true)
+                    .Where(a => ownPid == null || a.ProcessId != ownPid)
+                    .Select(a => a.Describe())
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[AppNetwork] Could not list running apps: {ex.Message}");
+                return new List<string>();
+            }
+        }
+
         private void RecreatePromptToDllSession(bool preserveState)
         {
             if (AiAgent == null)
@@ -134,7 +155,7 @@ namespace Neo.App
                 InitialCode = preserveState ? (AppState.LastCode ?? string.Empty) : GetUserControlBaseCode(),
                 InitialHistoryPrefix = preserveState ? string.Empty : "Code:\n\n",
                 AdditionalSourceFiles = additionalSourceFiles,
-                SystemMessageOverride = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython, PluginAgents),
+                SystemMessageOverride = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython, PluginAgents, OtherRunningApps()),
             };
 
             _promptToDllSession = _promptToDllClient.CreateSession(sessionOptions);

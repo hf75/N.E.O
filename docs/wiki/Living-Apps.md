@@ -53,6 +53,10 @@ Code map: `Neo.App.Core/PlayerMode.cs` (detection, manifest, `LivingAppExporter`
 
 Tests: `Neo.App.Core.Tests/PlayerModeTests` (detection, manifest, export layout, reset), `Neo.PluginWindow.SmokeTests/PluginWindowSmokeTests` (bounds reports, `Dock=false`, clean close), `Neo.PluginWindow.SmokeTests/LivingAppSmokeTests` (both real hosts started with `--play`, driven through UI Automation: only the app with its hint, Ctrl+Shift+N from both sides, state kept, close ends the host). The end-to-end path — export through the real host, start the exported `.exe`, change it through the code editor, autosave, reset, close — was verified with UI automation against the real windows, for both hosts.
 
+## Living apps on the app network
+
+A living app is on the [[App Network]] under its title (or the name in its `[AppInfo]`): other N.E.O. apps on the machine can call what it offers, and a prompt inside it can use the other running apps — "take the customer from the CRM app".
+
 ## Limits
 
 - The user gets all of N.E.O.'s power, including the PowerShell agent and Python. The Avalonia host has no sandbox, and the WPF host's sandbox is off by default, so a living app runs its user's prompts with the user's rights. Keep this in mind before handing one to someone who does not know what they are asking for.

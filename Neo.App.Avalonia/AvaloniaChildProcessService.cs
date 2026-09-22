@@ -41,6 +41,11 @@ namespace Neo.App
 
         public bool HasLoadedControl => _hasLoadedControl;
 
+        public int? ChildProcessId
+        {
+            get { try { return _childProcess is { HasExited: false } p ? p.Id : null; } catch { return null; } }
+        }
+
         public event Func<CrashReason, ErrorMessage, Task>? ChildProcessCrashed;
         public event Action<LogMessage>? ChildLogReceived;
 

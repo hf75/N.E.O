@@ -75,6 +75,8 @@
   <Target Name="CopyChildOutputs" AfterTargets="Build">
     <ItemGroup>
       <ChildOutputs Include="..\Neo.PluginWindowAvalonia\bin\$(Configuration)\$(NeoTargetFramework)\Neo.PluginWindowAvalonia.*" />
+      <!-- The app network API: the child publishes the app with it, generated code calls other apps with it. -->
+      <ChildOutputs Include="..\Neo.PluginWindowAvalonia\bin\$(Configuration)\$(NeoTargetFramework)\Neo.App.Api.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(ChildOutputs)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
   </Target>

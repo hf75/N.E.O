@@ -147,6 +147,9 @@ namespace Neo.App
             PluginAgents = DiscoverPluginAgents();
 
             AdditionalDlls.Add(ResolveAppDll("Neo.Agents.Core.dll"));
+            // The app network and Live-MCP attributes ([AppInfo], [McpCallable], Apps.CallAsync …).
+            if (File.Exists(ResolveAppDll("Neo.App.Api.dll")))
+                AdditionalDlls.Add(ResolveAppDll("Neo.App.Api.dll"));
             foreach (var plugin in PluginAgents)
             {
                 AdditionalDlls.Add(ResolveAppDll(plugin.AgentDllName));

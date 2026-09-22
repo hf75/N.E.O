@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Neo.App.Api\Neo.App.Api.csproj" />
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
     <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
   </ItemGroup>

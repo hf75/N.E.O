@@ -95,6 +95,7 @@ namespace Neo.PluginWindowAvalonia
 
             MainWin = new MainWindow();
             hostOptions.MainWindowCreated?.Invoke(MainWin);
+            _appName = GetArgValue(args, "--app-name") ?? GetArgValue(args, "--title");
             if (isStandalone)
             {
                 // Standalone mode: full window with decorations. In player mode the host passes
@@ -238,6 +239,7 @@ namespace Neo.PluginWindowAvalonia
 
         private async void OnExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
         {
+            try { Neo.App.AppNetwork.Unpublish(); } catch (Exception ex) { Debug.WriteLine($"[OnExit] Unpublish failed: {ex.Message}"); }
             try { _hb?.Stop(); } catch (Exception ex) { Debug.WriteLine($"[OnExit] Timer stop failed: {ex.Message}"); }
             try { _ipcCts.Cancel(); } catch (Exception ex) { Debug.WriteLine($"[OnExit] CTS cancel failed: {ex.Message}"); }
             try { if (_client != null) await _client.DisposeAsync(); } catch (Exception ex) { Debug.WriteLine($"[OnExit] Client dispose failed: {ex.Message}"); }
@@ -377,6 +379,7 @@ namespace Neo.PluginWindowAvalonia
                             // finds the manifest instead of "no UserControl loaded".
                             if (PluginHost.Options.EnableMcpHostFeatures)
                                 await SendLiveMcpManifestAsync();
+                            await PublishOnAppNetworkAsync();
                         }
                         catch (Exception ex)
                         {
@@ -537,6 +540,7 @@ namespace Neo.PluginWindowAvalonia
                             // result goes out, so the host knows the new ones when it hears "applied".
                             if (PluginHost.Options.EnableMcpHostFeatures)
                                 await SendLiveMcpManifestAsync();
+                            await PublishOnAppNetworkAsync();
                         }
                         catch (Exception ex)
                         {
@@ -558,6 +562,7 @@ namespace Neo.PluginWindowAvalonia
                         });
                         _liveMcpManifest = null;
                         _liveMcpObservableSubs?.ClearForControlUnload();
+                        Neo.App.AppNetwork.Unpublish();
 
                         await SafeSendAsync(new IpcEnvelope(
                             IpcTypes.Ack, env.CorrelationId,
@@ -952,6 +957,33 @@ namespace Neo.PluginWindowAvalonia
             var evt = new AppEventMessage(eventType, target, value, details, hops);
             return SafeSendAsync(new IpcEnvelope(IpcTypes.AppEvent, "", Json.ToJson(evt)));
         }
+
+        /// <summary>
+        /// Puts the loaded app on the app network (<see cref="Neo.App.Apps"/>): other N.E.O. apps on
+        /// this machine can call its [McpCallable] methods and read its [McpObservable] values. Called
+        /// after every load and every live update — the offer may have changed. Never throws.
+        /// </summary>
+        private async Task PublishOnAppNetworkAsync()
+        {
+            try
+            {
+                var (control, title) = await Dispatcher.UIThread.InvokeAsync(() => (MainWin.GetLoadedUserControl(), MainWin.Title));
+                if (control == null) return;
+                var name = _appName ?? title ?? "N.E.O. app";
+                var app = Neo.App.AppNetwork.Publish(control, name,
+                    f => Dispatcher.UIThread.InvokeAsync(f).GetTask());
+                if (app.Methods.Count > 0 || app.Values.Count > 0)
+                    await SendLogAsync(LogLevel.Info,
+                        $"On the app network as '{app.Name}': {app.Methods.Count} method(s), {app.Values.Count} value(s).", "AppNetwork");
+            }
+            catch (Exception ex)
+            {
+                await SendLogAsync(LogLevel.Warn, "App network: could not publish the app — " + ex.Message, "AppNetwork");
+            }
+        }
+
+        /// <summary>The name the host gave this app for the app network (<c>--app-name</c>); null: the window title.</summary>
+        private string? _appName;
 
         /// <summary>
         /// Build the Live-MCP manifest for the currently loaded UserControl and push it
