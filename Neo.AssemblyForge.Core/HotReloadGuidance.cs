@@ -19,6 +19,7 @@ public static class HotReloadGuidance
         "Keep everything the user did or loaded in fields of the control (loaded data, the path of an opened file, lists, the current selection), not only in controls. Fields keep their values across updates; the controls are rebuilt.",
         "Put one-time set-up — starting timers, subscribing to objects held in fields, starting background work — in the constructor, not in the UI method, because the UI method may run many times. Keep every timer in a field.",
         "When changing existing code, keep the names and types of existing fields, properties and methods and add new members instead of renaming. A renamed or retyped field loses its value, and a changed base class or interface list forces a full restart.",
+        "Leave the signatures and modifiers of existing methods exactly as they are: do not add or remove static, async, virtual or override, do not change public/private, and do not change parameters. Changing a method body is fine; anything else about an existing method forces a full restart. If a method has to behave differently, change its body or add a new method.",
         "Optional: a parameterless method OnHotReloaded() is called after each live update.",
     ];
 
