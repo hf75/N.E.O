@@ -44,6 +44,36 @@ namespace Neo.App
         public event Func<CrashReason, ErrorMessage, Task>? ChildProcessCrashed;
         public event Action<LogMessage>? ChildLogReceived;
 
+        // ── Player mode: the host hides behind the app window and follows it ──
+
+        /// <summary>
+        /// True (default): the app window docks to the right of the host and follows it. False:
+        /// the app window is a window of its own — the host follows it (see <see cref="ChildWindowBounds"/>).
+        /// </summary>
+        public bool DockChildToHost { get; set; } = true;
+
+        /// <summary>Title and icon the app window is started with; null: the preview defaults.</summary>
+        public string? ChildWindowTitle { get; set; }
+        public string? ChildWindowIcon { get; set; }
+
+        /// <summary>The app window's last reported screen bounds (position in pixels, size in DIPs); null before it reported.</summary>
+        public ParentWindowBoundsMessage? ChildWindowBounds { get; private set; }
+
+        /// <summary>The app window moved or resized.</summary>
+        public event Action<ParentWindowBoundsMessage>? ChildWindowBoundsChanged;
+
+        /// <summary>The user pressed Ctrl+Shift+N in the app window.</summary>
+        public event Action? HostToggleRequested;
+
+        /// <summary>The app window went away without the host asking (the user closed it).</summary>
+        public event Action? ChildExited;
+
+        /// <summary>
+        /// True (default): a preview window the user closes is reported as a crash, so the host
+        /// offers to restore it. False (player mode): it is the app closing — <see cref="ChildExited"/> fires instead.
+        /// </summary>
+        public bool TreatCloseAsCrash { get; set; } = true;
+
         public AvaloniaChildProcessService(MainWindow mainWindow)
         {
             _mainWindow = mainWindow;
@@ -114,6 +144,10 @@ namespace Neo.App
             }
 
             var childArgs = $"--pipe {pipeName} --parentPid {Environment.ProcessId} --standalone";
+            if (!string.IsNullOrWhiteSpace(ChildWindowTitle))
+                childArgs += $" --title \"{ChildWindowTitle.Replace("\"", "")}\"";
+            if (!string.IsNullOrWhiteSpace(ChildWindowIcon) && File.Exists(ChildWindowIcon))
+                childArgs += $" --icon \"{ChildWindowIcon}\"";
 
             var psi = new ProcessStartInfo
             {
@@ -240,6 +274,19 @@ namespace Neo.App
                                     await ChildProcessCrashed.Invoke(CrashReason.UnhandledException, errMsg);
                                 break;
 
+                            case IpcTypes.ChildWindowBounds:
+                                var childBounds = Json.FromJson<ParentWindowBoundsMessage>(env.PayloadJson);
+                                if (childBounds != null)
+                                {
+                                    ChildWindowBounds = childBounds;
+                                    ChildWindowBoundsChanged?.Invoke(childBounds);
+                                }
+                                break;
+
+                            case IpcTypes.ToggleHostWindow:
+                                HostToggleRequested?.Invoke();
+                                break;
+
                             case IpcTypes.NotifyFirstChildVisibility:
                             case IpcTypes.ChildActivated:
                             case IpcTypes.Heartbeat:
@@ -256,6 +303,18 @@ namespace Neo.App
                     onBlobChunk: null!,
                     onBlobEnd: null!,
                     ct: ct);
+
+                // The pipe closed cleanly: the app window was closed.
+                if (_isShuttingDown || ct.IsCancellationRequested) return;
+                if (TreatCloseAsCrash && ChildProcessCrashed != null)
+                {
+                    await ChildProcessCrashed.Invoke(CrashReason.PipeDisconnected,
+                        new ErrorMessage("The preview window was closed.", "EndOfStreamException", ""));
+                }
+                else
+                {
+                    ChildExited?.Invoke();
+                }
             }
             catch (OperationCanceledException) { }
             catch (ObjectDisposedException) { }
@@ -335,7 +394,8 @@ namespace Neo.App
                 var msg = new ParentWindowBoundsMessage(
                     pos.X, pos.Y,
                     _mainWindow.Width, _mainWindow.Height,
-                    _allowChildVisible && _mainWindow.WindowState != global::Avalonia.Controls.WindowState.Minimized);
+                    _allowChildVisible && (!DockChildToHost || _mainWindow.WindowState != global::Avalonia.Controls.WindowState.Minimized),
+                    Dock: DockChildToHost);
 
                 await SafeSendControlAsync(new IpcEnvelope(
                     IpcTypes.ParentWindowBounds,
@@ -510,7 +570,7 @@ namespace Neo.App
             if (_messenger == null || _pipeStream == null || !_pipeStream.IsConnected) return;
             try
             {
-                var msg = new ParentWindowBoundsMessage(0, 0, 0, 0, visible);
+                var msg = new ParentWindowBoundsMessage(0, 0, 0, 0, visible, Dock: false);
                 await SafeSendControlAsync(new IpcEnvelope(
                     IpcTypes.ParentWindowBounds, "", Json.ToJson(msg)));
             }

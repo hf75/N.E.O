@@ -49,8 +49,23 @@ namespace Neo.PluginWindowAvalonia
         public Avalonia.Controls.Control? GetLoadedUserControl()
             => dynamicContent.Content as Avalonia.Controls.Control;
 
+        /// <summary>
+        /// Ctrl+Shift+N: the user wants the host (N.E.O.) shown or hidden. In player mode the
+        /// host runs invisibly behind this window; this is how it is called up.
+        /// </summary>
+        public event Action? HostToggleRequested;
+
         private void OnKeyDown(object? sender, global::Avalonia.Input.KeyEventArgs e)
         {
+            if (e.Key == global::Avalonia.Input.Key.N
+                && e.KeyModifiers.HasFlag(global::Avalonia.Input.KeyModifiers.Control)
+                && e.KeyModifiers.HasFlag(global::Avalonia.Input.KeyModifiers.Shift))
+            {
+                HostToggleRequested?.Invoke();
+                e.Handled = true;
+                return;
+            }
+
             // Escape or Ctrl+Shift+F exits fullscreen
             if (WindowState == WindowState.FullScreen)
             {

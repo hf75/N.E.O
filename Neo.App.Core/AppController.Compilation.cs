@@ -175,6 +175,7 @@ namespace Neo.App
                 ChildProcessService.ShowChild();
                 ChildProcessService.UpdatePosition();
                 LastErrorMsg = "";
+                SaveProjectIfAutoSaving();
                 return true;
             }
             if (couldHotReload)
@@ -206,6 +207,7 @@ namespace Neo.App
             ChildProcessService.UpdatePosition();
 
             LastErrorMsg = "";
+            SaveProjectIfAutoSaving();
             return true;
         }
 

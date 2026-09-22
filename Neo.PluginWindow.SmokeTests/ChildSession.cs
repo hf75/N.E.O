@@ -24,6 +24,7 @@ internal sealed class ChildSession : IAsyncDisposable
     private Process? _child;
     private Task? _receiveLoop;
     private int _loadExecuted;
+    private readonly ConcurrentDictionary<string, string> _lastPayloads = new(StringComparer.Ordinal);
 
     private ChildSession(NamedPipeServerStream pipe)
     {
@@ -41,6 +42,16 @@ internal sealed class ChildSession : IAsyncDisposable
 
     /// <summary>How many control frames of the given <see cref="IpcTypes"/> type the child sent.</summary>
     public int FrameCount(string ipcType) => _frameCounts.TryGetValue(ipcType, out var n) ? n : 0;
+
+    /// <summary>The payload of the last control frame of that type, or null.</summary>
+    public string? LastPayload(string ipcType) => _lastPayloads.TryGetValue(ipcType, out var p) ? p : null;
+
+    /// <summary>True once the receive loop ended because the child closed the pipe (a clean end, no exception).</summary>
+    public bool PipeClosedCleanly { get; private set; }
+
+    /// <summary>A fire-and-forget control frame, as the hosts send window bounds.</summary>
+    public Task SendControlAsync(string type, string payloadJson)
+        => SendAsync(new IpcEnvelope(type, "", payloadJson));
 
     public static async Task<ChildSession> StartAsync(string exePath, string extraArgs,
         IReadOnlyDictionary<string, string>? environment = null)
@@ -184,6 +195,7 @@ internal sealed class ChildSession : IAsyncDisposable
                 onControl: async env =>
                 {
                     _frameCounts.AddOrUpdate(env.Type, 1, (_, n) => n + 1);
+                    _lastPayloads[env.Type] = env.PayloadJson;
 
                     if (env.Type != IpcTypes.Error && !string.IsNullOrEmpty(env.CorrelationId) &&
                         _pending.TryRemove(env.CorrelationId, out var waiting))
@@ -219,6 +231,7 @@ internal sealed class ChildSession : IAsyncDisposable
                 onBlobChunk: (_, _) => Task.CompletedTask,
                 onBlobEnd: _ => Task.CompletedTask,
                 ct: _cts.Token);
+            PipeClosedCleanly = true;
         }
         catch (Exception) when (_cts.IsCancellationRequested || !ChildIsAlive)
         {
@@ -226,6 +239,12 @@ internal sealed class ChildSession : IAsyncDisposable
         }
         catch (IOException) { }
         catch (ObjectDisposedException) { }
+    }
+
+    /// <summary>Asks the child's main window to close, as a user would (WM_CLOSE).</summary>
+    public void CloseMainWindow()
+    {
+        try { _child?.CloseMainWindow(); } catch { }
     }
 
     public async ValueTask DisposeAsync()

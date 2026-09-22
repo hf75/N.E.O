@@ -97,8 +97,9 @@ namespace Neo.PluginWindowAvalonia
             hostOptions.MainWindowCreated?.Invoke(MainWin);
             if (isStandalone)
             {
-                // Standalone mode: full window with decorations
-                MainWin.Title = hostOptions.StandaloneWindowTitle;
+                // Standalone mode: full window with decorations. In player mode the host passes
+                // the app's own title and icon — the window then is the app, not a preview.
+                MainWin.Title = GetArgValue(args, "--title") ?? hostOptions.StandaloneWindowTitle;
                 MainWin.Width = 800;
                 MainWin.Height = 600;
                 MainWin.ShowInTaskbar = true;
@@ -107,11 +108,27 @@ namespace Neo.PluginWindowAvalonia
                 MainWin.WindowStartupLocation = WindowStartupLocation.CenterScreen;
                 try
                 {
-                    var stream = typeof(App).Assembly.GetManifestResourceStream("icon.ico");
-                    if (stream != null)
-                        MainWin.Icon = new WindowIcon(stream);
+                    var iconPath = GetArgValue(args, "--icon");
+                    if (iconPath != null && File.Exists(iconPath))
+                        MainWin.Icon = new WindowIcon(iconPath);
+                    else
+                    {
+                        var stream = typeof(App).Assembly.GetManifestResourceStream("icon.ico");
+                        if (stream != null)
+                            MainWin.Icon = new WindowIcon(stream);
+                    }
                 }
                 catch { /* icon not critical */ }
+
+                // The host may run hidden behind this window (player mode): it needs to know where
+                // the window is to dock next to it, and when the user calls it up.
+                MainWin.HostToggleRequested += () => _ = SafeSendAsync(new IpcEnvelope(IpcTypes.ToggleHostWindow, "", "{}"));
+                var boundsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
+                boundsTimer.Tick += (_, _) => { boundsTimer.Stop(); _ = SendWindowBoundsAsync(); };
+                void BoundsChanged(object? _, EventArgs __) { boundsTimer.Stop(); boundsTimer.Start(); }
+                MainWin.PositionChanged += BoundsChanged;
+                MainWin.SizeChanged += BoundsChanged;
+                MainWin.Opened += BoundsChanged;
             }
             else
             {
@@ -422,13 +439,17 @@ namespace Neo.PluginWindowAvalonia
                                     else
                                         MainWin.WaitStatusText.Text = "Waiting for code...";
 
-                                    // Dock to the right edge of parent, same height
-                                    int dockX = (int)(bounds.X + bounds.Width + 8); // 8px gap
-                                    int dockY = (int)bounds.Y;
-                                    int dockH = (int)bounds.Height;
+                                    // Dock to the right edge of parent, same height — unless the
+                                    // host follows this window instead (player mode).
+                                    if (bounds.Dock)
+                                    {
+                                        int dockX = (int)(bounds.X + bounds.Width + 8); // 8px gap
+                                        int dockY = (int)bounds.Y;
+                                        int dockH = (int)bounds.Height;
 
-                                    MainWin.Position = new PixelPoint(dockX, dockY);
-                                    MainWin.Height = dockH;
+                                        MainWin.Position = new PixelPoint(dockX, dockY);
+                                        MainWin.Height = dockH;
+                                    }
 
                                     if (!MainWin.IsVisible)
                                         MainWin.Show();
@@ -841,6 +862,24 @@ namespace Neo.PluginWindowAvalonia
         // =======================================================
         // Utility
         // =======================================================
+        private static string? GetArgValue(string[] args, string name)
+        {
+            for (int i = 0; i < args.Length - 1; i++)
+                if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+                    return args[i + 1];
+            return null;
+        }
+
+        /// <summary>Where the app window is on screen (standalone mode), for a host that docks next to it.</summary>
+        private Task SendWindowBoundsAsync()
+        {
+            if (_client == null || !MainWin.IsVisible) return Task.CompletedTask;
+            // Same convention as the host's own bounds: position in screen pixels, size in DIPs.
+            var bounds = new ParentWindowBoundsMessage(
+                MainWin.Position.X, MainWin.Position.Y, MainWin.Width, MainWin.Height, IsVisible: true);
+            return SafeSendAsync(new IpcEnvelope(IpcTypes.ChildWindowBounds, "", Json.ToJson(bounds)));
+        }
+
         private static string? GetPipeNameFromArgs(string[] args)
         {
             for (int i = 0; i < args.Length - 1; i++)

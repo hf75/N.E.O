@@ -42,6 +42,17 @@ namespace Neo.App
         private AppController _appController = null!;
         // Wait indicator is now shown in the Live Preview child window, not here
 
+        // ── Player mode ─────────────────────────────────────────────────
+        // The host plays a project as a living app: this window stays hidden behind the app
+        // window and is called up with Ctrl+Shift+N (in either window); every change is saved
+        // back to the project. See PlayerProject.
+
+        /// <summary>Set before the window is used when the host runs as a living app; null in the normal mode.</summary>
+        public PlayerProject? Player { get; init; }
+
+        private bool _hostInitialized;
+        private bool _playerShuttingDown;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -96,6 +107,14 @@ namespace Neo.App
 
         private async void MainWindow_Closing(object? sender, WindowClosingEventArgs e)
         {
+            // In player mode the app window is the app; closing this one only puts it away.
+            if (Player != null && !_playerShuttingDown)
+            {
+                e.Cancel = true;
+                Hide();
+                return;
+            }
+
             Debug.WriteLine("--- MainWindow_Closing: Starting shutdown sequence. ---");
 
             if (_appController?.ChildProcessService != null)
@@ -115,8 +134,17 @@ namespace Neo.App
             }, DispatcherPriority.Background);
         }
 
-        private async void MainWindow_Loaded(object? sender, RoutedEventArgs e)
+        private async void MainWindow_Loaded(object? sender, RoutedEventArgs e) => await InitializeHostAsync();
+
+        /// <summary>
+        /// Starts the host: settings, controller, packages, the app window. Runs once — from the
+        /// Loaded event in the normal mode, or directly in player mode, where this window is not shown.
+        /// </summary>
+        private async Task InitializeHostAsync()
         {
+            if (_hostInitialized) return;
+            _hostInitialized = true;
+
             // Force UseAvalonia BEFORE AppController constructor, because
             // the constructor calls RecreatePromptToDllSession which reads
             // Settings.UseAvalonia to select the correct base code template.
@@ -126,10 +154,31 @@ namespace Neo.App
 
             _appController = new AppController(this, new AvaloniaPlatformServices());
 
+            if (Player != null)
+            {
+                // Its own build folders: a living app must not compile over a running N.E.O. (or
+                // another living app) on the same machine.
+                var playerRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    AppName, "Players", Player.Name);
+                _appController.DllPath = Path.Combine(playerRoot, "DynamicUserControl.dll");
+                _appController.NuGetPackageDirectory = Path.Combine(playerRoot, "NuGetPackages");
+            }
+
             if (_appController.AvailableAgents.Count == 0)
             {
                 var setup = new Neo.App.Views.ApiKeySetupWindow();
-                await setup.ShowDialog<object?>(this);
+                if (Player != null)
+                {
+                    // No owner: this window is not on screen in player mode.
+                    var closed = new TaskCompletionSource<bool>();
+                    setup.Closed += (_, _) => closed.TrySetResult(true);
+                    setup.Show();
+                    await closed.Task;
+                }
+                else
+                {
+                    await setup.ShowDialog<object?>(this);
+                }
                 if (setup.KeysSaved)
                     _appController.ReloadAgents();
             }
@@ -153,20 +202,146 @@ namespace Neo.App
 
                 _appController.ChildProcessService.ConfigureCrossplatformSettings(cps);
 
-                await _appController.ChildProcessService.RestartAsync();
-                // Don't call HideChild here — the child's WaitOverlay is already
-                // visible by default (XAML). HideChild would start the timer.
+                if (Player != null)
+                {
+                    ConfigurePlayerMode();
+                }
+                else
+                {
+                    await _appController.ChildProcessService.RestartAsync();
+                    // Don't call HideChild here — the child's WaitOverlay is already
+                    // visible by default (XAML). HideChild would start the timer.
+                }
 
                 EnsureAppDataFolderExists();
 
                 isCycleViewLocked = false;
-                Activate();
-                txtPrompt.Focus();
+                if (Player == null)
+                {
+                    Activate();
+                    txtPrompt.Focus();
+                }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[MainWindow_Loaded] Fatal error: {ex}");
             }
+        }
+
+        // ─── Player mode ────────────────────────────────────────────────
+
+        /// <summary>Runs the host as a living app: loads <see cref="Player"/>'s project into the app window and waits, hidden.</summary>
+        public async Task RunAsPlayerAsync()
+        {
+            if (Player == null) throw new InvalidOperationException("No project to play.");
+
+            await InitializeHostAsync();
+            if (_appController == null) { ShutdownPlayer(); return; }
+
+            // Importing starts the app window (ClearSession restarts the child) and shows it
+            // with the app loaded — no "waiting for code" window before that.
+            await _appController.ImportProjectAsync(Player.ProjectFile);
+            if (!_appController.ChildProcessService.HasLoadedControl)
+            {
+                // The project does not build on this machine: show what went wrong.
+                ShowHostBesideApp();
+                return;
+            }
+            _appController.AutoSaveProjectPath = Player.ProjectFile;
+        }
+
+        private void ConfigurePlayerMode()
+        {
+            var player = Player!;
+            Title = $"N.E.O. · {player.Title}";
+            BtnImport.IsVisible = false;
+            BtnExport.IsVisible = false;
+            BtnClear.IsVisible = false;
+            BtnResetOriginal.IsVisible = player.OriginalFile != null;
+
+            if (_appController.ChildProcessService is not AvaloniaChildProcessService svc) return;
+            svc.DockChildToHost = false;
+            svc.TreatCloseAsCrash = false;
+            svc.ChildWindowTitle = player.Title;
+            svc.ChildWindowIcon = player.IconFile;
+            svc.HostToggleRequested += () => Dispatcher.UIThread.Post(ToggleHostWindow);
+            svc.ChildWindowBoundsChanged += _ => Dispatcher.UIThread.Post(() => { if (IsVisible) PlaceBesideApp(); });
+            svc.ChildExited += () => Dispatcher.UIThread.Post(ShutdownPlayer);
+        }
+
+        /// <summary>Ctrl+Shift+N: N.E.O. beside the app, or away again.</summary>
+        private void ToggleHostWindow()
+        {
+            if (Player == null) return;
+            if (IsVisible) Hide();
+            else ShowHostBesideApp();
+        }
+
+        private void ShowHostBesideApp()
+        {
+            PlaceBesideApp();
+            Show();
+            Activate();
+            txtPrompt.Focus();
+        }
+
+        // Left of the app window, same height; right of it when there is no room on the left.
+        private void PlaceBesideApp()
+        {
+            if (_appController?.ChildProcessService is not AvaloniaChildProcessService svc || svc.ChildWindowBounds is not { } app)
+                return;
+
+            var screen = Screens.ScreenFromPoint(new PixelPoint((int)app.X, (int)app.Y)) ?? Screens.Primary;
+            double scaling = screen?.Scaling > 0 ? screen.Scaling : 1;
+            const int gap = 8;
+            int hostWidth = (int)(Width * scaling);
+            int appWidth = (int)(app.Width * scaling);
+
+            int x = (int)app.X - hostWidth - gap;
+            if (screen != null && x < screen.WorkingArea.X)
+                x = (int)app.X + appWidth + gap;
+
+            Height = app.Height;
+            Position = new PixelPoint(x, (int)app.Y);
+        }
+
+        private void ShutdownPlayer()
+        {
+            if (_playerShuttingDown) return;
+            _playerShuttingDown = true;
+            _ = ShutdownPlayerAsync();
+        }
+
+        private async Task ShutdownPlayerAsync()
+        {
+            try
+            {
+                if (_appController?.ChildProcessService != null)
+                    await _appController.ChildProcessService.DisposeAsync();
+            }
+            catch { /* shutting down anyway */ }
+
+            if (global::Avalonia.Application.Current?.ApplicationLifetime is global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                desktop.Shutdown();
+        }
+
+        private async void Button_Click_ResetOriginal(object? sender, RoutedEventArgs e)
+        {
+            if (Player == null || _appController == null) return;
+            if (!Player.ResetToOriginal())
+            {
+                _appController.Logger.LogMessage("There is no original to go back to.", BubbleType.CompletionError);
+                return;
+            }
+            _appController.Logger.LogMessage("Back to the app as it was exported.", BubbleType.Info);
+            await _appController.ImportProjectAsync(Player.ProjectFile);
+            txtPrompt.Focus();
+        }
+
+        // Dialogs need a visible owner; in player mode this window may be hidden when one is due.
+        private void EnsureVisibleForDialog()
+        {
+            if (Player != null && !IsVisible) ShowHostBesideApp();
         }
 
         private void EnsureAppDataFolderExists()
@@ -340,6 +515,13 @@ namespace Neo.App
 
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
             {
+                if (e.Key == Key.N && Player != null)
+                {
+                    ToggleHostWindow();
+                    e.Handled = true;
+                    return;
+                }
+
                 if (e.Key == Key.C)
                 {
                     if (_isCodeEditorActive)
@@ -546,8 +728,9 @@ namespace Neo.App
                     dialog.RequiresExport,
                     exportSettings,
                     dialog.ExportIcoFullPath,
-                    dialog.InstallStartMenu,
-                    dialog.InstallDesktop
+                    installDesktop: dialog.InstallDesktop,
+                    installStartmenu: dialog.InstallStartMenu,
+                    livingApp: dialog.LivingApp
                 );
             }
 
@@ -645,6 +828,7 @@ namespace Neo.App
 
         public async Task<CrashDialogResult> ShowCrashDialogAsync()
         {
+            EnsureVisibleForDialog();
             var dialog = new CrashDialog(
                 title: "Plugin Process Error",
                 message: "The plugin process has become unresponsive or disconnected.",
@@ -668,7 +852,8 @@ namespace Neo.App
 
         void IMainView.ClearPrompt() => txtPrompt.Clear();
         void IMainView.FocusPrompt() => txtPrompt.Focus();
-        void IMainView.ActivateWindow() => Activate();
+        // Activate() would put a hidden window on screen — in player mode it stays away until asked for.
+        void IMainView.ActivateWindow() { if (Player == null || IsVisible) Activate(); }
 
         void IMainView.ShowRepairOverlay() => RepairOverlay.IsVisible = true;
         void IMainView.HideRepairOverlay() => RepairOverlay.IsVisible = false;
@@ -684,6 +869,7 @@ namespace Neo.App
             bool isPowerShellMode,
             bool isConsoleAppMode)
         {
+            EnsureVisibleForDialog();
             var review = new PatchReviewWindow(patchOrCode, nugetPackages, explanation,
                 isPowerShellMode: isPowerShellMode, isConsoleAppMode: isConsoleAppMode);
             await review.ShowDialog<bool?>(this);

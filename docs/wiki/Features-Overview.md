@@ -54,7 +54,7 @@ From left to right:
 | Button | Name | Description |
 |--------|------|-------------|
 | Import | Import | Load a previously saved `.resx` project file |
-| Export | Export | Export your app as a standalone executable |
+| Export | Export | Export your app as a standalone executable — or as a [[Living Apps|living app]] its user keeps changing |
 | Sandbox | Sandbox Controls | Toggle security sandbox options |
 | Settings | Settings | Open the settings window |
 | Code | Code Editor | Open the built-in code editor |

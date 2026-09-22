@@ -91,6 +91,12 @@ namespace Neo.IPC
         // so the app instance and everything it holds survives a code change.
         public const string HotReload = "HotReload";
         public const string HotReloadResult = "HotReloadResult";
+
+        // ── Player mode (the host runs hidden behind the app window) ────────
+        /// <summary>Child → host, unsolicited: the app window's screen bounds (a standalone window that moved or resized).</summary>
+        public const string ChildWindowBounds = "ChildWindowBounds";
+        /// <summary>Child → host, unsolicited: the user pressed the shortcut that shows or hides the host window.</summary>
+        public const string ToggleHostWindow = "ToggleHostWindow";
     }
 
     public record StartWebBridgeRequest(string HtmlContent, int Port = 0);
@@ -362,8 +368,12 @@ namespace Neo.IPC
 
     public record NotifyFirstChildVisibility(int unused);
 
-    /// <summary>Parent window screen bounds, sent to child for magnetic docking.</summary>
-    public record ParentWindowBoundsMessage(double X, double Y, double Width, double Height, bool IsVisible);
+    /// <summary>
+    /// Parent window screen bounds, sent to child for magnetic docking. <paramref name="Dock"/> false:
+    /// only the visibility applies — the app window keeps its own place (player mode, where the host
+    /// hides behind the app and follows it instead).
+    /// </summary>
+    public record ParentWindowBoundsMessage(double X, double Y, double Width, double Height, bool IsVisible, bool Dock = true);
 
     public static class Json
     {
@@ -725,7 +735,11 @@ namespace Neo.IPC
         private async Task<Frame?> ReadFrameAsync(CancellationToken ct)
         {
             byte[] header = new byte[HEADER_SIZE];
-            await ReadExactAsync(_stream, header, 0, HEADER_SIZE, ct).ConfigureAwait(false);
+            // EOF between frames is the other side closing the pipe on purpose (the window was
+            // closed): a clean end, not a broken frame.
+            int first = await _stream.ReadAsync(header, 0, HEADER_SIZE, ct).ConfigureAwait(false);
+            if (first == 0) return null;
+            await ReadExactAsync(_stream, header, first, HEADER_SIZE - first, ct).ConfigureAwait(false);
 
             var hspan = header.AsSpan();
             uint magic = BinaryPrimitives.ReadUInt32LittleEndian(hspan.Slice(0, 4));

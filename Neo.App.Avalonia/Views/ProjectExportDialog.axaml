@@ -86,7 +86,10 @@
                                 Content="Load ICO ..." Click="LoadIcon_Click"/>
                     </Grid>
 
-                    <CheckBox Classes="rounded" Name="cbInstallDesktop" Margin="0,12,0,0"
+                    <CheckBox Classes="rounded" Name="cbLivingApp" Margin="0,12,0,0"
+                              Content="Living app (its user can keep changing it with Ctrl+Shift+N)"
+                              ToolTip.Tip="Ships N.E.O. itself, hidden behind the app. Needs the .NET runtime and an AI key on the user's machine."/>
+                    <CheckBox Classes="rounded" Name="cbInstallDesktop" Margin="0,6,0,0"
                               Content="Create Desktop Shortcut"/>
                     <CheckBox Classes="rounded" Name="cbInstallStartMenu" Margin="0,6,0,0"
                               Content="Create Startmenu Shortcut"/>

@@ -20,13 +20,47 @@ namespace Neo.App
 {
     public partial class AppController
     {
-        public async Task ExportProjectAsync(string assemblyName, 
-            string exportPath, 
+        /// <summary>
+        /// Set while the host plays a project (a living app): every build that reaches the app
+        /// window — prompts, undo/redo, history, code editor — is written back to this file.
+        /// </summary>
+        public string? AutoSaveProjectPath { get; set; }
+
+        /// <summary>Writes the current code, packages and history as a project file (the .resx the hosts import).</summary>
+        public void SaveProjectFile(string path)
+        {
+            var data = new ResxData
+            {
+                Version = 2,
+                Code = VirtualProjectFiles?.GetFileContent("./currentcode.cs") ?? AppState.LastCode,
+                Nuget = AppState.PackageVersions,
+                History = AppState.History,
+            };
+            var temp = path + ".tmp";
+            File.WriteAllText(temp, JsonConvert.SerializeObject(data));
+            File.Move(temp, path, overwrite: true);
+        }
+
+        private void SaveProjectIfAutoSaving()
+        {
+            if (AutoSaveProjectPath == null) return;
+            try { SaveProjectFile(AutoSaveProjectPath); }
+            catch (Exception ex) { Logger.LogMessage("The change could not be saved: " + ex.Message, BubbleType.CompletionError); }
+        }
+
+        /// <param name="livingApp">
+        /// Export the app as a living app: this host, trimmed and renamed after the app, playing
+        /// the project. Its user changes the app with prompts (Ctrl+Shift+N) and keeps every change.
+        /// No separate executable is compiled.
+        /// </param>
+        public async Task ExportProjectAsync(string assemblyName,
+            string exportPath,
             string selectedCreationMode,
             bool requiresFullExport, // false --> only save resx
             ExportSettings exportSettings,
             string? iconFullPath,
-            bool installDesktop = false, bool installStartmenu = false)
+            bool installDesktop = false, bool installStartmenu = false,
+            bool livingApp = false)
         {
             if (CurrentStatus != AppStatus.Idle) return;
 
@@ -39,7 +73,7 @@ namespace Neo.App
                 var exportData = new ExportData(
                     AssemblyName: assemblyName,
                     ExportPath: exportPath,
-                    RequiresFullExport: requiresFullExport,
+                    RequiresFullExport: requiresFullExport && !livingApp,
                     ExportSettings: exportSettings,
                     SelectedCreationMode: selectedCreationMode,
                     VirtualProjectFiles: VirtualProjectFiles,
@@ -59,7 +93,22 @@ namespace Neo.App
                     prefix = "Saved project to ";
 
                 // 3. Ergebnis verarbeiten
-                if (success && result != null)
+                if (success && result != null && livingApp)
+                {
+                    try
+                    {
+                        var exe = await Task.Run(() => LivingAppExporter.Export(result.ExportDirectory, assemblyName, iconFullPath, _platformServices));
+                        Logger.LogMessage($"Exported living app to {exe} — its user changes it with Ctrl+Shift+N.", BubbleType.CompletionSuccess);
+                        result = result with { ExportedOrSavedPath = exe };
+                    }
+                    catch (Exception ex)
+                    {
+                        success = false;
+                        errorMessage = "The living app could not be written: " + ex.Message;
+                    }
+                }
+
+                if (success && result != null && !livingApp)
                 {
                     Logger.LogMessage(prefix + result.ExportedOrSavedPath, BubbleType.CompletionSuccess);
 
@@ -67,7 +116,7 @@ namespace Neo.App
                 Logger.LogMessage(ExportWindowBaseCode.CreateBaseCodeForExport(result.AssemblyName), BubbleType.Answer);
 #endif
                 }
-                else
+                else if (!success)
                 {
                     Logger.LogMessage($"Export failed: {errorMessage}", BubbleType.CompletionError);
 #if !HIDE_INTERNAL_CODE
@@ -97,11 +146,16 @@ namespace Neo.App
 
         public async Task ImportProjectAsync(string assemblyPath)
         {
+            // The project file is what is being read here; it is written again only once the
+            // imported state is in place (the build below runs before that).
+            var autoSave = AutoSaveProjectPath;
+            AutoSaveProjectPath = null;
+
             // 0. Clear everything
             await ClearSessionAsync();
 
             // 1. Prüfen, ob die App bereit ist.
-            if (CurrentStatus != AppStatus.Idle) return;
+            if (CurrentStatus != AppStatus.Idle) { AutoSaveProjectPath = autoSave; return; }
 
             try
             {
@@ -181,6 +235,9 @@ namespace Neo.App
 
                     // Sync the extracted prompt→DLL pipeline with the imported state/settings.
                     RecreatePromptToDllSession(preserveState: true);
+
+                    AutoSaveProjectPath = autoSave;
+                    SaveProjectIfAutoSaving();
                 }
             }
             catch (Exception ex)
@@ -189,6 +246,8 @@ namespace Neo.App
             }
             finally
             {
+                AutoSaveProjectPath = autoSave;
+
                 // 4. Restore child visibility and reset status.
                 ChildProcessService.ShowChild();
                 _pendingCrash = null;

@@ -121,7 +121,7 @@ Everything lives in [docs/wiki/](docs/wiki/Home.md). Start with [Home](docs/wiki
 - [Excel MCP](docs/wiki/Excel-MCP.md) — live Excel integration
 - [Channels](docs/wiki/Channels.md) — generated apps that push prompts back to Claude
 - [Architecture](docs/wiki/Architecture.md) — how the projects fit together
-- [Features Overview](docs/wiki/Features-Overview.md) · [Hot Reload](docs/wiki/Hot-Reload.md) · [Export and Import](docs/wiki/Export-and-Import.md) · [Settings](docs/wiki/Settings-and-Configuration.md) · [Shortcuts](docs/wiki/Keyboard-Shortcuts.md) · [Troubleshooting](docs/wiki/Troubleshooting.md)
+- [Features Overview](docs/wiki/Features-Overview.md) · [Hot Reload](docs/wiki/Hot-Reload.md) · [Living Apps](docs/wiki/Living-Apps.md) · [Export and Import](docs/wiki/Export-and-Import.md) · [Settings](docs/wiki/Settings-and-Configuration.md) · [Shortcuts](docs/wiki/Keyboard-Shortcuts.md) · [Troubleshooting](docs/wiki/Troubleshooting.md)
 
 ## License
 

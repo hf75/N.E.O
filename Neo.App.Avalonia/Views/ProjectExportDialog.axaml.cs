@@ -21,6 +21,9 @@ namespace Neo.App
         public bool InstallStartMenu { get; private set; }
         public bool RequiresExport { get; private set; }
 
+        /// <summary>Export the app as a living app (see <see cref="LivingAppExporter"/>).</summary>
+        public bool LivingApp { get; private set; }
+
         public CrossPlatformExport SelectedExportTarget
         {
             get
@@ -126,6 +129,7 @@ namespace Neo.App
             InstallDesktop = installDesktop;
             InstallStartMenu = installStartMenu;
             RequiresExport = requiresExport;
+            LivingApp = requiresExport && cbLivingApp.IsChecked.GetValueOrDefault();
 
             Close(true);
         }

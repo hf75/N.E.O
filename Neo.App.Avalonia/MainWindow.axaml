@@ -101,13 +101,13 @@
                     <SolidColorBrush x:Key="ToggleButtonBorderBrushDisabled" Color="#DDDDDD"/>
                 </StackPanel.Resources>
                 <!-- Import Button -->
-                <Button ToolTip.Tip="Import" Margin="8,0,0,0" Classes="minimalist"
+                <Button x:Name="BtnImport" ToolTip.Tip="Import" Margin="8,0,0,0" Classes="minimalist"
                         Click="Button_Click_Import">
                     <PathIcon Width="14" Height="14" Data="M12 2v8.586l2.293-2.293 1.414 1.414L11 14.414 6.293 9.707l1.414-1.414L10 10.586V2h2ZM2 18v-4h2v4h16v-4h2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z"/>
                 </Button>
 
                 <!-- Export Button -->
-                <Button ToolTip.Tip="Export" Margin="8,0,0,0" Classes="minimalist"
+                <Button x:Name="BtnExport" ToolTip.Tip="Export" Margin="8,0,0,0" Classes="minimalist"
                         Click="Button_Click_Export">
                     <PathIcon Width="14" Height="14" Data="M12 16V7.414l2.293 2.293 1.414-1.414L11 3.586 6.293 8.293l1.414 1.414L10 7.414V16h2ZM2 18v-4h2v4h16v-4h2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z"/>
                 </Button>
@@ -159,9 +159,16 @@
                 </Button>
 
                 <!-- Clear Button -->
-                <Button ToolTip.Tip="Clear" Margin="8,0,0,0" Classes="minimalist"
+                <Button x:Name="BtnClear" ToolTip.Tip="Clear" Margin="8,0,0,0" Classes="minimalist"
                         Click="Button_Click_Clear">
                     <TextBlock Text="✕" FontSize="12" FontWeight="Bold" Foreground="Black" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Button>
+
+                <!-- Player mode only: back to the app as it was exported -->
+                <Button x:Name="BtnResetOriginal" ToolTip.Tip="Reset to original (discard all changes made in this app)"
+                        Margin="8,0,0,0" Classes="minimalist" IsVisible="False"
+                        Click="Button_Click_ResetOriginal">
+                    <PathIcon Width="14" Height="14" Data="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8Z"/>
                 </Button>
             </StackPanel>
         </Grid>

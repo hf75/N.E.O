@@ -59,6 +59,58 @@ public class PluginWindowSmokeTests
     }
 
     [Fact]
+    public async Task Standalone_head_tells_the_host_where_its_window_is_and_keeps_its_place_when_asked()
+    {
+        // Player mode: the host hides behind the app window and follows it, so the child reports
+        // its bounds — and a bounds message with Dock=false must not move it.
+        await using var child = await ChildSession.StartAsync(
+            TestEnvironment.HeadExe("Neo.PluginWindowAvalonia"), "--standalone --title \"Player Test\"");
+
+        await child.LoadAsync(TestEnvironment.PluginFor("Neo.PluginWindowAvalonia"));
+        (await child.WaitForLoadsAsync(1)).Should().BeTrue(Describe(child, "load"));
+
+        // Show the window at a known place, without docking.
+        await child.SendControlAsync(IpcTypes.PositionWindow, Json.ToJson(new ParentWindowBoundsMessage(300, 200, 640, 480, true)));
+        await Task.Delay(1500);
+        child.FrameCount(IpcTypes.ChildWindowBounds).Should().BeGreaterThan(0, "a shown standalone window reports its bounds");
+        var reported = Json.FromJson<ParentWindowBoundsMessage>(child.LastPayload(IpcTypes.ChildWindowBounds)!)!;
+        reported.X.Should().Be(300);
+        reported.Y.Should().Be(200);
+
+        // Host bounds without docking: the window stays where it is.
+        await child.SendControlAsync(IpcTypes.ParentWindowBounds, Json.ToJson(new ParentWindowBoundsMessage(1000, 1000, 600, 700, true, Dock: false)));
+        await Task.Delay(800);
+        var after = Json.FromJson<ParentWindowBoundsMessage>(child.LastPayload(IpcTypes.ChildWindowBounds)!)!;
+        after.X.Should().Be(300, "Dock=false leaves the app window alone");
+        after.Y.Should().Be(200);
+
+        // Host bounds with docking (the normal mode): the window follows.
+        await child.SendControlAsync(IpcTypes.ParentWindowBounds, Json.ToJson(new ParentWindowBoundsMessage(100, 150, 500, 700, true)));
+        await Task.Delay(800);
+        var docked = Json.FromJson<ParentWindowBoundsMessage>(child.LastPayload(IpcTypes.ChildWindowBounds)!)!;
+        docked.X.Should().Be(100 + 500 + 8, "docked to the right of the host");
+        docked.Y.Should().Be(150);
+        child.Errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_child_that_exits_closes_the_pipe_cleanly()
+    {
+        // The host tells "the user closed the app window" (clean end) from a crash (broken pipe).
+        await using var child = await ChildSession.StartAsync(
+            TestEnvironment.HeadExe("Neo.PluginWindowAvalonia"), "--standalone");
+        await child.LoadAsync(TestEnvironment.PluginFor("Neo.PluginWindowAvalonia"));
+        (await child.WaitForLoadsAsync(1)).Should().BeTrue(Describe(child, "load"));
+
+        child.CloseMainWindow();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.Elapsed < TimeSpan.FromSeconds(15) && !child.PipeClosedCleanly) await Task.Delay(100);
+
+        child.PipeClosedCleanly.Should().BeTrue("the receive loop ends without an exception when the child closes its end");
+        child.ChildIsAlive.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Mcp_head_announces_the_LiveMcp_manifest_after_load()
     {
         await using var child = await ChildSession.StartAsync(
