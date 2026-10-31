@@ -27,7 +27,8 @@ namespace Neo.Agents
 
             metadata.Options.Add(new Option<string>("ApiKey", true, null!, "Dein Anthropic API Key (Pflicht)."));
             metadata.Options.Add(new Option<string>("Model", true, "claude-3-7-sonnet-latest", "Das zu verwendende Modell."));
-            metadata.Options.Add(new Option<float>("Temperature", false, 0.0f, "Sampling-Temperature."));
+            // Accepted because every caller sets it on all providers, but never sent: Claude 4.7+ answers 'temperature' with a 400.
+            metadata.Options.Add(new Option<float>("Temperature", false, 0.0f, "Wird nicht an Claude gesendet."));
             metadata.Options.Add(new Option<int>("TimeoutSeconds", false, 600, "Timeout fuer den API-Request in Sekunden (0 = unendlich)."));
             metadata.Options.Add(new Option<float>("TopP", false, 0.9f, "Top-P für nucleus sampling."));
 
@@ -67,7 +68,6 @@ namespace Neo.Agents
 
             var apiKey = GetOption<string>("ApiKey");
             var model = GetOption<string>("Model");
-            var temperature = GetOption<float>("Temperature");
             var timeoutSeconds = GetOption<int>("TimeoutSeconds");
 
             var systemMessage = GetInput<string>("SystemMessage");
@@ -101,7 +101,6 @@ namespace Neo.Agents
                     Model = model,
                     MaxTokens = 64000,
                     System = systemMessage,
-                    Temperature = temperature,
                     Messages = messages,
                     Tools = [new ApiTool
                     {
@@ -135,7 +134,6 @@ namespace Neo.Agents
                     Model = model,
                     MaxTokens = 64000,
                     System = systemMessage,
-                    Temperature = temperature,
                     Messages = messages
                 };
 
@@ -170,9 +168,6 @@ namespace Neo.Agents
             [JsonPropertyName("system")]
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public string? System { get; set; }
-
-            [JsonPropertyName("temperature")]
-            public float Temperature { get; set; }
 
             [JsonPropertyName("messages")]
             public List<ApiMessage> Messages { get; set; } = [];
