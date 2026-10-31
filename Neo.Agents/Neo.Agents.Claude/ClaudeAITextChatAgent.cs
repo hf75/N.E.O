@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -13,7 +14,13 @@ namespace Neo.Agents
     public class AnthropicTextChatAgent : AgentBase
     {
         private const string ApiUrl = "https://api.anthropic.com/v1/messages";
+        private const string ModelsUrl = "https://api.anthropic.com/v1/models";
         private const string ApiVersion = "2023-06-01";
+        private const string FallbackRequestBeta = "server-side-fallback-2026-07-01";
+        private const string FallbackListingBeta = "server-side-fallback-2026-06-01";
+
+        // What the API reports about a model, asked once per model so that a new model needs no code change.
+        private static readonly ConcurrentDictionary<string, ModelCapabilities> KnownModels = new();
 
         public override string Name => "AnthropicTextChatAgent";
 
@@ -91,71 +98,150 @@ namespace Neo.Agents
                 messages.Add(new ApiMessage { Role = "assistant", Content = history });
             messages.Add(new ApiMessage { Role = "user", Content = prompt });
 
+            var capabilities = await GetCapabilitiesAsync(httpClient, model, ct);
+
+            var request = new ApiRequest
+            {
+                Model = model,
+                MaxTokens = 64000,
+                System = systemMessage,
+                Messages = messages,
+                // A safety classifier can decline harmless code requests; re-run those on the model Anthropic recommends.
+                Fallbacks = capabilities.ServerSideFallback ? "default" : null
+            };
+
             string rawJsonResponse;
 
-            if (!string.IsNullOrEmpty(jsonSchema))
+            if (string.IsNullOrEmpty(jsonSchema))
             {
-                // Tool Use mode for structured JSON output
-                var request = new ApiRequest
+                // Plain text mode
+                var result = await PostAsync(httpClient, request, ct);
+                rawJsonResponse = FirstText(result)
+                    ?? throw new InvalidOperationException("No text response from Anthropic API.");
+            }
+            else if (capabilities.StructuredOutput)
+            {
+                // Only here the API guarantees the schema. A forced tool does not (Haiku 5.5 sent arrays
+                // as strings), and Opus 5.5, Sonnet 5.5 and Fable 5.1 reject it with a 400.
+                request.OutputConfig = new ApiOutputConfig
                 {
-                    Model = model,
-                    MaxTokens = 64000,
-                    System = systemMessage,
-                    Messages = messages,
-                    Tools = [new ApiTool
-                    {
-                        Name = "record_summary",
-                        Description = "Generate JSON output based on the given schema.",
-                        InputSchema = JsonNode.Parse(jsonSchema)
-                    }],
-                    ToolChoice = new ApiToolChoice
-                    {
-                        Type = "tool",
-                        Name = "record_summary"
-                    }
+                    Format = new ApiOutputFormat { Schema = JsonNode.Parse(jsonSchema) }
                 };
 
-                var response = await httpClient.PostAsJsonAsync(ApiUrl, request, ct);
-                var content = await response.Content.ReadAsStringAsync(ct);
-
-                if (!response.IsSuccessStatusCode)
-                    throw new HttpRequestException($"Anthropic API error ({response.StatusCode}): {Truncate(content, 500)}");
-
-                var result = JsonSerializer.Deserialize<ApiResponse>(content);
-                var toolUse = result?.Content?.FirstOrDefault(c => c.Type == "tool_use");
-                rawJsonResponse = toolUse?.Input?.ToJsonString()
-                    ?? throw new InvalidOperationException("No tool_use response from Anthropic API.");
+                var result = await PostAsync(httpClient, request, ct);
+                ThrowIfCutOff(result);
+                rawJsonResponse = FirstText(result)
+                    ?? throw new InvalidOperationException("No structured output from Anthropic API.");
             }
             else
             {
-                // Plain text mode
-                var request = new ApiRequest
+                // Tool Use mode for structured JSON output on models without structured outputs
+                request.Tools = [new ApiTool
                 {
-                    Model = model,
-                    MaxTokens = 64000,
-                    System = systemMessage,
-                    Messages = messages
+                    Name = "record_summary",
+                    Description = "Generate JSON output based on the given schema.",
+                    InputSchema = JsonNode.Parse(jsonSchema)
+                }];
+                request.ToolChoice = new ApiToolChoice
+                {
+                    Type = "tool",
+                    Name = "record_summary"
                 };
 
-                var response = await httpClient.PostAsJsonAsync(ApiUrl, request, ct);
-                var content = await response.Content.ReadAsStringAsync(ct);
-
-                if (!response.IsSuccessStatusCode)
-                    throw new HttpRequestException($"Anthropic API error ({response.StatusCode}): {Truncate(content, 500)}");
-
-                var result = JsonSerializer.Deserialize<ApiResponse>(content);
-                var textBlock = result?.Content?.FirstOrDefault(c => c.Type == "text");
-                rawJsonResponse = textBlock?.Text
-                    ?? throw new InvalidOperationException("No text response from Anthropic API.");
+                var result = await PostAsync(httpClient, request, ct);
+                ThrowIfCutOff(result);
+                var toolUse = result.Content?.FirstOrDefault(c => c.Type == "tool_use");
+                rawJsonResponse = toolUse?.Input?.ToJsonString()
+                    ?? throw new InvalidOperationException("No tool_use response from Anthropic API.");
             }
 
             SetOutput("Result", rawJsonResponse);
         }
 
+        private static async Task<ModelCapabilities> GetCapabilitiesAsync(HttpClient httpClient, string model, CancellationToken ct)
+        {
+            if (KnownModels.TryGetValue(model, out var known))
+                return known;
+
+            using var message = new HttpRequestMessage(HttpMethod.Get, $"{ModelsUrl}/{Uri.EscapeDataString(model)}");
+            message.Headers.Add("anthropic-beta", FallbackListingBeta);
+
+            try
+            {
+                using var response = await httpClient.SendAsync(message, ct);
+                if (!response.IsSuccessStatusCode)
+                    return default;
+
+                var info = JsonSerializer.Deserialize<ApiModelInfo>(await response.Content.ReadAsStringAsync(ct));
+                return KnownModels[model] = new ModelCapabilities(
+                    info?.Capabilities?.StructuredOutputs?.Supported == true,
+                    info?.AllowedFallbackModels is { Count: > 0 });
+            }
+            catch (HttpRequestException)
+            {
+                // The Messages request that follows reports what is really wrong.
+                return default;
+            }
+        }
+
+        private static async Task<ApiResponse> PostAsync(HttpClient httpClient, ApiRequest request, CancellationToken ct)
+        {
+            using var message = new HttpRequestMessage(HttpMethod.Post, ApiUrl) { Content = JsonContent.Create(request) };
+            if (request.Fallbacks != null)
+                message.Headers.Add("anthropic-beta", FallbackRequestBeta);
+
+            using var response = await httpClient.SendAsync(message, ct);
+            var content = await response.Content.ReadAsStringAsync(ct);
+
+            if (!response.IsSuccessStatusCode)
+                throw new HttpRequestException($"Anthropic API error ({response.StatusCode}): {Truncate(content, 500)}");
+
+            var result = JsonSerializer.Deserialize<ApiResponse>(content)
+                ?? throw new InvalidOperationException("Empty response from Anthropic API.");
+
+            if (result.StopReason == "refusal")
+                throw new InvalidOperationException($"Claude declined this request ({result.StopDetails?.Category ?? "no reason given"}). Rephrase the prompt or choose another model.");
+
+            return result;
+        }
+
+        // Thinking counts toward max_tokens on newer models; cut-off JSON must not pass as a finished answer.
+        private static void ThrowIfCutOff(ApiResponse result)
+        {
+            if (result.StopReason == "max_tokens")
+                throw new InvalidOperationException("Claude's answer reached the output limit and was cut off.");
+        }
+
+        private static string? FirstText(ApiResponse result) =>
+            result.Content?.FirstOrDefault(c => c.Type == "text")?.Text;
+
         private static string Truncate(string value, int maxLength) =>
             value.Length <= maxLength ? value : value[..maxLength] + "...";
 
+        private readonly record struct ModelCapabilities(bool StructuredOutput, bool ServerSideFallback);
+
         #region Anthropic REST DTOs
+
+        private class ApiModelInfo
+        {
+            [JsonPropertyName("capabilities")]
+            public ApiModelCapabilities? Capabilities { get; set; }
+
+            [JsonPropertyName("allowed_fallback_models")]
+            public List<JsonNode>? AllowedFallbackModels { get; set; }
+        }
+
+        private class ApiModelCapabilities
+        {
+            [JsonPropertyName("structured_outputs")]
+            public ApiSupported? StructuredOutputs { get; set; }
+        }
+
+        private class ApiSupported
+        {
+            [JsonPropertyName("supported")]
+            public bool Supported { get; set; }
+        }
 
         private class ApiRequest
         {
@@ -179,6 +265,29 @@ namespace Neo.Agents
             [JsonPropertyName("tool_choice")]
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public ApiToolChoice? ToolChoice { get; set; }
+
+            [JsonPropertyName("output_config")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public ApiOutputConfig? OutputConfig { get; set; }
+
+            [JsonPropertyName("fallbacks")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string? Fallbacks { get; set; }
+        }
+
+        private class ApiOutputConfig
+        {
+            [JsonPropertyName("format")]
+            public ApiOutputFormat? Format { get; set; }
+        }
+
+        private class ApiOutputFormat
+        {
+            [JsonPropertyName("type")]
+            public string Type { get; set; } = "json_schema";
+
+            [JsonPropertyName("schema")]
+            public JsonNode? Schema { get; set; }
         }
 
         private class ApiMessage
@@ -217,6 +326,18 @@ namespace Neo.Agents
         {
             [JsonPropertyName("content")]
             public List<ApiContentBlock>? Content { get; set; }
+
+            [JsonPropertyName("stop_reason")]
+            public string? StopReason { get; set; }
+
+            [JsonPropertyName("stop_details")]
+            public ApiStopDetails? StopDetails { get; set; }
+        }
+
+        private class ApiStopDetails
+        {
+            [JsonPropertyName("category")]
+            public string? Category { get; set; }
         }
 
         private class ApiContentBlock
