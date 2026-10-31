@@ -107,6 +107,11 @@ namespace Neo.PluginWindowAvalonia
                 MainWin.WindowDecorations = WindowDecorations.Full;
                 MainWin.CanResize = true;
                 MainWin.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+
+                // Docked beside N.E.O.: the keyboard stays in its prompt box.
+                _stayInactive = args.Any(a => string.Equals(a, "--no-activate", StringComparison.OrdinalIgnoreCase));
+                MainWin.ShowActivated = !_stayInactive;
+
                 try
                 {
                     var iconPath = GetArgValue(args, "--icon");
@@ -364,7 +369,8 @@ namespace Neo.PluginWindowAvalonia
                                     managedAssembliesByFullName: managedByFull,
                                     nativeLibrariesByBasename: nativeByBase
                                 );
-                                MainWin.Activate();
+                                if (!_stayInactive)
+                                    MainWin.Activate();
                             });
 
                             await SendLogAsync(LogLevel.Info, "LoadControl executed.", "Child", "Mode=Bytes(In-Memory)");
@@ -984,6 +990,7 @@ namespace Neo.PluginWindowAvalonia
 
         /// <summary>The name the host gave this app for the app network (<c>--app-name</c>); null: the window title.</summary>
         private string? _appName;
+        private bool _stayInactive;
 
         /// <summary>
         /// Build the Live-MCP manifest for the currently loaded UserControl and push it

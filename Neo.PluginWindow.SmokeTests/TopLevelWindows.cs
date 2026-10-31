@@ -88,6 +88,17 @@ internal static class TopLevelWindows
         System.Windows.Forms.SendKeys.SendWait(keys);
     }
 
+    /// <summary>True when <paramref name="upper"/> lies above <paramref name="lower"/> in the z-order.</summary>
+    public static bool IsAbove(IntPtr upper, IntPtr lower)
+    {
+        for (var hwnd = GetTopWindow(IntPtr.Zero); hwnd != IntPtr.Zero; hwnd = GetWindow(hwnd, 2 /* GW_HWNDNEXT */))
+        {
+            if (hwnd == upper) return true;
+            if (hwnd == lower) return false;
+        }
+        return false;
+    }
+
     /// <summary>Ends the plugin windows a host started — and only those, not the ones of a N.E.O. someone is using.</summary>
     public static void KillChildrenOf(int hostPid)
     {
@@ -122,6 +133,8 @@ internal static class TopLevelWindows
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern IntPtr GetTopWindow(IntPtr parent);
+    [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hWnd, uint command);
     [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
     [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] private static extern bool BringWindowToTop(IntPtr hWnd);

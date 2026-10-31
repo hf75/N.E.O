@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -38,6 +39,7 @@ namespace Neo.App
 
         // What the current child process has received (it keeps every assembly until it exits).
         private readonly SentFileLedger _sentFiles = new();
+        private IntPtr _childHwnd;
 
         public bool HasLoadedControl => _hasLoadedControl;
 
@@ -152,6 +154,8 @@ namespace Neo.App
             }
 
             var childArgs = $"--pipe {pipeName} --parentPid {Environment.ProcessId} --standalone";
+            if (DockChildToHost)
+                childArgs += " --no-activate";
             if (!string.IsNullOrWhiteSpace(ChildWindowTitle))
                 childArgs += $" --title \"{ChildWindowTitle.Replace("\"", "")}\"";
             if (!string.IsNullOrWhiteSpace(ChildWindowIcon) && File.Exists(ChildWindowIcon))
@@ -265,7 +269,10 @@ namespace Neo.App
                                 break;
 
                             case IpcTypes.Hello:
-                                HotReloadCapabilities = Json.FromJson<HelloMessage>(env.PayloadJson)?.HotReloadCapabilities;
+                                var hello = Json.FromJson<HelloMessage>(env.PayloadJson);
+                                HotReloadCapabilities = hello?.HotReloadCapabilities;
+                                _childHwnd = new IntPtr(hello?.Hwnd ?? 0);
+                                Dispatcher.UIThread.Post(WatchForeground); // the hook belongs on the thread with the message loop
                                 Debug.WriteLine("[ChildProcess] Hello received from child");
                                 await SafeSendControlAsync(new IpcEnvelope(
                                     IpcTypes.Ack, env.CorrelationId,
@@ -395,6 +402,48 @@ namespace Neo.App
             // Send parent bounds to child via IPC for magnetic docking
             SendParentBoundsAsync().ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnFaulted);
         }
+
+        // ── One app to the user ──────────────────────────────────────────
+        // N.E.O. and the app are two windows of two processes. Coming back from another program, the
+        // one the user picks brings the other along. Windows only asks, because Activated cannot tell:
+        // Focus() makes a window active inside its own process while the app holds the foreground, and
+        // then no Activated comes when that window really reaches the front.
+
+        private WinEventDelegate? _foregroundChanged; // the hook lives as long as the host, and needs this alive
+
+        private void WatchForeground()
+        {
+            if (!OperatingSystem.IsWindows() || _foregroundChanged != null) return;
+
+            _foregroundChanged = OnForegroundChanged;
+            SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, IntPtr.Zero, _foregroundChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
+        }
+
+        private void OnForegroundChanged(IntPtr hook, uint eventType, IntPtr window, int objectId, int childId, uint thread, uint time)
+        {
+            var host = _mainWindow.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+            if (host == IntPtr.Zero || _childHwnd == IntPtr.Zero) return;
+            if (!_mainWindow.IsVisible || _mainWindow.WindowState == global::Avalonia.Controls.WindowState.Minimized) return;
+
+            if (window == host)
+                SetWindowPos(_childHwnd, host, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+            else if (window == _childHwnd)
+                SetWindowPos(host, _childHwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+        }
+
+        private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+        private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOACTIVATE = 0x0010;
+
+        private delegate void WinEventDelegate(IntPtr hook, uint eventType, IntPtr window, int objectId, int childId, uint thread, uint time);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr module, WinEventDelegate callback, uint process, uint thread, uint flags);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
 
         private async Task SendParentBoundsAsync()
         {
