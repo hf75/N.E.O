@@ -95,7 +95,9 @@ public class LivingAppSmokeTests : IDisposable
         var project = Path.Combine(_directory, "Notes.resx");
         File.WriteAllText(project, JsonConvert.SerializeObject(new ResxData { Version = 2, Code = wpf ? WpfTodo : AvaloniaTodo, Nuget = new(), History = "" }));
 
-        using var host = Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = Path.GetDirectoryName(exe)!, UseShellExecute = false, Arguments = $"--play \"{project}\"" })!;
+        var startInfo = new ProcessStartInfo(exe) { WorkingDirectory = Path.GetDirectoryName(exe)!, UseShellExecute = false, Arguments = $"--play \"{project}\"" };
+        startInfo.Environment[SettingsService.FolderEnvironmentVariable] = Path.Combine(_directory, "settings"); // hosts save settings when they start
+        using var host = Process.Start(startInfo)!;
         try
         {
             // Only the app, with its content and the one-time hint.

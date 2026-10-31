@@ -158,51 +158,50 @@ public class SettingsModelTests
 }
 
 /// <summary>
-/// SettingsService uses static methods and Environment.SpecialFolder.LocalApplicationData.
-/// We test the serialization logic by doing a Save+Load roundtrip on the real path,
-/// and we test corrupt-file handling by writing a temporary corrupt file.
+/// SettingsService uses static methods. Every test here works in a folder of its own, never on
+/// the settings of whoever runs the tests.
 /// </summary>
 [Collection("SettingsFolder")]
-public class SettingsServiceTests
+public class SettingsServiceTests : IDisposable
 {
+    private readonly string? _previousFolder = Environment.GetEnvironmentVariable(SettingsService.FolderEnvironmentVariable);
+    private readonly string _folder = Path.Combine(Path.GetTempPath(), "neo_settings_" + Guid.NewGuid().ToString("N")[..8]);
+
+    public SettingsServiceTests() => Environment.SetEnvironmentVariable(SettingsService.FolderEnvironmentVariable, _folder);
+
+    public void Dispose()
+    {
+        Environment.SetEnvironmentVariable(SettingsService.FolderEnvironmentVariable, _previousFolder);
+        try { Directory.Delete(_folder, recursive: true); } catch { }
+    }
+
     // ── Save + Load roundtrip ───────────────────────────────────────
 
     [Fact]
     public void SaveAndLoad_Roundtrip_PreservesProperties()
     {
         // Save a known model, then load it back and verify.
-        // We restore the original afterwards to avoid polluting the user's settings.
-        var filePath = SettingsService.GetSettingsFilePath();
-        string? originalContent = null;
-        if (File.Exists(filePath))
-            originalContent = File.ReadAllText(filePath);
-
-        try
+        var model = new SettingsModel
         {
-            var model = new SettingsModel
-            {
-                AiCodeGenerationAttempts = 10,
-                UseReactUi = true,
-                ClaudeModel = "test-model",
-                ExportBasePath = "/tmp/export",
-            };
+            AiCodeGenerationAttempts = 10,
+            UseReactUi = true,
+            ClaudeModel = "test-model",
+            ExportBasePath = "/tmp/export",
+        };
 
-            SettingsService.Save(model);
-            var loaded = SettingsService.Load();
+        SettingsService.Save(model);
+        var loaded = SettingsService.Load();
 
-            loaded.AiCodeGenerationAttempts.Should().Be(10);
-            loaded.UseReactUi.Should().BeTrue();
-            loaded.ClaudeModel.Should().Be("test-model");
-            loaded.ExportBasePath.Should().Be("/tmp/export");
-        }
-        finally
-        {
-            // Restore original file.
-            if (originalContent != null)
-                File.WriteAllText(filePath, originalContent);
-            else if (File.Exists(filePath))
-                File.Delete(filePath);
-        }
+        loaded.AiCodeGenerationAttempts.Should().Be(10);
+        loaded.UseReactUi.Should().BeTrue();
+        loaded.ClaudeModel.Should().Be("test-model");
+        loaded.ExportBasePath.Should().Be("/tmp/export");
+    }
+
+    [Fact]
+    public void Folder_IsTheOneTheEnvironmentVariableNames()
+    {
+        SettingsService.GetSettingsFilePath().Should().Be(Path.Combine(_folder, "settings.json"));
     }
 
     // ── Load with corrupt file → defaults ───────────────────────────
@@ -210,27 +209,12 @@ public class SettingsServiceTests
     [Fact]
     public void Load_CorruptFile_ReturnsDefaults()
     {
-        var filePath = SettingsService.GetSettingsFilePath();
-        string? originalContent = null;
-        if (File.Exists(filePath))
-            originalContent = File.ReadAllText(filePath);
+        File.WriteAllText(SettingsService.GetSettingsFilePath(), "THIS IS NOT VALID JSON {{{");
 
-        try
-        {
-            File.WriteAllText(filePath, "THIS IS NOT VALID JSON {{{");
+        var loaded = SettingsService.Load();
 
-            var loaded = SettingsService.Load();
-
-            loaded.Should().NotBeNull();
-            loaded.AiCodeGenerationAttempts.Should().Be(5);
-        }
-        finally
-        {
-            if (originalContent != null)
-                File.WriteAllText(filePath, originalContent);
-            else if (File.Exists(filePath))
-                File.Delete(filePath);
-        }
+        loaded.Should().NotBeNull();
+        loaded.AiCodeGenerationAttempts.Should().Be(5);
     }
 
     // ── Save validates AiCodeGenerationAttempts minimum ──────────────
@@ -241,24 +225,9 @@ public class SettingsServiceTests
         var model = new SettingsModel { AiCodeGenerationAttempts = 0 };
 
         // Save mutates the model's property before writing.
-        var filePath = SettingsService.GetSettingsFilePath();
-        string? originalContent = null;
-        if (File.Exists(filePath))
-            originalContent = File.ReadAllText(filePath);
+        SettingsService.Save(model);
 
-        try
-        {
-            SettingsService.Save(model);
-
-            model.AiCodeGenerationAttempts.Should().Be(5);
-        }
-        finally
-        {
-            if (originalContent != null)
-                File.WriteAllText(filePath, originalContent);
-            else if (File.Exists(filePath))
-                File.Delete(filePath);
-        }
+        model.AiCodeGenerationAttempts.Should().Be(5);
     }
 
     // ── GetSettingsFolderPath creates the directory ──────────────────
@@ -269,7 +238,15 @@ public class SettingsServiceTests
         var path = SettingsService.GetSettingsFolderPath();
 
         Directory.Exists(path).Should().BeTrue();
-        path.Should().EndWith("Neo");
+        path.Should().Be(_folder);
+    }
+
+    [Fact]
+    public void GetSettingsFolderPath_WithoutOverride_IsTheNeoFolder()
+    {
+        Environment.SetEnvironmentVariable(SettingsService.FolderEnvironmentVariable, null);
+
+        SettingsService.GetSettingsFolderPath().Should().EndWith("Neo");
     }
 
     // ── JSON serialization roundtrip (no file system) ───────────────
