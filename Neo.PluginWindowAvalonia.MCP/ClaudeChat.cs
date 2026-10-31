@@ -16,7 +16,7 @@ namespace Neo.PluginWindowAvalonia.MCP;
 internal sealed class ClaudeChat
 {
     private string? _apiKey;
-    private string _model = "claude-sonnet-4-20250514";
+    private string _model = "claude-sonnet-5-5";
     private readonly System.Collections.Generic.List<(string role, string content)> _history = new();
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(_apiKey);

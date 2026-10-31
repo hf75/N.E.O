@@ -46,7 +46,7 @@ Endpoints can be customized in Settings.
 
 Each provider shows a model dropdown (only visible if the API key is set):
 
-- **Claude Model**: e.g., `claude-sonnet-4-20250514`
+- **Claude Model**: e.g., `claude-sonnet-5-5`
 - **OpenAI Model**: e.g., `gpt-4o`
 - **Gemini Model**: e.g., `gemini-2.5-pro-preview-06-05`
 - **Ollama Model**: e.g., `llama3.1:latest`
