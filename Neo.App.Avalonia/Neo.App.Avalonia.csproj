@@ -37,6 +37,9 @@
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.NugetLoader\Neo.Agents.NugetLoader.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.PowerShell\Neo.Agents.PowerShell.csproj" />
     <ProjectReference Include="..\Neo.AssemblyForge\Neo.AssemblyForge.csproj" />
+    <!-- Build order only: CopyChildOutputs below needs the child's output, also when only this
+         project is built (dotnet run - project Neo.App.Avalonia, as the README says). -->
+    <ProjectReference Include="..\Neo.PluginWindowAvalonia\Neo.PluginWindowAvalonia.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <!-- Shared assets from Neo.App -->
