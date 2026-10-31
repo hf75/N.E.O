@@ -22,6 +22,9 @@ namespace Neo.Agents
         // What the API reports about a model, asked once per model so that a new model needs no code change.
         private static readonly ConcurrentDictionary<string, ModelCapabilities> KnownModels = new();
 
+        // Lets tests answer in place of the real API.
+        internal HttpMessageHandler? Handler { get; set; }
+
         public override string Name => "AnthropicTextChatAgent";
 
         protected override AgentMetadata CreateMetadata()
@@ -88,7 +91,9 @@ namespace Neo.Agents
 
             var ct = cancellationToken ?? CancellationToken.None;
 
-            using var httpClient = new HttpClient { Timeout = timeout };
+            using var httpClient = Handler != null
+                ? new HttpClient(Handler, disposeHandler: false) { Timeout = timeout }
+                : new HttpClient { Timeout = timeout };
             httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
             httpClient.DefaultRequestHeaders.Add("anthropic-version", ApiVersion);
 

@@ -10,4 +10,8 @@
     <ProjectReference Include="..\Neo.Agents.Core\Neo.Agents.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neo.App.Core.Tests" />
+  </ItemGroup>
+
 </Project>
