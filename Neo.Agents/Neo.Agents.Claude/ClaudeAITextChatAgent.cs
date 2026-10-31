@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -36,10 +37,10 @@ namespace Neo.Agents
             };
 
             metadata.Options.Add(new Option<string>("ApiKey", true, null!, "Dein Anthropic API Key (Pflicht)."));
-            metadata.Options.Add(new Option<string>("Model", true, "claude-3-7-sonnet-latest", "Das zu verwendende Modell."));
+            metadata.Options.Add(new Option<string>("Model", true, "claude-sonnet-5-5", "Das zu verwendende Modell."));
             // Accepted because every caller sets it on all providers, but never sent: Claude 4.7+ answers 'temperature' with a 400.
             metadata.Options.Add(new Option<float>("Temperature", false, 0.0f, "Wird nicht an Claude gesendet."));
-            metadata.Options.Add(new Option<int>("TimeoutSeconds", false, 600, "Timeout fuer den API-Request in Sekunden (0 = unendlich)."));
+            metadata.Options.Add(new Option<int>("TimeoutSeconds", false, 600, "So lange darf die API schweigen, in Sekunden (0 = unendlich). Die Antwort selbst darf beliebig lange dauern."));
             metadata.Options.Add(new Option<float>("TopP", false, 0.9f, "Top-P für nucleus sampling."));
 
             metadata.InputParameters.Add(new InputParameter<string>("SystemMessage", true, "System-Instruction für das Modell."));
@@ -120,8 +121,8 @@ namespace Neo.Agents
             if (string.IsNullOrEmpty(jsonSchema))
             {
                 // Plain text mode
-                var result = await PostAsync(httpClient, request, ct);
-                rawJsonResponse = FirstText(result)
+                var result = await PostAsync(httpClient, request, timeout, ct);
+                rawJsonResponse = AllText(result)
                     ?? throw new InvalidOperationException("No text response from Anthropic API.");
             }
             else if (capabilities.StructuredOutput)
@@ -133,9 +134,9 @@ namespace Neo.Agents
                     Format = new ApiOutputFormat { Schema = JsonNode.Parse(jsonSchema) }
                 };
 
-                var result = await PostAsync(httpClient, request, ct);
+                var result = await PostAsync(httpClient, request, timeout, ct);
                 ThrowIfCutOff(result);
-                rawJsonResponse = FirstText(result)
+                rawJsonResponse = AllText(result)
                     ?? throw new InvalidOperationException("No structured output from Anthropic API.");
             }
             else
@@ -153,9 +154,9 @@ namespace Neo.Agents
                     Name = "record_summary"
                 };
 
-                var result = await PostAsync(httpClient, request, ct);
+                var result = await PostAsync(httpClient, request, timeout, ct);
                 ThrowIfCutOff(result);
-                var toolUse = result.Content?.FirstOrDefault(c => c.Type == "tool_use");
+                var toolUse = result.Content.LastOrDefault(c => c.Type == "tool_use");
                 rawJsonResponse = toolUse?.Input?.ToJsonString()
                     ?? throw new InvalidOperationException("No tool_use response from Anthropic API.");
             }
@@ -189,25 +190,107 @@ namespace Neo.Agents
             }
         }
 
-        private static async Task<ApiResponse> PostAsync(HttpClient httpClient, ApiRequest request, CancellationToken ct)
+        // Always streams: an answer can take many minutes, and only silence should end the wait.
+        private static async Task<ApiResponse> PostAsync(HttpClient httpClient, ApiRequest request, TimeSpan silenceLimit, CancellationToken ct)
         {
             using var message = new HttpRequestMessage(HttpMethod.Post, ApiUrl) { Content = JsonContent.Create(request) };
             if (request.Fallbacks != null)
                 message.Headers.Add("anthropic-beta", FallbackRequestBeta);
 
-            using var response = await httpClient.SendAsync(message, ct);
-            var content = await response.Content.ReadAsStringAsync(ct);
+            using var response = await httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, ct);
 
             if (!response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync(ct);
                 throw new HttpRequestException($"Anthropic API error ({response.StatusCode}): {Truncate(content, 500)}");
+            }
 
-            var result = JsonSerializer.Deserialize<ApiResponse>(content)
-                ?? throw new InvalidOperationException("Empty response from Anthropic API.");
+            var result = await ReadAnswerAsync(response, silenceLimit, ct);
 
             if (result.StopReason == "refusal")
-                throw new InvalidOperationException($"Claude declined this request ({result.StopDetails?.Category ?? "no reason given"}). Rephrase the prompt or choose another model.");
+                throw new InvalidOperationException($"Claude declined this request ({result.StopCategory ?? "no reason given"}). Rephrase the prompt or choose another model.");
 
             return result;
+        }
+
+        private static async Task<ApiResponse> ReadAnswerAsync(HttpResponseMessage response, TimeSpan silenceLimit, CancellationToken ct)
+        {
+            using var silence = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            silence.CancelAfter(silenceLimit);
+
+            var result = new ApiResponse();
+            var buffer = new StringBuilder();
+            bool complete = false;
+
+            try
+            {
+                using var stream = await response.Content.ReadAsStreamAsync(silence.Token);
+                using var reader = new StreamReader(stream, Encoding.UTF8);
+
+                while (!complete && await reader.ReadLineAsync(silence.Token) is { } line)
+                {
+                    silence.CancelAfter(silenceLimit);
+
+                    if (!line.StartsWith("data:", StringComparison.Ordinal))
+                        continue;
+
+                    var data = JsonNode.Parse(line["data:".Length..]);
+                    switch ((string?)data?["type"])
+                    {
+                        case "content_block_start":
+                            result.Content.Add(new ApiContentBlock { Type = (string?)data?["content_block"]?["type"] ?? "" });
+                            buffer.Clear();
+                            break;
+
+                        case "content_block_delta":
+                            // text_delta or input_json_delta; thinking is not kept.
+                            buffer.Append((string?)data?["delta"]?["text"] ?? (string?)data?["delta"]?["partial_json"]);
+                            break;
+
+                        case "content_block_stop":
+                            if (result.Content.LastOrDefault() is { } block)
+                                FinishBlock(block, buffer.ToString());
+                            break;
+
+                        case "message_delta":
+                            result.StopReason = (string?)data?["delta"]?["stop_reason"] ?? result.StopReason;
+                            result.StopCategory = (string?)data?["delta"]?["stop_details"]?["category"]
+                                ?? (string?)data?["stop_details"]?["category"]
+                                ?? result.StopCategory;
+                            break;
+
+                        case "message_stop":
+                            complete = true;
+                            break;
+
+                        case "error":
+                            throw new HttpRequestException($"Anthropic API error ({(string?)data?["error"]?["type"]}): {(string?)data?["error"]?["message"]}");
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                throw new TimeoutException($"The Anthropic API sent nothing for {silenceLimit.TotalSeconds:0} seconds.");
+            }
+
+            if (!complete)
+                throw new InvalidOperationException("The connection to the Anthropic API ended before the answer was complete.");
+
+            return result;
+        }
+
+        private static void FinishBlock(ApiContentBlock block, string content)
+        {
+            if (block.Type == "text")
+            {
+                block.Text = content;
+            }
+            else if (block.Type == "tool_use")
+            {
+                // JSON cut off at max_tokens does not parse; ThrowIfCutOff reports that.
+                try { block.Input = JsonNode.Parse(content); }
+                catch (JsonException) { }
+            }
         }
 
         // Thinking counts toward max_tokens on newer models; cut-off JSON must not pass as a finished answer.
@@ -217,8 +300,12 @@ namespace Neo.Agents
                 throw new InvalidOperationException("Claude's answer reached the output limit and was cut off.");
         }
 
-        private static string? FirstText(ApiResponse result) =>
-            result.Content?.FirstOrDefault(c => c.Type == "text")?.Text;
+        // All blocks together: a fallback model that takes over mid-answer continues the text.
+        private static string? AllText(ApiResponse result)
+        {
+            var texts = result.Content.Where(c => c.Type == "text").Select(c => c.Text).ToList();
+            return texts.Count > 0 ? string.Concat(texts) : null;
+        }
 
         private static string Truncate(string value, int maxLength) =>
             value.Length <= maxLength ? value : value[..maxLength] + "...";
@@ -255,6 +342,9 @@ namespace Neo.Agents
 
             [JsonPropertyName("max_tokens")]
             public int MaxTokens { get; set; }
+
+            [JsonPropertyName("stream")]
+            public bool Stream { get; set; } = true;
 
             [JsonPropertyName("system")]
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -327,35 +417,18 @@ namespace Neo.Agents
             public string? Name { get; set; }
         }
 
+        // The answer as ReadAnswerAsync puts it together from the stream.
         private class ApiResponse
         {
-            [JsonPropertyName("content")]
-            public List<ApiContentBlock>? Content { get; set; }
-
-            [JsonPropertyName("stop_reason")]
+            public List<ApiContentBlock> Content { get; } = [];
             public string? StopReason { get; set; }
-
-            [JsonPropertyName("stop_details")]
-            public ApiStopDetails? StopDetails { get; set; }
-        }
-
-        private class ApiStopDetails
-        {
-            [JsonPropertyName("category")]
-            public string? Category { get; set; }
+            public string? StopCategory { get; set; }
         }
 
         private class ApiContentBlock
         {
-            [JsonPropertyName("type")]
             public string Type { get; set; } = "";
-
-            [JsonPropertyName("text")]
-            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public string? Text { get; set; }
-
-            [JsonPropertyName("input")]
-            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public JsonNode? Input { get; set; }
         }
 
