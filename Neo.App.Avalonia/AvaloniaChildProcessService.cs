@@ -272,7 +272,7 @@ namespace Neo.App
                                 var hello = Json.FromJson<HelloMessage>(env.PayloadJson);
                                 HotReloadCapabilities = hello?.HotReloadCapabilities;
                                 _childHwnd = new IntPtr(hello?.Hwnd ?? 0);
-                                Dispatcher.UIThread.Post(WatchForeground); // the hook belongs on the thread with the message loop
+                                Dispatcher.UIThread.Post(WatchForeground);
                                 Debug.WriteLine("[ChildProcess] Hello received from child");
                                 await SafeSendControlAsync(new IpcEnvelope(
                                     IpcTypes.Ack, env.CorrelationId,
@@ -405,42 +405,44 @@ namespace Neo.App
 
         // ── One app to the user ──────────────────────────────────────────
         // N.E.O. and the app are two windows of two processes. Coming back from another program, the
-        // one the user picks brings the other along. Windows only asks, because Activated cannot tell:
-        // Focus() makes a window active inside its own process while the app holds the foreground, and
-        // then no Activated comes when that window really reaches the front.
+        // one the user picks brings the other along. Asks Windows a few times a second because no event
+        // is reliable: a window shown while another program has the foreground counts as active inside
+        // its own process, and then reaches the front without Activated or a WinEvent.
 
-        private WinEventDelegate? _foregroundChanged; // the hook lives as long as the host, and needs this alive
+        private DispatcherTimer? _foregroundWatch;
+        private IntPtr _lastForeground;
 
         private void WatchForeground()
         {
-            if (!OperatingSystem.IsWindows() || _foregroundChanged != null) return;
+            if (!OperatingSystem.IsWindows() || _foregroundWatch != null) return;
 
-            _foregroundChanged = OnForegroundChanged;
-            SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, IntPtr.Zero, _foregroundChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
+            _foregroundWatch = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            _foregroundWatch.Tick += (_, _) => KeepWindowsTogether();
+            _foregroundWatch.Start();
         }
 
-        private void OnForegroundChanged(IntPtr hook, uint eventType, IntPtr window, int objectId, int childId, uint thread, uint time)
+        private void KeepWindowsTogether()
         {
+            var foreground = GetForegroundWindow();
+            if (foreground == _lastForeground) return;
+            _lastForeground = foreground;
+
             var host = _mainWindow.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
             if (host == IntPtr.Zero || _childHwnd == IntPtr.Zero) return;
             if (!_mainWindow.IsVisible || _mainWindow.WindowState == global::Avalonia.Controls.WindowState.Minimized) return;
 
-            if (window == host)
+            if (foreground == host)
                 SetWindowPos(_childHwnd, host, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-            else if (window == _childHwnd)
+            else if (foreground == _childHwnd)
                 SetWindowPos(host, _childHwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
         }
 
-        private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
-        private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOACTIVATE = 0x0010;
 
-        private delegate void WinEventDelegate(IntPtr hook, uint eventType, IntPtr window, int objectId, int childId, uint thread, uint time);
-
         [DllImport("user32.dll")]
-        private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr module, WinEventDelegate callback, uint process, uint thread, uint flags);
+        private static extern IntPtr GetForegroundWindow();
 
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
