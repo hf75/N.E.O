@@ -1,11 +1,12 @@
 using System;
 using System.Diagnostics;
-using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Neo.Agents;
 using Neo.Agents.Core;
 using Neo.App;
+using Neo.AssemblyForge;
 
 namespace Neo.PluginWindowAvalonia.MCP;
 
@@ -52,9 +53,9 @@ internal sealed class ClaudeChat
 
             var prompt = $"Here is the current code of the running Avalonia app:\n\n```csharp\n{currentCode}\n```\n\n" +
                          $"User request: {userRequest}\n\n" +
-                         "Respond with EITHER a unified diff patch (preferred for small changes) " +
-                         "OR complete replacement code. Do NOT include any explanation outside the code/patch. " +
-                         "If you provide a patch, use standard unified diff format targeting './currentcode.cs'.";
+                         "Answer with EITHER a unified diff patch in Patch (preferred for small changes), " +
+                         "in standard unified diff format targeting './currentcode.cs', " +
+                         "OR the complete replacement code in Code.";
 
             // Build history string
             var historyText = "";
@@ -68,6 +69,7 @@ internal sealed class ClaudeChat
             agent.SetInput("Prompt", prompt);
             agent.SetInput("History", historyText);
             agent.SetInput("SystemMessage", systemPrompt);
+            agent.SetInput("JsonSchema", JsonSchemata.JsonSchemaResponse);
 
             await agent.ExecuteAsync(ct);
 
@@ -79,26 +81,14 @@ internal sealed class ClaudeChat
             _history.Add(("user", userRequest));
             _history.Add(("assistant", result.Length > 200 ? result[..200] + "..." : result));
 
-            // Determine if it's a patch or full code
-            var trimmed = result.Trim();
+            var response = JsonSerializer.Deserialize<StructuredResponse>(result, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            // Strip markdown code fences if present
-            if (trimmed.StartsWith("```"))
-            {
-                var lines = trimmed.Split('\n').ToList();
-                if (lines.Count > 1) lines.RemoveAt(0);
-                if (lines.Count > 0 && lines[^1].TrimStart().StartsWith("```"))
-                    lines.RemoveAt(lines.Count - 1);
-                trimmed = string.Join("\n", lines);
-            }
+            if (!string.IsNullOrWhiteSpace(response?.Patch))
+                return new ChatResult(true, null, response.Patch, response.Explanation, null);
+            if (!string.IsNullOrWhiteSpace(response?.Code))
+                return new ChatResult(true, response.Code, null, response.Explanation, null);
 
-            bool isPatch = trimmed.Contains("@@") &&
-                (trimmed.Contains("---") || trimmed.Contains("+++") || trimmed.Contains("*** "));
-
-            if (isPatch)
-                return new ChatResult(true, null, trimmed, null, null);
-            else
-                return new ChatResult(true, trimmed, null, null, null);
+            return new ChatResult(false, null, null, null, string.IsNullOrWhiteSpace(response?.Chat) ? "Claude returned no code or patch." : response.Chat);
         }
         catch (Exception ex)
         {
@@ -114,9 +104,6 @@ internal sealed class ClaudeChat
         return AISystemMessages.GetSystemMessage(useAvalonia: true) +
             "\n\nIMPORTANT: You are running INSIDE the app you are modifying. " +
             "The user sees the app in real-time and is asking you to modify it via a chat overlay. " +
-            "Respond ONLY with code — either a unified diff patch (preferred for small changes) " +
-            "or complete C# code for the DynamicUserControl. " +
-            "Do NOT include explanations, markdown headings, or JSON. Just raw code or diff. " +
             "The class MUST be named DynamicUserControl and inherit from UserControl.";
     }
 }
