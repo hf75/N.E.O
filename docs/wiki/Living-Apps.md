@@ -12,7 +12,7 @@ Both desktop hosts export and play living apps. They differ in one thing: under 
 |---|---|
 | Start | Only the app window, titled after the app. No splash screen, no N.E.O. — just a one-time line at the bottom: *Ctrl+Shift+N: change this app with N.E.O.* |
 | **Ctrl+Shift+N** | Avalonia host: N.E.O. appears docked beside the app (left, or right when there is no room) and follows the app window; closing the N.E.O. window puts it away too. WPF host: N.E.O.'s panel appears inside the window, beside the app. The same shortcut in either place puts it away again. |
-| A prompt | N.E.O.'s chat opens with one line explaining the app instead of the import's history. Prompts work exactly as in N.E.O.: the app is patched in place when possible, reloaded otherwise. Every version that reaches the window is saved to the project file, so the next start shows it. |
+| A prompt | N.E.O.'s chat opens with one line explaining the app instead of the import's history. Prompts work exactly as in N.E.O.: the app is patched in place when possible, reloaded otherwise. On the Avalonia host the app stays in use while the AI writes, so its user can go on working. Every version that reaches the window is saved to the project file, so the next start shows it. |
 | Undo / History / Code editor | As in N.E.O. (`Ctrl+Shift+Z`, History, `Ctrl+Shift+C`). Import, Export and Clear are hidden — the app *is* the project. |
 | ↺ Reset to original | Back to the exported version. The user's own changes are discarded (the history stays in the chat until the next start). |
 | Closing the app window | Ends the app, N.E.O. included. (WPF host: Alt+F4 inside the embedded app is ignored; the window's own close button ends it.) |

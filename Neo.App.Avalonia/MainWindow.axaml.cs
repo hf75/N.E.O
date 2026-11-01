@@ -374,6 +374,7 @@ namespace Neo.App
             optionsHub.IsEnabled = !isBusy;
             isCycleViewLocked = isBusy;
             btnCancelContainer.IsVisible = isBusy && showCancel;
+            busyStatus.Text = message ?? "";
 
             // Yield to let Avalonia render before heavy sync operations
             await Task.Delay(1);
@@ -913,7 +914,7 @@ namespace Neo.App
 
         void IMainView.ShowFrostedSnapshot(object snapshot) { /* No-op: child is a separate window */ }
 
-        void IMainView.SetWaitIndicatorStatus(string text) { /* Status shown in Live Preview child window */ }
+        void IMainView.SetWaitIndicatorStatus(string text) => busyStatus.Text = text;
 
         async Task<PatchReviewDecision> IMainView.ShowPatchReviewDialogAsync(
             string patchOrCode,

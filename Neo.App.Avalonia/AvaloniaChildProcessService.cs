@@ -613,6 +613,8 @@ namespace Neo.App
 
         public object? CaptureChildScreenshot() => null;
 
+        public bool CanStayInUseWhileGenerating => true;
+
         public void SendToggleFullScreenAsync()
         {
             SafeSendControlAsync(new IpcEnvelope(

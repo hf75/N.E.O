@@ -51,6 +51,18 @@ internal sealed class StandInClaudeApi : IDisposable
         => AnswerAfterSearching(query, pageTitle, pageUrl,
             JsonSerializer.Serialize(new { Code = code, NuGetPackages = nuGetPackages, Explanation = "From the stand-in, after a search." }), cited: false);
 
+    private volatile TaskCompletionSource? _hold;
+
+    /// <summary>From now on the model takes its time: requests arrive, and nothing comes back until <see cref="ReleaseAnswers"/>.</summary>
+    public void HoldAnswers() => _hold = new TaskCompletionSource();
+
+    public void ReleaseAnswers()
+    {
+        var hold = _hold;
+        _hold = null;
+        hold?.TrySetResult();
+    }
+
     /// <summary>Requests with the search tool are refused the way the API does for an organization that switched it off.</summary>
     public bool SearchSwitchedOff { get; set; }
 
@@ -86,6 +98,9 @@ internal sealed class StandInClaudeApi : IDisposable
             _requests.Enqueue(body);
             var request = JsonNode.Parse(body)!;
             _prompts.Enqueue(request["messages"]!.AsArray().Last()!["content"]!.GetValue<string>());
+
+            if (_hold is { } hold)
+                await hold.Task;
 
             var mayAskForSearch = request["tools"] != null;
             if (mayAskForSearch && SearchSwitchedOff)

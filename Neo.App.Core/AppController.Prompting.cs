@@ -358,12 +358,17 @@ namespace Neo.App
                 // Die Logik aus der alten Execute-Methode kommt hierher.
                 if ((!string.IsNullOrEmpty(prompt)) || (!string.IsNullOrEmpty(LastErrorMsg)))
                 {
-                    // Capture screenshot while child is still visible, then hide.
-                    // Do NOT unload the control yet — only unload when we have new code to load.
-                    var snapshot = ChildProcessService.CaptureChildScreenshot();
-                    ChildProcessService.HideChild();
-                    if (snapshot != null)
-                        _view.ShowFrostedSnapshot(snapshot);
+                    // A running app the change can be patched into stays in view and in use: the user
+                    // goes on working while the AI writes, and the patch finds the app as they left it.
+                    if (!(ChildProcessService.CanStayInUseWhileGenerating && ChildProcessService.HasLoadedControl && _hotReload.HasRunningApp))
+                    {
+                        // Capture screenshot while child is still visible, then hide.
+                        // Do NOT unload the control yet — only unload when we have new code to load.
+                        var snapshot = ChildProcessService.CaptureChildScreenshot();
+                        ChildProcessService.HideChild();
+                        if (snapshot != null)
+                            _view.ShowFrostedSnapshot(snapshot);
+                    }
 
                     await SetStatusAsync(AppStatus.Generating, true, "Generating...");
                     _view.PromptToNextLine(); // UI-Aktion über die View
@@ -391,8 +396,10 @@ namespace Neo.App
                 ChildProcessService.ShowChild();
                 _view.HideFrostedSnapshot();
 
-                // Discard pipe disconnects caused by normal operation (not real crashes)
-                _pendingCrash = null;
+                // Discard pipe disconnects caused by normal operation (not real crashes). An error the
+                // app survived while the user went on working is real: going idle repairs it.
+                if (_pendingCrash is not { err.Recoverable: true })
+                    _pendingCrash = null;
 
                 await SetStatusAsync(AppStatus.Idle, false);
             }

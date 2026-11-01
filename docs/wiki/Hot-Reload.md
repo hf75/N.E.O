@@ -9,6 +9,7 @@ This works in the desktop hosts (WPF and Avalonia, every way a new build reaches
 - Desktop: an info line in the chat — `Hot reload (generation 3): the running app was patched in place, its state is preserved. …` — or, when a change cannot be patched, `Hot reload not possible — <reason>. Reloading the app.` followed by the old behaviour (a fresh start).
 - MCP: the same line at the end of the `update_preview` / `patch_preview` result, so Claude knows whether the state is still there.
 - A running app that could not be prepared for hot reload is never reloaded silently: the next change says `Hot reload not possible — <why it could not be prepared>` in the same place.
+- Avalonia host: while the AI writes a change for a running app, the app stays in view and in use. N.E.O. shows what it is doing beside its Cancel button. What you do in the app meanwhile is still there after the patch, and an error you run into meanwhile is repaired as soon as the change is in. The WPF host still covers the app, because it sits inside the N.E.O. window and the Cancel button lies in that overlay.
 
 ## How it works
 

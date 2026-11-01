@@ -39,6 +39,12 @@ namespace Neo.App
 
         bool HasLoadedControl { get; }
 
+        /// <summary>
+        /// The app can stay in view and in use while the AI writes the next change: the app window is
+        /// a window of its own, with nothing of N.E.O. over it. The WPF host covers the embedded app with its overlay.
+        /// </summary>
+        bool CanStayInUseWhileGenerating => false;
+
         /// <summary>The plugin window's process id, null while there is none.</summary>
         int? ChildProcessId { get; }
         void HideChild();

@@ -27,7 +27,10 @@ namespace Neo.App
             {
                 // Wenn die App schon beschäftigt ist (z.B. beim Exportieren),
                 // kann sie nicht gleichzeitig reparieren. Logge das Problem.
-                Logger.LogMessage($"Child process crashed while app was busy ({CurrentStatus}). Recovery postponed.", BubbleType.CompletionError);
+                if (err.Recoverable && CurrentStatus is AppStatus.Generating or AppStatus.Repairing)
+                    Logger.LogMessage($"The app ran into an error: {err.Message} It gets repaired as soon as N.E.O. is done with this.", BubbleType.Info);
+                else
+                    Logger.LogMessage($"Child process crashed while app was busy ({CurrentStatus}). Recovery postponed.", BubbleType.CompletionError);
                 _pendingCrash = (reason, err);
                 return;
             }
