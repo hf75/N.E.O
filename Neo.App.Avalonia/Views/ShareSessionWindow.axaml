@@ -3,7 +3,7 @@
         x:Class="Neo.App.Views.ShareSessionWindow"
         Title="Share session"
         FontFamily="Inter, Segoe UI, sans-serif"
-        Width="600"
+        Width="760"
         SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
@@ -12,73 +12,91 @@
         <Style Selector="TextBlock.heading">
             <Setter Property="FontSize" Value="15"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="0,14,0,4"/>
         </Style>
         <Style Selector="TextBlock.hint">
             <Setter Property="Foreground" Value="#666666"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="Margin" Value="0,0,0,6"/>
         </Style>
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="Margin" Value="0,10,0,4"/>
+        </Style>
+        <Style Selector="Border.divider">
+            <Setter Property="Margin" Value="0,12,0,12"/>
+            <Setter Property="BorderBrush" Value="#DDD"/>
+            <Setter Property="BorderThickness" Value="0,1,0,0"/>
+        </Style>
+        <!-- A code is about five lines, and how many depends on where it has hyphens. Fixed, so the window does not jump when one arrives. -->
         <Style Selector="TextBox.code">
             <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, monospace"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
             <Setter Property="AcceptsReturn" Value="False"/>
-            <Setter Property="MinHeight" Value="44"/>
+            <Setter Property="Height" Value="90"/>
+            <Setter Property="Padding" Value="8,6"/>
         </Style>
-        <Style Selector="Button">
-            <Setter Property="MinWidth" Value="130"/>
+        <Style Selector="Button.wide">
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="Margin" Value="8,0,0,0"/>
-            <Setter Property="VerticalAlignment" Value="Top"/>
         </Style>
     </Window.Styles>
 
-    <StackPanel Margin="18,12,18,16">
+    <StackPanel Margin="16">
         <Grid ColumnDefinitions="Auto,*">
-            <TextBlock Text="Your name" VerticalAlignment="Center" Margin="0,0,10,0"/>
-            <TextBox x:Name="NameBox" Grid.Column="1" Watermark="how the others see you"/>
+            <TextBlock Text="Your name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBox x:Name="NameBox" Classes="rounded" Grid.Column="1" Padding="4" Watermark="how the others see you"/>
         </Grid>
 
-        <!-- Invite -->
-        <TextBlock Classes="heading" Text="Invite someone"/>
-        <TextBlock Classes="hint" Text="Create an invitation and send it to the person (chat, e-mail, …). They send you a reply code back — paste it here. Each person needs their own invitation."/>
-        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
-            <TextBox x:Name="InviteOut" Classes="code" IsReadOnly="True" Watermark="the invitation appears here"/>
-            <StackPanel Grid.Column="1">
-                <Button x:Name="BtnCreateInvite" Content="Create invitation" Click="CreateInvite_Click"/>
-                <Button x:Name="BtnCopyInvite" Content="Copy" Margin="8,6,0,0" IsEnabled="False" Click="CopyInvite_Click"/>
+        <Border Classes="divider"/>
+
+        <Grid ColumnDefinitions="*,Auto,*">
+            <!-- Invite -->
+            <StackPanel>
+                <TextBlock Classes="heading" Text="Invite someone"/>
+                <TextBlock Classes="hint" Text="Each person needs their own invitation."/>
+
+                <TextBlock Classes="fieldLabel" Text="1. Invitation to send:"/>
+                <TextBox x:Name="InviteOut" Classes="rounded code" IsReadOnly="True" Watermark="the invitation appears here"/>
+                <Grid ColumnDefinitions="*,*" Margin="0,6,0,0">
+                    <Button x:Name="BtnCreateInvite" Classes="rounded wide" Margin="0,0,3,0" Content="Create invitation" Click="CreateInvite_Click"/>
+                    <Button x:Name="BtnCopyInvite" Classes="rounded wide" Grid.Column="1" Margin="3,0,0,0" Content="Copy" IsEnabled="False" Click="CopyInvite_Click"/>
+                </Grid>
+
+                <TextBlock Classes="fieldLabel" Text="2. Reply code you received:"/>
+                <TextBox x:Name="ReplyIn" Classes="rounded code" Watermark="paste the reply code here" IsEnabled="False"/>
+                <Button x:Name="BtnConnect" Classes="rounded wide" Margin="0,6,0,0" Content="Connect" IsEnabled="False" Click="Connect_Click"/>
+            </StackPanel>
+
+            <Border Grid.Column="1" Margin="12,0" BorderBrush="#DDD" BorderThickness="1,0,0,0"/>
+
+            <!-- Join -->
+            <StackPanel Grid.Column="2">
+                <TextBlock Classes="heading" Text="Join someone's session"/>
+                <TextBlock Classes="hint" Text="Your current app is replaced by theirs."/>
+
+                <TextBlock Classes="fieldLabel" Text="1. Invitation you received:"/>
+                <TextBox x:Name="InviteIn" Classes="rounded code" Watermark="paste the invitation here"/>
+                <Button x:Name="BtnJoin" Classes="rounded wide" Margin="0,6,0,0" Content="Create reply" Click="Join_Click"/>
+
+                <TextBlock Classes="fieldLabel" Text="2. Reply code to send back:"/>
+                <TextBox x:Name="ReplyOut" Classes="rounded code" IsReadOnly="True" Watermark="your reply code appears here"/>
+                <Button x:Name="BtnCopyReply" Classes="rounded wide" Margin="0,6,0,0" Content="Copy" IsEnabled="False" Click="CopyReply_Click"/>
             </StackPanel>
         </Grid>
-        <Grid ColumnDefinitions="*,Auto">
-            <TextBox x:Name="ReplyIn" Classes="code" Watermark="paste the reply code here" IsEnabled="False"/>
-            <Button x:Name="BtnConnect" Grid.Column="1" Content="Connect" IsEnabled="False" Click="Connect_Click"/>
-        </Grid>
 
-        <!-- Join -->
-        <TextBlock Classes="heading" Text="Join someone's session"/>
-        <TextBlock Classes="hint" Text="Paste the invitation you received and send the reply code back. Your current app is replaced by theirs."/>
-        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
-            <TextBox x:Name="InviteIn" Classes="code" Watermark="paste the invitation here"/>
-            <Button x:Name="BtnJoin" Grid.Column="1" Content="Create reply" Click="Join_Click"/>
-        </Grid>
-        <Grid ColumnDefinitions="*,Auto">
-            <TextBox x:Name="ReplyOut" Classes="code" IsReadOnly="True" Watermark="your reply code appears here"/>
-            <Button x:Name="BtnCopyReply" Grid.Column="1" Content="Copy" IsEnabled="False" Click="CopyReply_Click"/>
-        </Grid>
+        <Border Classes="divider"/>
 
         <!-- Status -->
-        <Border Margin="0,16,0,0" Padding="10,8" CornerRadius="6" Background="#F3F4F6">
-            <Grid ColumnDefinitions="*,Auto">
+        <Border Padding="12,8" CornerRadius="12" Background="#F8F8F8">
+            <Grid ColumnDefinitions="*,Auto" MinHeight="32">
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock x:Name="StatusText" TextWrapping="Wrap" Text="Not shared."/>
                     <TextBlock x:Name="ErrorText" TextWrapping="Wrap" Foreground="#B42318" IsVisible="False" Margin="0,4,0,0"/>
                 </StackPanel>
-                <Button x:Name="BtnLeave" Grid.Column="1" Content="Leave" IsVisible="False" VerticalAlignment="Center" Click="Leave_Click"/>
+                <Button x:Name="BtnLeave" Classes="rounded" Grid.Column="1" MinWidth="120" Margin="8,0,0,0" VerticalAlignment="Center" HorizontalContentAlignment="Center" Content="Leave" IsVisible="False" Click="Leave_Click"/>
             </Grid>
         </Border>
 
-        <TextBlock Classes="hint" Margin="0,10,0,0"
+        <TextBlock Classes="hint" Margin="0,8,0,0"
                    Text="⚠ What the others change runs as code on this PC, with your rights. Share only with people you trust. Codes go straight from PC to PC; no server of ours is involved."/>
     </StackPanel>
 </Window>

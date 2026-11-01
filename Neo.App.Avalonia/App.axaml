@@ -31,6 +31,11 @@
         <Style Selector="Button.rounded:disabled">
             <Setter Property="Opacity" Value="0.5"/>
         </Style>
+        <Style Selector="Button.rounded:disabled /template/ ContentPresenter">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="Gray"/>
+            <Setter Property="Foreground" Value="Black"/>
+        </Style>
 
         <!-- Rounded Orange Button -->
         <Style Selector="Button.orange">
@@ -65,6 +70,13 @@
         </Style>
         <Style Selector="TextBox.rounded:pointerover">
             <Setter Property="BorderBrush" Value="#9AA7B2"/>
+        </Style>
+        <Style Selector="TextBox.rounded:disabled">
+            <Setter Property="Opacity" Value="0.6"/>
+        </Style>
+        <Style Selector="TextBox.rounded:disabled /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="Gray"/>
         </Style>
 
         <!-- Rounded ComboBox -->

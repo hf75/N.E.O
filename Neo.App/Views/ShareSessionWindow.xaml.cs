@@ -49,6 +49,8 @@ namespace Neo.App
             bool host = session is { Role: SessionRole.Host };
 
             NameBox.IsEnabled = session == null;
+            InviteOut.IsEnabled = !string.IsNullOrEmpty(InviteOut.Text);
+            ReplyOut.IsEnabled = !string.IsNullOrEmpty(ReplyOut.Text);
             BtnCreateInvite.IsEnabled = !guest && !_busy;
             BtnConnect.IsEnabled = host && !_busy && !string.IsNullOrEmpty(InviteOut.Text);
             ReplyIn.IsEnabled = BtnConnect.IsEnabled;
@@ -60,7 +62,9 @@ namespace Neo.App
             StatusText.Text = session switch
             {
                 null => "Not shared.",
-                { Role: SessionRole.Host } s when s.Participants.Count <= 1 => "Shared — nobody has joined yet.",
+                { Role: SessionRole.Host } s when s.Participants.Count <= 1 => string.IsNullOrEmpty(InviteOut.Text)
+                    ? "Shared — nobody has joined yet."
+                    : "Invitation copied — send it, then paste the reply code.",
                 { Role: SessionRole.Host } s => $"You host this session. In it: {string.Join(", ", s.Participants)}.",
                 { IsConnected: true } s => $"You are in {s.HostName}'s session. In it: {string.Join(", ", s.Participants)}.",
                 _ => "Waiting for the host to paste your reply code …",
