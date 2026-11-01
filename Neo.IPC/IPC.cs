@@ -389,11 +389,17 @@ namespace Neo.IPC
     public record NotifyFirstChildVisibility(int unused);
 
     /// <summary>
-    /// Parent window screen bounds, sent to child for magnetic docking. <paramref name="Dock"/> false:
-    /// only the visibility applies — the app window keeps its own place (player mode, where the host
-    /// hides behind the app and follows it instead).
+    /// Parent window screen bounds, sent to child for magnetic docking: position in screen pixels, size in
+    /// DIPs. <paramref name="Dock"/> false: only the visibility applies — the app window keeps its own place
+    /// (player mode, where the host hides behind the app and follows it instead).
     /// </summary>
-    public record ParentWindowBoundsMessage(double X, double Y, double Width, double Height, bool IsVisible, bool Dock = true);
+    public record ParentWindowBoundsMessage(double X, double Y, double Width, double Height, bool IsVisible, bool Dock = true)
+    {
+        private const double DockGap = 8;
+
+        /// <summary>Screen pixel column of a window docked to the right of this one; <paramref name="scaling"/> is that of the screen this window is on.</summary>
+        public int RightDockX(double scaling) => (int)Math.Round(X + (Width + DockGap) * scaling);
+    }
 
     public static class Json
     {

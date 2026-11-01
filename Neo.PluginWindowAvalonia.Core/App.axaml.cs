@@ -456,11 +456,11 @@ namespace Neo.PluginWindowAvalonia
                                     // host follows this window instead (player mode).
                                     if (bounds.Dock)
                                     {
-                                        int dockX = (int)(bounds.X + bounds.Width + 8); // 8px gap
                                         int dockY = (int)bounds.Y;
                                         int dockH = (int)bounds.Height;
+                                        var scaling = MainWin.Screens.ScreenFromPoint(new PixelPoint((int)bounds.X, dockY))?.Scaling ?? MainWin.RenderScaling;
 
-                                        MainWin.Position = new PixelPoint(dockX, dockY);
+                                        MainWin.Position = new PixelPoint(bounds.RightDockX(scaling), dockY);
                                         MainWin.Height = dockH;
                                     }
 
