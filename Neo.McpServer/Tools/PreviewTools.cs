@@ -86,6 +86,7 @@ public sealed partial class PreviewTools
                 return $"Compilation succeeded but failed to send DLL to preview window.\n" +
                        $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
             }
+            await preview.SendSourceAsync(sourceCode, windowId);
 
             return $"SUCCESS: App compiled and displayed in live preview window.\n" +
                    $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}" +
@@ -154,6 +155,7 @@ public sealed partial class PreviewTools
                 return $"Compilation succeeded but hot-reload failed.\n" +
                        $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
             }
+            await preview.SendSourceAsync(sourceCode, windowId);
 
             return $"SUCCESS: Preview updated live.\n" +
                    $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}" +
@@ -288,6 +290,7 @@ public sealed partial class PreviewTools
             if (!updated)
                 return $"PATCH applied and compiled, but hot-reload failed.\n" +
                        $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
+            await preview.SendSourceAsync(new[] { patchedCode }, windowId);
 
             return $"SUCCESS: Patch applied and preview updated.\n" +
                    $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}" +

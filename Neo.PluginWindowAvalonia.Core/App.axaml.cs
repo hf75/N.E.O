@@ -727,6 +727,10 @@ namespace Neo.PluginWindowAvalonia
                         break;
                     }
 
+                case IpcTypes.SourceCode:
+                    PluginHost.Options.SourceCodeReceived?.Invoke(env.PayloadJson);
+                    break;
+
                 case IpcTypes.StartWebBridge:
                     {
                         try

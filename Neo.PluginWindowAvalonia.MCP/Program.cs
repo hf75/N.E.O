@@ -13,12 +13,22 @@ namespace Neo.PluginWindowAvalonia.MCP
         // Neo.PluginWindowAvalonia.Core; on top of it this head adds Smart Edit (Ctrl+K) and
         // turns on the MCP host features (Live-MCP manifest, Ai.Trigger channel to Claude).
         [STAThread]
-        public static void Main(string[] args) => PluginHost.Run(args, new PluginHostOptions
+        public static void Main(string[] args)
         {
-            StandaloneWindowTitle = "N.E.O. — Live Preview (MCP)",
-            EnableMcpHostFeatures = true,
-            MainWindowCreated = window => new SmartEditController(window).Attach(),
-        });
+            SmartEditController? smartEdit = null;
+
+            PluginHost.Run(args, new PluginHostOptions
+            {
+                StandaloneWindowTitle = "N.E.O. — Live Preview (MCP)",
+                EnableMcpHostFeatures = true,
+                MainWindowCreated = window =>
+                {
+                    smartEdit = new SmartEditController(window);
+                    smartEdit.Attach();
+                },
+                SourceCodeReceived = code => smartEdit?.SeedCode(code),
+            });
+        }
 
         // Avalonia configuration, don't remove; also used by visual designer.
         public static AppBuilder BuildAvaloniaApp() => PluginHost.BuildAvaloniaApp();

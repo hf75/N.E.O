@@ -481,7 +481,7 @@ Both MCP variants of the preview window (`Neo.PluginWindowAvalonia.MCP` and `Neo
 2. Press **Ctrl+K** — the Smart Edit panel appears on the right side
 3. Type a modification request: *"Make the header red and add a search bar"*
 4. Press **Enter** — the app modifies itself:
-   - Current code is extracted from the visual tree
+   - Claude gets the app's source (the server sends it along with every build)
    - Claude generates a patch or new code
    - Embedded Roslyn compiles it in ~1 second
    - The control hot-reloads — the change appears instantly
@@ -491,8 +491,8 @@ Both MCP variants of the preview window (`Neo.PluginWindowAvalonia.MCP` and `Neo
 
 ```
 User types in ChatOverlay
-  → ExtractCodeFromVisualTree (current app state)
-  → ClaudeChat.SendAsync (Anthropic API with Avalonia system prompt)
+  → the app's source (from the server or the last Smart Edit)
+  → ClaudeChat.SendAsync (Anthropic API with the window's system prompt)
   → Claude responds with patch or full code
   → UnifiedDiffPatcher.TryApply (or full replacement)
   → SmartCompiler.CompileAsync (embedded CSharpDllCompileAgent + Roslyn)

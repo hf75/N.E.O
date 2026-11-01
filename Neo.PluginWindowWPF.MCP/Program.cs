@@ -20,6 +20,7 @@ namespace Neo.PluginWindowWPF.MCP
                     smartEdit.Attach();
                 },
                 LastCompiledCodeProvider = () => smartEdit?.LastCompiledCode,
+                SourceCodeReceived = code => smartEdit?.SeedCode(code),
             });
         }
     }

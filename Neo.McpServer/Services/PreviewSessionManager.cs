@@ -475,6 +475,17 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         return await LoadFreshAsync(s, mainDllBytes, mainDllName, dependencyDlls, ct, windowId, dllPath);
     }
 
+    /// <summary>
+    /// Hands the window the source of the build it just received. The window only ever gets builds, but
+    /// Smart Edit (Ctrl+K) works on code, and what it could rebuild from the UI has no logic in it.
+    /// </summary>
+    public Task SendSourceAsync(IEnumerable<string> sourceCode, string? windowId = null)
+    {
+        var s = GetRunningSession(windowId);
+        return s == null ? Task.CompletedTask : SafeSendControlAsync(s, new IpcEnvelope(
+            IpcTypes.SourceCode, Guid.NewGuid().ToString("N"), string.Join("\n", sourceCode)));
+    }
+
     /// <summary>"Hot reload …" / "Hot reload not possible — …" for the last build sent to the window, if any.</summary>
     public string? GetLastLoadMessage(string? windowId = null)
         => GetRunningSession(windowId)?.LastLoadMessage;

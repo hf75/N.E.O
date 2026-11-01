@@ -59,6 +59,10 @@ namespace Neo.IPC
         public const string PositionWindow = "PositionWindow";
         public const string ExtractCode = "ExtractCode";
         public const string ExtractCodeResult = "ExtractCodeResult";
+
+        /// <summary>The source of the build just sent, as the payload. The window only ever receives builds; Smart Edit works on code.</summary>
+        public const string SourceCode = "SourceCode";
+
         public const string StartWebBridge = "StartWebBridge";
         public const string StartWebBridgeResult = "StartWebBridgeResult";
         public const string StopWebBridge = "StopWebBridge";

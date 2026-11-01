@@ -27,6 +27,12 @@ namespace Neo.PluginWindowAvalonia
         /// shown. Heads use this to attach their own features (the MCP head adds Smart Edit).
         /// </summary>
         public Action<MainWindow>? MainWindowCreated { get; init; }
+
+        /// <summary>
+        /// The source of the build the MCP server just sent (the desktop hosts send none). The window
+        /// only runs builds; a head that works on code (Smart Edit) keeps it.
+        /// </summary>
+        public Action<string>? SourceCodeReceived { get; init; }
     }
 
     /// <summary>Entry point shared by all Avalonia plugin window executables.</summary>

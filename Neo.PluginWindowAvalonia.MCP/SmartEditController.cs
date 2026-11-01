@@ -26,6 +26,9 @@ namespace Neo.PluginWindowAvalonia.MCP
             _window = window;
         }
 
+        /// <summary>The source of the build the server just sent: what the next request starts from.</summary>
+        public void SeedCode(string code) => _smartCompiler.SeedCode(code);
+
         /// <summary>Puts the overlay on top of the window content and hooks Ctrl+K.</summary>
         public void Attach()
         {
@@ -74,17 +77,18 @@ namespace Neo.PluginWindowAvalonia.MCP
 
             try
             {
-                // 1. Extract current code from visual tree
+                // 1. The real source: from the server or from the last change made here. What the
+                // visual tree gives is only the fallback, it has no logic in it.
                 var root = _window.GetLoadedUserControl();
 
                 string currentCode;
-                if (root != null && root is UserControl && Application.Current is App app)
-                {
-                    currentCode = app.ExtractCodeFromVisualTree(root);
-                }
-                else if (_smartCompiler.LastCompiledCode != null)
+                if (_smartCompiler.LastCompiledCode != null)
                 {
                     currentCode = _smartCompiler.LastCompiledCode;
+                }
+                else if (root != null && root is UserControl && Application.Current is App app)
+                {
+                    currentCode = app.ExtractCodeFromVisualTree(root);
                 }
                 else
                 {
@@ -108,7 +112,7 @@ namespace Neo.PluginWindowAvalonia.MCP
                 _chatOverlay.SetStatus("Compiling...");
 
                 // Seed the SmartCompiler with current code if it has no previous code
-                // (happens when app was compiled via MCP server, not via SmartCompiler)
+                // (happens when no source came with the app: the fallback above)
                 if (_smartCompiler.LastCompiledCode == null)
                     _smartCompiler.SeedCode(currentCode);
 

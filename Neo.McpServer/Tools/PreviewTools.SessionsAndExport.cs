@@ -206,6 +206,7 @@ public sealed partial class PreviewTools
             if (!sent)
                 return $"Compiled but failed to send DLL to preview.\n" +
                        $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
+            await preview.SendSourceAsync(sourceCode);
 
             // Restore WebBridge if saved
             string webBridgeInfo = "";

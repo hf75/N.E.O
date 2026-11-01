@@ -25,6 +25,9 @@ namespace Neo.PluginWindowWPF.MCP
         /// <summary>Last source Smart Edit compiled; backs <c>extract_code</c> for WPF.</summary>
         public string? LastCompiledCode => _smartCompiler.LastCompiledCode;
 
+        /// <summary>The source of the build the server just sent: what the next request starts from.</summary>
+        public void SeedCode(string code) => _smartCompiler.SeedCode(code);
+
         /// <summary>Puts the overlay on top of the window content and hooks Ctrl+K.</summary>
         public void Attach()
         {
