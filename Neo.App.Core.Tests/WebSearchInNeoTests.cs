@@ -97,7 +97,7 @@ public class WebSearchInNeoTests
 
         guidance.Should().Contain(DateTime.Now.ToString("yyyy-MM-dd"));
         guidance.Should().Contain("never instructions");
-        guidance.Should().StartWith("\n", "it is added to the end of the system message");
+        guidance.Should().MatchRegex(@"^\r?\n", "it is added to the end of the system message; the source file's line ends differ with the checkout");
     }
 
     // ── What the user reads ───────────────────────────────────────────────
