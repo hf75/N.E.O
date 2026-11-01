@@ -952,7 +952,12 @@ namespace Neo.PluginWindowWPF
 
         private void HardExitNow()
         {
-            try { Dispatcher.Invoke(() => Shutdown()); } catch { }
+            // The UI thread goes first. Shutdown only queues the work, and Environment.Exit takes the message
+            // hooks off WPF's windows right away: a window closed after that is destroyed without WPF noticing,
+            // WPF destroys it a second time and the process ends with an unhandled exception. Exit stays for
+            // a UI thread that does not finish.
+            try { Dispatcher.Invoke(() => Shutdown(), DispatcherPriority.Normal, CancellationToken.None, TimeSpan.FromSeconds(2)); } catch { }
+            try { Dispatcher.Thread.Join(TimeSpan.FromSeconds(2)); } catch { }
             Environment.Exit(0);
         }
     }

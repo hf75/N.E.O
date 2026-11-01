@@ -120,6 +120,13 @@ public class SmartEditSourceSmokeTests : IDisposable
             await ClaudeGetsAsync(server, Version(6));
 
             (await server.CallToolAsync("get_runtime_errors", new { })).Should().Contain("No runtime errors");
+
+            // Closing it is a clean end: a crash during shutdown fails nothing else, it only leaves a report in the Windows log.
+            using var child = Process.GetProcessById(PreviewWindow(server)!.Current.ProcessId);
+            _ = child.Handle; // keeps the exit code readable once the process is gone
+            await server.CallToolAsync("close_preview", new { }, TimeSpan.FromSeconds(20));
+            child.WaitForExit(10_000).Should().BeTrue("the window's process ends");
+            child.ExitCode.Should().Be(0, "0xE0434352 (-532462766) is an unhandled exception during shutdown, -1 a kill after waiting in vain");
         }
         finally
         {
