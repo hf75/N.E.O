@@ -182,6 +182,10 @@ Switch between frameworks in **Settings**:
 
 Drag the window of one running app onto another: one program that does both, with the data of both. The app you dropped it on keeps running and stays in use meanwhile. If it does not work out, the dropped window comes back with everything it held. See **[[Fusion]]**.
 
+## Teleport
+
+In a shared session, the running app moves to another person with everything in it: their copy becomes the one you just left, your window goes away, and it comes home the same way. They are asked first, and nothing but the question leaves your PC before they say yes. See **[[Teleport]]**.
+
 ## Web Search
 
 With an Anthropic key, generated apps can answer from the current web with their sources, as text or as typed data for tables; the AI uses this where it knows no free API. If you switch it on in the settings, Claude also looks things up while it builds. See **[[Web Search]]**.

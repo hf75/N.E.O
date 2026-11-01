@@ -463,6 +463,14 @@ namespace Neo.PluginWindowWPF
                         break;
                     }
 
+                case IpcTypes.AppWindow:
+                    {
+                        if (Json.FromJson<AppWindowMessage>(env.PayloadJson) is { Banner: not null } windowMessage)
+                            await Dispatcher.InvokeAsync(() => MainWin.ShowBanner(windowMessage.Banner, windowMessage.BannerColor ?? "#D0202020", windowMessage.BannerSeconds));
+                        await SafeSendAsync(new IpcEnvelope(IpcTypes.Ack, env.CorrelationId, Json.ToJson(new AckMessage("Done."))));
+                        break;
+                    }
+
                 case IpcTypes.CaptureAppState:
                     {
                         AppStateCapturedMessage captured;

@@ -75,6 +75,22 @@ namespace Neo.App.Views
                 { IsConnected: true } s => $"You are in {s.HostName}'s session. In it: {string.Join(", ", s.Participants)}.",
                 _ => "Waiting for the host to paste your reply code …",
             };
+
+            var others = session is { IsConnected: true } ? session.Participants.Where(p => p != session.LocalName).ToList() : new List<string>();
+            TeleportPanel.IsVisible = others.Count > 0;
+            if (TeleportTo.ItemsSource is not List<string> shown || !shown.SequenceEqual(others))
+            {
+                var chosen = TeleportTo.SelectedItem as string;
+                TeleportTo.ItemsSource = others;
+                TeleportTo.SelectedItem = chosen != null && others.Contains(chosen) ? chosen : others.FirstOrDefault();
+            }
+            var away = _controller.AppIsAt;
+            TeleportTo.IsVisible = away == null;
+            BtnTeleport.Content = away == null ? "Teleport" : "Show my copy";
+            BtnTeleport.IsEnabled = !_busy;
+            TeleportText.Text = away == null
+                ? "It leaves this PC with everything in it and goes on at the other person's. They are asked first."
+                : $"The app is at {away}'s. They can send it back. Your copy waits here as it was when it left.";
         }
 
         private void ShowError(string? message)
@@ -148,6 +164,21 @@ namespace Neo.App.Views
         }
 
         private async void Leave_Click(object? sender, RoutedEventArgs e) => await RunAsync(_controller.LeaveSessionAsync);
+
+        private async void Teleport_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_controller.AppIsAt != null)
+            {
+                await RunAsync(_controller.ShowMyCopyAsync);
+                return;
+            }
+            if (TeleportTo.SelectedItem is not string person) { ShowError("Choose who gets the app."); return; }
+            await RunAsync(async () =>
+            {
+                StatusText.Text = $"Waiting for {person} to take it …";
+                await _controller.TeleportAppAsync(person);
+            });
+        }
 
         private async void CopyInvite_Click(object? sender, RoutedEventArgs e) => await CopyAsync(InviteOut.Text);
 

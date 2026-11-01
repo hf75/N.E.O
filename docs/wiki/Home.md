@@ -34,6 +34,7 @@ N.E.O. comes in three flavours that share the same core: a **desktop host** (WPF
 - [[App Network]] — Apps that use each other: every running app offers methods and values, any app can call them, the AI knows who is running
 - [[Exoskeleton]] — New features for programs you have no source of: a panel docks to their window, reads them and uses them
 - [[Fusion]] — Drag one running program onto another: one program that does both, with the data of both
+- [[Teleport]] — In a shared session, the running app moves to another person's PC with everything in it
 - [[Web Search]] — Apps that answer from the current web with their sources; Claude looks things up while it builds, if you want
 - [[Export and Import]] — Save, share, and export as `.exe`
 - [[Live-MCP]] — Every generated app is an MCP server (Claude calls into it, reads state, subscribes)

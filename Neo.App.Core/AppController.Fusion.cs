@@ -29,6 +29,8 @@ namespace Neo.App
         // Waiting for the app this one was dropped on: gone with the answer, or after a while.
         private CancellationTokenSource? _fusionWaiting;
 
+        private bool _mergedAway;
+
         private Task<string?> HandleAppMessageAsync(string kind, string? payload) => kind switch
         {
             FusionMessages.Drop => DroppedOnAnotherAppAsync(payload),
@@ -132,8 +134,19 @@ namespace Neo.App
             if (AutoSaveProjectPath != null)
                 await ChildProcessService.SetAppWindowAsync(new AppWindowMessage(Close: true));
             else
+            {
+                _mergedAway = true;
                 Logger.LogMessage("This app is a part of the other one now. Here it stays hidden; your next prompt brings it back.", BubbleType.Info);
+            }
             return "ok";
+        }
+
+        // It stayed hidden in this N.E.O. after the merge. New code for it means someone is working on it again.
+        private async Task BackAfterTheMergeAsync()
+        {
+            if (!_mergedAway) return;
+            _mergedAway = false;
+            await ChildProcessService.SetAppWindowAsync(new AppWindowMessage(Visible: true));
         }
 
         private async Task ComeBackAsync(string message)

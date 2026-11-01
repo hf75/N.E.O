@@ -1121,8 +1121,37 @@ namespace Neo.App
                 NativeMethods.ShowWindow(_childHwnd, NativeMethods.SW_HIDE);
         }
 
+        // The app went to another PC: prompts and history show the child again, this one stays away until it is back.
+        private bool _keptAway;
+
+        public async Task SetAppWindowAsync(AppWindowMessage message)
+        {
+            if (message.Visible == false)
+            {
+                HideChild();
+                _keptAway = true;
+            }
+            if (message.Visible == true)
+            {
+                _keptAway = false;
+                ShowChild();
+            }
+            if (message.BringToFront) _dispatcher.Invoke(() => _parentWindow.Activate());
+
+            if (message.Banner == null || _pipeServer == null || !_pipeServer.IsConnected) return;
+            try
+            {
+                await SendRequestAsync(IpcTypes.AppWindow, message, TimeSpan.FromSeconds(2), _pipeCts.Token);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[SetAppWindowAsync] Failed: {ex.Message}");
+            }
+        }
+
         public void ShowChild()
         {
+            if (_keptAway) return;
             _allowChildIsVisible = true;
 
             if (_childHwnd != IntPtr.Zero)

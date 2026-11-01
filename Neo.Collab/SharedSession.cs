@@ -28,6 +28,9 @@ public sealed class SessionCallbacks
     /// <summary>Everyone in the session, host first.</summary>
     public Action<IReadOnlyList<string>> ParticipantsChanged { get; init; } = _ => { };
 
+    /// <summary>A message about the running app, for this person. Awaited, so a question to the person must not be part of it.</summary>
+    public Func<TeleportMessage, Task> Teleport { get; init; } = _ => Task.CompletedTask;
+
     /// <summary>Joins, leaves, rejections — one line for the chat.</summary>
     public Action<string> Notice { get; init; } = _ => { };
 
@@ -47,7 +50,7 @@ public sealed class SessionCallbacks
 /// </summary>
 public sealed class SharedSession : IAsyncDisposable
 {
-    public const int ProtocolVersion = 1;
+    public const int ProtocolVersion = 2;
     public static TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(5);
     public static TimeSpan HeartbeatTimeout { get; set; } = TimeSpan.FromSeconds(25);
     public static TimeSpan TurnRequestTimeout { get; set; } = TimeSpan.FromSeconds(15);
@@ -278,6 +281,34 @@ public sealed class SharedSession : IAsyncDisposable
         await BroadcastAsync(new TurnReleasedMessage(LocalName));
     }
 
+    /// <summary>A message about the running app, for one person in the session. Guests send it through the host.</summary>
+    public Task SendTeleportAsync(TeleportMessage message)
+    {
+        var peers = ReadyPeers();
+        var next = Role == SessionRole.Host ? peers.FirstOrDefault(p => p.Name == message.To) : peers.FirstOrDefault();
+        if (next == null) throw new InvalidOperationException($"{message.To} is not in the session.");
+        return SendAsync(next, message);
+    }
+
+    // Between two guests it goes through the host. Someone who has left cannot answer any more, so the host does.
+    private async Task PassOnAsync(Peer from, TeleportMessage message)
+    {
+        if (ReadyPeers().FirstOrDefault(p => p.Name == message.To) is { } next)
+        {
+            await SendAsync(next, message);
+            return;
+        }
+
+        var answer = message.Phase switch
+        {
+            TeleportPhases.Offer => TeleportPhases.Answer,
+            TeleportPhases.State => TeleportPhases.Arrived,
+            _ => null,
+        };
+        if (answer != null)
+            await SendAsync(from, new TeleportMessage(answer, message.Id, message.To, message.From) { Reason = $"{message.To} is not in the session any more." });
+    }
+
     // ── Leaving ──────────────────────────────────────────────────────────────
 
     /// <summary>Leaves the session (the host ends it for everyone).</summary>
@@ -421,6 +452,11 @@ public sealed class SharedSession : IAsyncDisposable
                 break;
 
             // Both
+            case TeleportMessage teleport:
+                if (teleport.To == LocalName) await _callbacks.Teleport(teleport);
+                else if (Role == SessionRole.Host) await PassOnAsync(peer, teleport);
+                break;
+
             case ByeMessage bye:
                 if (Role == SessionRole.Guest)
                 {

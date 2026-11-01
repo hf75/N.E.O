@@ -94,6 +94,167 @@ public sealed class SharedSessionControllerTests : IDisposable
         await annaUi.Run(() => anna.LeaveSessionAsync());
     }
 
+    [Fact]
+    public async Task The_running_app_moves_to_another_person_and_comes_home()
+    {
+        using var annaUi = new UiThread("Anna");
+        using var benUi = new UiThread("Ben");
+        var annaView = new FakeView("Neo.Tests.Session");
+        var benView = new FakeView("Neo.Tests.Session");
+        var anna = annaUi.Invoke(() => new AppController(annaView, new FakePlatform()));
+        var ben = benUi.Invoke(() => new AppController(benView, new FakePlatform()));
+        await annaUi.Run(() => anna.ApplyManualCodeEditAsync(App("MARKER-ONE")));
+
+        // Nobody to send it to yet.
+        var alone = await Assert.ThrowsAsync<InvalidOperationException>(() => annaUi.Run(() => anna.TeleportAppAsync("Ben")));
+        alone.Message.Should().Contain("shared session");
+
+        var invite = await annaUi.Run(() => anna.CreateSessionInviteAsync("Anna"));
+        var reply = await benUi.Run(() => ben.JoinSessionAsync(invite, "Ben"));
+        var joined = benUi.Run(() => ben.CompleteJoinAsync());
+        await annaUi.Run(() => anna.AcceptGuestReplyAsync(reply));
+        await joined;
+        await WaitUntil(() => benView.Child.Shows("MARKER-ONE"), "Anna's app at Ben's", benView);
+        annaView.Child.State = new AppStateCapturedMessage("ANNAS DATA", 3, 2048, ["_clock (DispatcherTimer)"]);
+
+        // He says no: nothing left her PC, nothing was even taken.
+        benView.Answer = false;
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => annaUi.Run(() => anna.TeleportAppAsync("Ben")));
+        refused.Message.Should().Contain("Ben did not want to take it");
+        benView.Questions.Should().ContainSingle().Which.Should().Contain("Anna wants to send you the running app").And.Contain("replaced");
+        annaView.Child.Captures.Should().Be(0);
+        annaView.Child.Windows.Should().BeEmpty();
+        benView.Child.Restored.Should().BeEmpty();
+
+        // He says yes: her window goes, the app is at his, as it was.
+        benView.Answer = true;
+        await annaUi.Run(() => anna.TeleportAppAsync("Ben"));
+        benView.Child.Restored.Should().ContainSingle();
+        var taken = benView.Child.Restored.Single();
+        taken.Image.Should().Be("ANNAS DATA");
+        taken.RestoreUi.Should().BeTrue("the text in the boxes goes along");
+        taken.RebuildMethods.Should().Contain("BuildUi");
+        benView.Child.Windows.Should().ContainSingle().Which.Should().Match<AppWindowMessage>(m => m.Visible == true && m.BringToFront && m.Banner!.Contains("came from Anna"));
+        annaView.Child.Windows.Should().ContainSingle().Which.Visible.Should().BeFalse();
+        annaUi.Invoke(() => anna.AppIsAt).Should().Be("Ben");
+        benUi.Invoke(() => ben.AppIsAt).Should().BeNull();
+        annaView.Log.Lines.Should().Contain(l => l.Contains("The app is at Ben's now") && l.Contains("3 value(s)") && l.Contains("2 KB") && l.Contains("_clock"));
+        benView.Log.Lines.Should().Contain(l => l.Contains("Anna sent you the running app"));
+
+        // While it is away it cannot go away again.
+        var again = await Assert.ThrowsAsync<InvalidOperationException>(() => annaUi.Run(() => anna.TeleportAppAsync("Ben")));
+        again.Message.Should().Contain("at Ben's");
+
+        // A change still reaches her hidden copy, and does not bring it back.
+        await benUi.Run(() => ben.ApplyManualCodeEditAsync(App("MARKER-TWO")));
+        await WaitUntil(() => annaView.Child.Shows("MARKER-TWO"), "Ben's change at Anna's", annaView);
+        annaView.Child.Windows.Should().ContainSingle();
+
+        // A state of another version of the app is not taken.
+        await benUi.Run(() => ben.TeleportMessageArrivedAsync(new TeleportMessage(TeleportPhases.State, "other", "Anna", "Ben") { Image = "OLD", CodeHash = "another version" }));
+        benView.Child.Restored.Should().ContainSingle();
+        benView.Log.Lines.Should().Contain(l => l.Contains("could not be taken here") && l.Contains("on its way"));
+
+        // Home: it was hers, so nobody asks her.
+        var questionsSoFar = annaView.Questions.Count;
+        benView.Child.State = new AppStateCapturedMessage("BENS DATA", 4, 4096, []);
+        await benUi.Run(() => ben.TeleportAppAsync("Anna"));
+        annaView.Questions.Count.Should().Be(questionsSoFar);
+        annaView.Child.Restored.Single().Image.Should().Be("BENS DATA");
+        annaView.Child.Windows.Last().Visible.Should().BeTrue();
+        annaUi.Invoke(() => anna.AppIsAt).Should().BeNull();
+        benUi.Invoke(() => ben.AppIsAt).Should().Be("Anna");
+
+        // He does not want to wait for it: his own copy comes back, as it was.
+        await benUi.Run(() => ben.ShowMyCopyAsync());
+        benUi.Invoke(() => ben.AppIsAt).Should().BeNull();
+        benView.Child.Windows.Last().Visible.Should().BeTrue();
+
+        // It cannot be taken over there: her window comes back, and she hears why.
+        benView.Child.RestoreError = "no way";
+        var failed = await Assert.ThrowsAsync<InvalidOperationException>(() => annaUi.Run(() => anna.TeleportAppAsync("Ben")));
+        failed.Message.Should().Contain("no way");
+        annaUi.Invoke(() => anna.AppIsAt).Should().BeNull();
+        annaView.Child.Windows.Last().Should().Match<AppWindowMessage>(m => m.Visible == true && m.Banner!.StartsWith("Not sent:"));
+        benView.Child.RestoreError = null;
+
+        // A lot of data: 3 MB that do not compress.
+        var large = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(1_500_000));
+        annaView.Child.State = new AppStateCapturedMessage(large, 1, large.Length, []);
+        await annaUi.Run(() => anna.TeleportAppAsync("Ben"));
+        benView.Child.Restored.Last().Image.Should().Be(large);
+        annaUi.Invoke(() => anna.AppIsAt).Should().Be("Ben");
+
+        // He leaves with it: her copy comes back by itself.
+        await benUi.Run(() => ben.LeaveSessionAsync());
+        await WaitUntil(() => annaUi.Invoke(() => anna.AppIsAt) == null, "Anna's copy back", annaView);
+        annaView.Child.Windows.Last().Should().Match<AppWindowMessage>(m => m.Visible == true && m.Banner!.Contains("Ben left the session"));
+        await annaUi.Run(() => anna.LeaveSessionAsync());
+    }
+
+    [Fact]
+    public async Task When_the_other_person_is_gone_nobody_waits_and_the_copy_comes_back()
+    {
+        using var annaUi = new UiThread("Anna");
+        using var benUi = new UiThread("Ben");
+        var annaView = new FakeView("Neo.Tests.Session");
+        var benView = new FakeView("Neo.Tests.Session");
+        var anna = annaUi.Invoke(() => new AppController(annaView, new FakePlatform()));
+        var ben = benUi.Invoke(() => new AppController(benView, new FakePlatform()));
+        await annaUi.Run(() => anna.ApplyManualCodeEditAsync(App("MARKER-ONE")));
+        annaView.Child.State = new AppStateCapturedMessage("ANNAS DATA", 1, 2048, []);
+        benView.Child.State = new AppStateCapturedMessage("BENS DATA", 1, 2048, []);
+
+        async Task JoinAsync()
+        {
+            var invite = await annaUi.Run(() => anna.CreateSessionInviteAsync("Anna"));
+            var reply = await benUi.Run(() => ben.JoinSessionAsync(invite, "Ben"));
+            var joined = benUi.Run(() => ben.CompleteJoinAsync());
+            await annaUi.Run(() => anna.AcceptGuestReplyAsync(reply));
+            await joined;
+            await WaitUntil(() => benView.Child.Shows("MARKER-ONE"), "Anna's app at Ben's", benView);
+        }
+
+        // He leaves while he is thinking about it: she hears at once, not after two minutes.
+        await JoinAsync();
+        benView.Thinking = new TaskCompletionSource<bool>();
+        var waiting = annaUi.Run(() => anna.TeleportAppAsync("Ben"));
+        await WaitUntil(() => benView.Questions.Count == 1, "the question at Ben's", benView);
+        await benUi.Run(() => ben.LeaveSessionAsync());
+        (await Task.WhenAny(waiting, Task.Delay(TimeSpan.FromSeconds(20)))).Should().Be(waiting, "she does not wait for someone who left");
+        (await Assert.ThrowsAsync<InvalidOperationException>(() => waiting)).Message.Should().Contain("Ben did not answer");
+        annaView.Child.Windows.Should().BeEmpty("nothing happened");
+        benView.Thinking.TrySetResult(false);
+        benView.Thinking = null;
+        await annaUi.Run(() => anna.LeaveSessionAsync());
+
+        // She ends the session while his app is at hers: his copy comes back.
+        benView.Child.State = new AppStateCapturedMessage("BENS DATA", 1, 2048, []);
+        await JoinAsync();
+        await benUi.Run(() => ben.TeleportAppAsync("Anna"));
+        benUi.Invoke(() => ben.AppIsAt).Should().Be("Anna");
+        await annaUi.Run(() => anna.LeaveSessionAsync());
+        await WaitUntil(() => benUi.Invoke(() => ben.AppIsAt) == null, "Ben's copy back", benView);
+        benView.Child.Windows.Last().Visible.Should().BeTrue();
+
+        // He leaves himself while the app is at hers: his copy comes back too.
+        await JoinAsync();
+        await benUi.Run(() => ben.TeleportAppAsync("Anna"));
+        await benUi.Run(() => ben.LeaveSessionAsync());
+        benUi.Invoke(() => ben.AppIsAt).Should().BeNull();
+        benView.Child.Windows.Last().Visible.Should().BeTrue();
+        await annaUi.Run(() => anna.LeaveSessionAsync());
+    }
+
+    [Theory]
+    [InlineData("a\r\nb\r\n", "a\nb")]
+    [InlineData("  code  ", "code")]
+    public void Line_ends_do_not_make_two_versions_of_an_app(string one, string other)
+    {
+        AppController.CodeHash(one).Should().Be(AppController.CodeHash(other));
+        AppController.CodeHash(one).Should().NotBe(AppController.CodeHash(other + " changed"));
+    }
+
     private static async Task WaitUntil(Func<bool> condition, string what, FakeView view, int seconds = 60)
     {
         var deadline = DateTime.UtcNow.AddSeconds(seconds);
@@ -182,6 +343,14 @@ public sealed class SharedSessionControllerTests : IDisposable
         public RecordingLog Log { get; } = new();
         public FakeChild Child { get; } = new();
         public int BusyOverlays;
+        public bool Answer = true;
+        public TaskCompletionSource<bool>? Thinking;
+        public List<string> Questions { get; } = new();
+        public Task<bool> AskAsync(string title, string question, string yes, string no)
+        {
+            Questions.Add(question);
+            return Thinking?.Task ?? Task.FromResult(Answer);
+        }
         public string AppName { get; } = appName;
         public Task SetUiBusyState(bool isBusy, string? message = null, bool showCancel = false, bool showOverlay = true)
         {
@@ -216,6 +385,31 @@ public sealed class SharedSessionControllerTests : IDisposable
     private sealed class FakeChild : IChildProcessService
     {
         private volatile byte[] _loaded = [];
+
+        public AppStateCapturedMessage? State;
+        public string? RestoreError;
+        public int Captures;
+        public List<RestoreAppStateRequest> Restored { get; } = new();
+        public List<AppWindowMessage> Windows { get; } = new();
+
+        public Task<AppStateCapturedMessage?> CaptureAppStateAsync()
+        {
+            Captures++;
+            return Task.FromResult(State);
+        }
+
+        public Task<AppStateRestoredMessage?> RestoreAppStateAsync(RestoreAppStateRequest request)
+        {
+            if (RestoreError != null) return Task.FromResult<AppStateRestoredMessage?>(new AppStateRestoredMessage(false, 0, 0, [], RestoreError));
+            Restored.Add(request);
+            return Task.FromResult<AppStateRestoredMessage?>(new AppStateRestoredMessage(true, 3, 0, []));
+        }
+
+        public Task SetAppWindowAsync(AppWindowMessage message)
+        {
+            Windows.Add(message);
+            return Task.CompletedTask;
+        }
 
         public bool Shows(string marker)
         {

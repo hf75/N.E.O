@@ -179,6 +179,7 @@ namespace Neo.App
                 _inPlaceRepair = default; // healed: PerformAutomaticRepairAsync reports it that way
                 Logger.LogMessage(attempt.Message, BubbleType.Info);
                 await _view.HideFrostedSnapshotAsync();
+                await BackAfterTheMergeAsync();
                 ChildProcessService.ShowChild();
                 ChildProcessService.UpdatePosition();
                 LastErrorMsg = "";
@@ -210,6 +211,7 @@ namespace Neo.App
             _ = ArmHotReloadAsync(compiledUserControlDllPath);
 
             await _view.HideFrostedSnapshotAsync();
+            await BackAfterTheMergeAsync();
             ChildProcessService.ShowChild();
             ChildProcessService.UpdatePosition();
 

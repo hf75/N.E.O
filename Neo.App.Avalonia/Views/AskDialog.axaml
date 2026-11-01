@@ -1,0 +1,18 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Neo.App.Views.AskDialog"
+        FontFamily="Inter, Segoe UI, sans-serif"
+        Width="440"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Topmost="True">
+    <StackPanel Margin="16">
+        <TextBlock x:Name="QuestionText" TextWrapping="Wrap"/>
+        <Grid ColumnDefinitions="*,*" Margin="0,16,0,0">
+            <Button x:Name="BtnYes" Classes="rounded" Margin="0,0,3,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="Yes_Click"/>
+            <Button x:Name="BtnNo" Classes="rounded" Grid.Column="1" Margin="3,0,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="No_Click"/>
+        </Grid>
+    </StackPanel>
+</Window>

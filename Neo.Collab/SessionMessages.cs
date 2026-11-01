@@ -52,6 +52,7 @@ public static class StateKinds
 [JsonDerivedType(typeof(TurnTakenMessage), "turn-taken")]
 [JsonDerivedType(typeof(TurnReleasedMessage), "turn-released")]
 [JsonDerivedType(typeof(StateMessage), "state")]
+[JsonDerivedType(typeof(TeleportMessage), "teleport")]
 [JsonDerivedType(typeof(PingMessage), "ping")]
 public abstract record SessionMessage
 {
@@ -88,5 +89,33 @@ public sealed record TurnTakenMessage(string Holder, string Activity) : SessionM
 public sealed record TurnReleasedMessage(string Holder) : SessionMessage;
 
 public sealed record StateMessage(SessionState State) : SessionMessage;
+
+/// <summary>
+/// The running app moves from one person to another: an offer, an answer, its state, whether it arrived.
+/// Meant for one person in the session; the host passes it on between guests.
+/// </summary>
+/// <param name="Phase">See <see cref="TeleportPhases"/>.</param>
+public sealed record TeleportMessage(string Phase, string Id, string From, string To) : SessionMessage
+{
+    /// <summary>The answer or the arrival: yes.</summary>
+    public bool Ok { get; init; }
+
+    /// <summary>The answer or the arrival: why not.</summary>
+    public string? Reason { get; init; }
+
+    /// <summary>The state of the running app, as data.</summary>
+    public string? Image { get; init; }
+
+    /// <summary>Which version of the app that state belongs to.</summary>
+    public string? CodeHash { get; init; }
+}
+
+public static class TeleportPhases
+{
+    public const string Offer = "offer";
+    public const string Answer = "answer";
+    public const string State = "state";
+    public const string Arrived = "arrived";
+}
 
 public sealed record PingMessage : SessionMessage;

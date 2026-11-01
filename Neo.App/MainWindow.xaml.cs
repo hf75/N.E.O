@@ -1186,6 +1186,12 @@ namespace Neo.App
             return Task.FromResult(dialog.Result);
         }
 
+        public Task<bool> AskAsync(string title, string question, string yes, string no)
+        {
+            var dialog = new AskDialog(title, question, yes, no) { Owner = this };
+            return Task.FromResult(dialog.ShowDialog() == true);
+        }
+
         public void ShowEmptyContent()
         {
             dynamicContent.Content = new EmptyUserControl();

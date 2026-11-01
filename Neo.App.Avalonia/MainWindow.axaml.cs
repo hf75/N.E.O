@@ -111,7 +111,7 @@ namespace Neo.App
             if (Player != null && !_playerShuttingDown)
             {
                 e.Cancel = true;
-                Hide();
+                PutAway();
                 return;
             }
 
@@ -284,8 +284,15 @@ namespace Neo.App
         private void ToggleHostWindow()
         {
             if (Player == null) return;
-            if (IsVisible) Hide();
+            if (IsVisible) PutAway();
             else ShowHostBesideApp();
+        }
+
+        // While the app is at someone else's this window is all that is on the screen: without it, the user's copy comes back.
+        private void PutAway()
+        {
+            if (_appController?.AppIsAt != null) _ = _appController.ShowMyCopyAsync();
+            Hide();
         }
 
         private void ShowHostBesideApp()
@@ -892,6 +899,12 @@ namespace Neo.App
             );
             await dialog.ShowDialog<CrashDialogResult?>(this);
             return dialog.Result;
+        }
+
+        public async Task<bool> AskAsync(string title, string question, string yes, string no)
+        {
+            EnsureVisibleForDialog();
+            return await new Views.AskDialog(title, question, yes, no).ShowDialog<bool?>(this) == true;
         }
 
         public void ShowEmptyContent() { /* No right panel in Avalonia — child is a separate window */ }

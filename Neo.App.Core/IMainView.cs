@@ -43,6 +43,9 @@ namespace Neo.App
         // ─── Dialogs ─────────────────────────────────────────────────────
         Task<CrashDialogResult> ShowCrashDialogAsync();
 
+        /// <summary>A question only the person can answer; true for the first answer.</summary>
+        Task<bool> AskAsync(string title, string question, string yes, string no) => Task.FromResult(false);
+
         Task<PatchReviewDecision> ShowPatchReviewDialogAsync(
             string patchOrCode,
             IReadOnlyList<string>? nugetPackages,

@@ -96,6 +96,18 @@
             </Grid>
         </Border>
 
+        <!-- Teleport -->
+        <Border x:Name="TeleportPanel" Padding="12,8" Margin="0,8,0,0" CornerRadius="12" Background="#F8F8F8" IsVisible="False">
+            <Grid ColumnDefinitions="*,Auto,Auto" MinHeight="32">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Classes="heading" Text="Teleport the running app"/>
+                    <TextBlock x:Name="TeleportText" Classes="hint"/>
+                </StackPanel>
+                <ComboBox x:Name="TeleportTo" Grid.Column="1" MinWidth="120" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                <Button x:Name="BtnTeleport" Classes="rounded" Grid.Column="2" MinWidth="120" Margin="8,0,0,0" VerticalAlignment="Center" HorizontalContentAlignment="Center" Content="Teleport" Click="Teleport_Click"/>
+            </Grid>
+        </Border>
+
         <TextBlock Classes="hint" Margin="0,8,0,0"
                    Text="⚠ What the others change runs as code on this PC, with your rights. Share only with people you trust. Codes go straight from PC to PC; no server of ours is involved."/>
     </StackPanel>

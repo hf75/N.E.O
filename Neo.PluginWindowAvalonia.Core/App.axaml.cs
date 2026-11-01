@@ -374,8 +374,7 @@ namespace Neo.PluginWindowAvalonia
                                     managedAssembliesByFullName: managedByFull,
                                     nativeLibrariesByBasename: nativeByBase
                                 );
-                                BackFromTheDrop();
-                                if (!_stayInactive)
+                                if (!_stayInactive && !_keptAway)
                                     MainWin.Activate();
                             });
 
@@ -470,7 +469,7 @@ namespace Neo.PluginWindowAvalonia
                                         MainWin.Height = dockH;
                                     }
 
-                                    if (!MainWin.IsVisible && !_droppedAway)
+                                    if (!MainWin.IsVisible && !_keptAway)
                                         MainWin.Show();
                                 }
                             });
@@ -489,7 +488,7 @@ namespace Neo.PluginWindowAvalonia
                                 MainWin.Width = bounds.Width;
                                 MainWin.Height = bounds.Height;
 
-                                if (!MainWin.IsVisible && !_droppedAway)
+                                if (!MainWin.IsVisible && !_keptAway)
                                     MainWin.Show();
 
                                 if (MainWin.HasEverLoadedControl)
@@ -535,7 +534,6 @@ namespace Neo.PluginWindowAvalonia
                             var details = await Dispatcher.UIThread.InvokeAsync(() =>
                             {
                                 var d = MainWin.HandleHotReload(request);
-                                BackFromTheDrop();
                                 _repairPending = false;
                                 if (request.IsRepair)
                                 {
@@ -577,7 +575,7 @@ namespace Neo.PluginWindowAvalonia
                         if (Json.FromJson<AppWindowMessage>(env.PayloadJson) is { } windowMessage)
                             Dispatcher.UIThread.Post(() =>
                             {
-                                if (windowMessage.Visible == true) _droppedAway = false;
+                                if (windowMessage.Visible is { } visible) _keptAway = !visible;
                                 MainWin.Apply(windowMessage);
                             });
                         break;
@@ -968,8 +966,8 @@ namespace Neo.PluginWindowAvalonia
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<string?>> _pendingAppMessages = new();
         private FusionDrag? _fusionDrag;
 
-        // Dropped onto another app. A host brings its window back whenever it comes to the front: not this one.
-        private bool _droppedAway;
+        // Dropped onto another app, or the app went to another PC. A host brings its window back whenever it comes to the front: not this one.
+        private bool _keptAway;
 
         private void StartFusion()
         {
@@ -980,7 +978,7 @@ namespace Neo.PluginWindowAvalonia
         private void DroppedOnAnotherApp(Neo.App.AppDescriptor target, PixelPoint cameFrom)
         {
             // The window goes at once; if the merge does not happen, the host brings it back to where it was.
-            _droppedAway = true;
+            _keptAway = true;
             MainWin.Hide();
             MainWin.Position = cameFrom;
             var self = Neo.App.AppNetwork.Published;
@@ -988,13 +986,6 @@ namespace Neo.PluginWindowAvalonia
             _ = AskHostAsync(FusionMessages.Drop, Json.ToJson(drop));
         }
 
-        // New code of its own: the user is working on this app again.
-        private void BackFromTheDrop()
-        {
-            if (!_droppedAway) return;
-            _droppedAway = false;
-            MainWin.Show();
-        }
 
         private async Task<string?> HandleSystemMessageAsync(string kind, string? payload)
         {

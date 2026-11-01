@@ -107,6 +107,8 @@ namespace Neo.App
             await session.LeaveAsync();
             await EndRemoteBusyAsync();
             Logger.LogMessage(session.Role == SessionRole.Host ? "You ended the shared session." : "You left the shared session.", BubbleType.Info);
+            EndTeleportExchanges();
+            await BackFromTeleportAsync("Your copy of the app is back, as it was when it left.");
             RaiseSharingChanged();
         }
 
@@ -134,7 +136,14 @@ namespace Neo.App
                 if (_remoteTurnHolder == who) _remoteTurnHolder = null;
                 _ = EndRemoteBusyAsync();
             },
-            ParticipantsChanged = _ => RaiseSharingChanged(),
+            ParticipantsChanged = names =>
+            {
+                if (AppIsAt != null && !names.Contains(AppIsAt))
+                    _ = BackFromTeleportAsync($"{AppIsAt} left the session. Your copy of the app is back, as it was when it left.");
+                EndTeleportExchanges(names);
+                RaiseSharingChanged();
+            },
+            Teleport = TeleportMessageArrivedAsync,
             Notice = line => Logger.LogMessage(line, BubbleType.Info),
             Ended = reason =>
             {
@@ -142,6 +151,8 @@ namespace Neo.App
                 _remoteTurnHolder = null;
                 _ = EndRemoteBusyAsync();
                 Logger.LogMessage(reason + " Your app stays as it is.", BubbleType.Info);
+                EndTeleportExchanges();
+                _ = BackFromTeleportAsync("Your copy of the app is back, as it was when it left.");
                 RaiseSharingChanged();
             },
         };

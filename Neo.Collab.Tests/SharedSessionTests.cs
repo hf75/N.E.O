@@ -18,6 +18,7 @@ public class SharedSessionTests
         public string Code = "";
         public readonly ConcurrentQueue<SessionState> Applied = new();
         public readonly ConcurrentQueue<string> Events = new();
+        public readonly ConcurrentQueue<TeleportMessage> Teleports = new();
         public IReadOnlyList<string> Participants = [];
         public string? Ended;
 
@@ -29,6 +30,7 @@ public class SharedSessionTests
             TurnTaken = (who, what) => Events.Enqueue($"taken:{who}:{what}"),
             TurnReleased = who => Events.Enqueue($"released:{who}"),
             ParticipantsChanged = names => Participants = names,
+            Teleport = m => { Teleports.Enqueue(m); return Task.CompletedTask; },
             Notice = line => Events.Enqueue("notice:" + line),
             Ended = reason => Ended = reason,
         };
@@ -150,6 +152,42 @@ public class SharedSessionTests
         ben2.LocalName.Should().Be("ben (2)");
         await WaitUntil(() => anna.Participants.Count == 3, "the list");
         anna.Participants.Should().Equal("Anna", "Ben", "ben (2)");
+    }
+
+    [Fact]
+    public async Task A_message_about_the_running_app_reaches_only_the_person_it_is_for()
+    {
+        var (host, anna) = await StartHost();
+        var (ben, benSide) = await Join(host, "Ben");
+        var (_, caraSide) = await Join(host, "Cara");
+
+        await host.SendTeleportAsync(new TeleportMessage(TeleportPhases.Offer, "1", "Anna", "Ben"));
+        await ben.SendTeleportAsync(new TeleportMessage(TeleportPhases.Answer, "1", "Ben", "Anna") { Ok = true });
+        await ben.SendTeleportAsync(new TeleportMessage(TeleportPhases.State, "2", "Ben", "Cara") { Image = "the data", CodeHash = "version" });
+
+        await WaitUntil(() => benSide.Teleports.Count == 1 && anna.Teleports.Count == 1 && caraSide.Teleports.Count == 1, "all three messages");
+        benSide.Teleports.Single().Phase.Should().Be(TeleportPhases.Offer);
+        anna.Teleports.Single().Should().Match<TeleportMessage>(m => m.Phase == TeleportPhases.Answer && m.Ok);
+        caraSide.Teleports.Single().Should().Match<TeleportMessage>(m => m.Phase == TeleportPhases.State && m.From == "Ben" && m.Image == "the data" && m.CodeHash == "version");
+    }
+
+    [Fact]
+    public async Task Someone_who_has_left_cannot_answer_so_the_host_does()
+    {
+        var (host, anna) = await StartHost();
+        var (ben, benSide) = await Join(host, "Ben");
+        var (cara, _) = await Join(host, "Cara");
+        await cara.LeaveAsync();
+        await WaitUntil(() => anna.Participants.Count == 2, "the host's list without Cara");
+
+        await ben.SendTeleportAsync(new TeleportMessage(TeleportPhases.Offer, "1", "Ben", "Cara"));
+        await ben.SendTeleportAsync(new TeleportMessage(TeleportPhases.State, "2", "Ben", "Cara") { Image = "the data" });
+
+        await WaitUntil(() => benSide.Teleports.Count == 2, "both answers");
+        benSide.Teleports.Should().OnlyContain(m => !m.Ok && m.Reason!.Contains("not in the session") && m.From == "Cara");
+        benSide.Teleports.Select(m => m.Phase).Should().Equal(TeleportPhases.Answer, TeleportPhases.Arrived);
+        anna.Teleports.Should().BeEmpty();
+        await host.Invoking(h => h.SendTeleportAsync(new TeleportMessage(TeleportPhases.Offer, "3", "Anna", "Cara"))).Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]

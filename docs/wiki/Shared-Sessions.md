@@ -24,13 +24,13 @@ Exchange the two codes within a few minutes of each other (while you are on the 
 
 | Shared | Stays on each PC |
 |---|---|
-| The app's code, NuGet packages, the AI conversation history (the next prompt, from whoever, has the full context) | The running app and its data — each person's copy keeps what they entered |
+| The app's code, NuGet packages, the AI conversation history (the next prompt, from whoever, has the full context) | The running app and its data — each person's copy keeps what they entered, unless someone sends it on purpose ([[Teleport]]) |
 | The chat: prompts (with the author's name), answers, errors | Local notes (hot reload results, …), settings, API keys |
 | Prompts, code-editor edits, undo/redo, history jumps, import, clear, automatic repairs | PowerShell scripts and console apps a prompt produces run only on the PC of the person who sent it |
 
 **One person changes the app at a time.** While someone works on a change, everybody else's prompt box is locked and the chat says *"Ben is working on a prompt: …"* — their app stays usable. The host decides whose turn it is, so two people pressing Enter at the same moment cannot collide; the one who has to wait keeps their prompt text. The AI call runs on the machine of the person who prompted, with their key or plan.
 
-A **living app** can share its session too: its user presses Ctrl+Shift+N, clicks Share, and a friend who knows N.E.O. changes the app from afar while the user keeps working in it. Only code travels; the user's data never leaves their PC.
+A **living app** can share its session too: its user presses Ctrl+Shift+N, clicks Share, and a friend who knows N.E.O. changes the app from afar while the user keeps working in it. Only code travels; the user's data does not leave their PC unless they send the app themselves ([[Teleport]]).
 
 ## How it works
 
@@ -68,7 +68,8 @@ A **living app** can share its session too: its user presses Ctrl+Shift+N, click
 | WebRTC link, keep-alive, candidate choice | `Neo.Collab/WebRtcPeerLink.cs` |
 | Framing, compression; in-memory link for tests | `Neo.Collab/PeerLink.cs` |
 | Protocol, session state | `Neo.Collab/SessionMessages.cs` |
+| Teleport | `Neo.App.Core/AppController.Teleport.cs` |
 | Turns, relay, joining, heartbeat | `Neo.Collab/SharedSession.cs` |
 | Wiring into N.E.O. | `Neo.App.Core/AppController.Sharing.cs`, `SessionChatRecorder.cs`, `InstanceFolder.cs` |
 | Share dialog | `Neo.App.Avalonia/Views/ShareSessionWindow.axaml`, `Neo.App/Views/ShareSessionWindow.xaml` |
-| Tests | `Neo.Collab.Tests` (codes, framing, real WebRTC in one process incl. a reply pasted 25 s late and 1.5 MB messages, session rules with three participants), `Neo.App.Core.Tests/SharedSessionControllerTests` (two real `AppController`s over real WebRTC: join, changes both ways, turn lock, undo, leave) |
+| Tests | `Neo.Collab.Tests` (codes, framing, real WebRTC in one process incl. a reply pasted 25 s late and 1.5 MB messages, session rules with three participants), `Neo.App.Core.Tests/SharedSessionControllerTests` (two real `AppController`s over real WebRTC: join, changes both ways, turn lock, undo, leave, teleport), `Neo.PluginWindow.SmokeTests/TeleportSmokeTests` (two real hosts, the real dialog) |
