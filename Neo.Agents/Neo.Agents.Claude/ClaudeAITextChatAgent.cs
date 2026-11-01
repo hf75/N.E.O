@@ -46,6 +46,7 @@ namespace Neo.Agents
             metadata.Options.Add(new Option<float>("Temperature", false, 0.0f, "Wird nicht an Claude gesendet."));
             metadata.Options.Add(new Option<int>("TimeoutSeconds", false, 600, "So lange darf die API schweigen, in Sekunden (0 = unendlich). Die Antwort selbst darf beliebig lange dauern."));
             metadata.Options.Add(new Option<float>("TopP", false, 0.9f, "Top-P für nucleus sampling."));
+            metadata.Options.Add(new Option<string>("Effort", false, "", "Wie gründlich das Modell arbeitet: low, medium, high, xhigh, max. Leer: die Vorgabe des Modells."));
 
             metadata.InputParameters.Add(new InputParameter<string>("SystemMessage", true, "System-Instruction für das Modell."));
             metadata.InputParameters.Add(new InputParameter<string>("History", false, "Bisherige Unterhaltung."));
@@ -120,6 +121,11 @@ namespace Neo.Agents
                 Fallbacks = capabilities.ServerSideFallback ? "default" : null
             };
 
+            // Only where the model knows this level: older ones answer the field with a 400.
+            var effort = GetOption<string>("Effort");
+            if (!string.IsNullOrEmpty(effort) && capabilities.EffortLevels?.Contains(effort) == true)
+                request.OutputConfig = new ApiOutputConfig { Effort = effort };
+
             string rawJsonResponse;
 
             if (string.IsNullOrEmpty(jsonSchema))
@@ -133,10 +139,8 @@ namespace Neo.Agents
             {
                 // Only here the API guarantees the schema. A forced tool does not (Haiku 5.5 sent arrays
                 // as strings), and Opus 5.5, Sonnet 5.5 and Fable 5.1 reject it with a 400.
-                request.OutputConfig = new ApiOutputConfig
-                {
-                    Format = new ApiOutputFormat { Schema = JsonNode.Parse(jsonSchema) }
-                };
+                request.OutputConfig ??= new ApiOutputConfig();
+                request.OutputConfig.Format = new ApiOutputFormat { Schema = JsonNode.Parse(jsonSchema) };
 
                 var result = await PostAsync(httpClient, request, timeout, ct);
                 ThrowIfCutOff(result);
@@ -185,7 +189,12 @@ namespace Neo.Agents
                 var info = JsonSerializer.Deserialize<ApiModelInfo>(await response.Content.ReadAsStringAsync(ct));
                 return KnownModels[model] = new ModelCapabilities(
                     info?.Capabilities?.StructuredOutputs?.Supported == true,
-                    info?.AllowedFallbackModels is { Count: > 0 });
+                    info?.AllowedFallbackModels is { Count: > 0 },
+                    info?.Capabilities?.Effort?
+                        .Where(level => level.Value.ValueKind == JsonValueKind.Object
+                            && level.Value.TryGetProperty("supported", out var supported) && supported.ValueKind == JsonValueKind.True)
+                        .Select(level => level.Key)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase));
             }
             catch (HttpRequestException)
             {
@@ -314,7 +323,7 @@ namespace Neo.Agents
         private static string Truncate(string value, int maxLength) =>
             value.Length <= maxLength ? value : value[..maxLength] + "...";
 
-        private readonly record struct ModelCapabilities(bool StructuredOutput, bool ServerSideFallback);
+        private readonly record struct ModelCapabilities(bool StructuredOutput, bool ServerSideFallback, IReadOnlySet<string>? EffortLevels);
 
         #region Anthropic REST DTOs
 
@@ -331,6 +340,10 @@ namespace Neo.Agents
         {
             [JsonPropertyName("structured_outputs")]
             public ApiSupported? StructuredOutputs { get; set; }
+
+            // {"supported":true,"low":{"supported":true},…}
+            [JsonPropertyName("effort")]
+            public Dictionary<string, JsonElement>? Effort { get; set; }
         }
 
         private class ApiSupported
@@ -377,7 +390,12 @@ namespace Neo.Agents
         private class ApiOutputConfig
         {
             [JsonPropertyName("format")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public ApiOutputFormat? Format { get; set; }
+
+            [JsonPropertyName("effort")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string? Effort { get; set; }
         }
 
         private class ApiOutputFormat

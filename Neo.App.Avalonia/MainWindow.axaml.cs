@@ -145,6 +145,9 @@ namespace Neo.App
             if (_hostInitialized) return;
             _hostInitialized = true;
 
+            // Until the app window is connected a build has nowhere to go, and the prompt would be lost.
+            txtPrompt.IsEnabled = false;
+
             // Force UseAvalonia BEFORE AppController constructor, because
             // the constructor calls RecreatePromptToDllSession which reads
             // Settings.UseAvalonia to select the correct base code template.
@@ -217,6 +220,7 @@ namespace Neo.App
                 EnsureAppDataFolderExists();
 
                 isCycleViewLocked = false;
+                txtPrompt.IsEnabled = true;
                 if (Player == null)
                 {
                     Activate();
@@ -225,6 +229,7 @@ namespace Neo.App
             }
             catch (Exception ex)
             {
+                txtPrompt.IsEnabled = true;
                 Debug.WriteLine($"[MainWindow_Loaded] Fatal error: {ex}");
             }
         }

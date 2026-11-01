@@ -34,7 +34,8 @@ namespace Neo.Agents
                     new InputParameter<Dictionary<string, string>>("PackageNames", isRequired: true, "Paketname und Version."),
                     new InputParameter<string>("OutputDirectory", isRequired: true, "Zielverzeichnis."),
                     new InputParameter<string>("TargetFramework", isRequired: false, "Standard: auto-detected from runtime."),
-                    new InputParameter<string>("RuntimeIdentifier", isRequired: false, "Standard: 'win-x64'.")
+                    new InputParameter<string>("RuntimeIdentifier", isRequired: false, "Standard: 'win-x64'."),
+                    new InputParameter<Dictionary<string, string>>("HostAssemblies", isRequired: false, "Was der Host mitbringt (HostProvidedAssemblies.Index): wird nicht heruntergeladen, auch nicht als Abhängigkeit.")
                 },
                 OutputParameters = new List<IOutputParameter>
                 {
@@ -73,7 +74,8 @@ namespace Neo.Agents
                     rootPackagesInput,
                     packagesCacheDir,
                     outputDirectory,
-                    ct);
+                    ct,
+                    GetInput<Dictionary<string, string>>("HostAssemblies"));
 
                 SetOutput("DllPaths", result.CopiedFiles);
                 SetOutput("PackageVersions", result.InstalledPackages.ToDictionary(p => p.Id, p => p.Version.ToNormalizedString()));
@@ -94,7 +96,8 @@ namespace Neo.Agents
             IDictionary<string, string> rootPackages,
             string packagesRootDirectory,
             string outputDirectory,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            IReadOnlyDictionary<string, string>? hostAssemblies = null)
         {
             if (string.IsNullOrWhiteSpace(targetFramework))
                 throw new ArgumentException(nameof(targetFramework));
@@ -190,7 +193,8 @@ namespace Neo.Agents
                     cache,
                     logger,
                     allPackages,
-                    cancellationToken);
+                    cancellationToken,
+                    hostAssemblies);
             }
 
             // ---------------------------------------------------------------------
@@ -527,7 +531,8 @@ namespace Neo.Agents
             SourceCacheContext cache,
             ILogger logger,
             ISet<SourcePackageDependencyInfo> dependencies,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            IReadOnlyDictionary<string, string>? hostAssemblies)
         {
             // Schon vorhanden?
             if (dependencies.Any(p => PackageIdentityComparer.Default.Equals(p, package)))
@@ -591,7 +596,10 @@ namespace Neo.Agents
                                     ?? groups.FirstOrDefault();
                 }
 
-                var deps = selectedGroup?.Packages ?? Enumerable.Empty<PackageDependency>();
+                // Was der Host mitbringt, samt allem, was daran hängt, wird nie gebraucht.
+                var deps = (selectedGroup?.Packages ?? Enumerable.Empty<PackageDependency>())
+                    .Where(d => hostAssemblies == null || !HostProvidedAssemblies.Provides(hostAssemblies, d.Id))
+                    .ToList();
 
                 var sourceDepInfo = new SourcePackageDependencyInfo(
                     package.Id,
@@ -626,7 +634,8 @@ namespace Neo.Agents
                             cache,
                             logger,
                             dependencies,
-                            cancellationToken)
+                            cancellationToken,
+                            hostAssemblies)
                         .ConfigureAwait(false);
                 }
 

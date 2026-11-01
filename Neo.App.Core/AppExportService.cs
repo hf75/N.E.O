@@ -116,7 +116,7 @@ namespace Neo.App
                         await NuGetBinaryCopier.RestoreAndCopyAsync(
                                     $"net{Environment.Version.Major}.0",
                                     GetTfmString(exportData.ExportSettings.Cpe),
-                                    exportData.PackageVersions,
+                                    PackagesForOtherPlatform(exportData.PackageVersions, exportData.ExportSettings.UseAvalonia),
                                     tmpPath,
                                     exportPath);
 
@@ -179,6 +179,21 @@ namespace Neo.App
             {
                 return (false, null, $"An unexpected error occurred during export: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// On this machine the host brings Avalonia, so a model does not have to name it. On another
+        /// platform the export has to bring it, along with the window code it adds.
+        /// </summary>
+        internal static Dictionary<string, string> PackagesForOtherPlatform(IReadOnlyDictionary<string, string> packageVersions, bool useAvalonia)
+        {
+            var packages = new Dictionary<string, string>(packageVersions, StringComparer.OrdinalIgnoreCase);
+            if (useAvalonia)
+            {
+                foreach (var id in new[] { "Avalonia", "Avalonia.Desktop", "Avalonia.Themes.Fluent" })
+                    packages.TryAdd(id, Neo.Shared.NeoBuildInfo.AvaloniaVersion);
+            }
+            return packages;
         }
 
         string GetTfmString(CrossPlatformExport cpe)

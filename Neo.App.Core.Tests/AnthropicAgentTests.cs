@@ -154,13 +154,14 @@ public class AnthropicAgentTests
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
-    private static async Task<string> Run(FakeApi api, string model, string schema, int? timeoutSeconds = null, CancellationToken? cancellation = null)
+    private static async Task<string> Run(FakeApi api, string model, string schema, int? timeoutSeconds = null, CancellationToken? cancellation = null, string? effort = null)
     {
         var agent = new AnthropicTextChatAgent { Handler = api };
         agent.SetOption("ApiKey", "test-key");
         agent.SetOption("Model", model);
         agent.SetOption("Temperature", 0.1f);
         if (timeoutSeconds != null) agent.SetOption("TimeoutSeconds", timeoutSeconds.Value);
+        if (effort != null) agent.SetOption("Effort", effort);
         agent.SetInput("SystemMessage", "system");
         agent.SetInput("Prompt", "prompt");
         agent.SetInput("History", "");
@@ -239,6 +240,95 @@ public class AnthropicAgentTests
         var body = api.LastBody;
         body.TryGetProperty("output_config", out _).Should().BeFalse();
         body.TryGetProperty("tools", out _).Should().BeFalse();
+    }
+
+    // ── Effort ────────────────────────────────────────────────────────────
+
+    private static string ModelWithEffort(bool structuredOutput, params string[] levels)
+    {
+        var effort = new Dictionary<string, object> { ["supported"] = levels.Length > 0, ["max"] = new { supported = false } };
+        foreach (var level in levels)
+            effort[level] = new { supported = true };
+
+        return JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["capabilities"] = new Dictionary<string, object> { ["structured_outputs"] = new { supported = structuredOutput }, ["effort"] = effort },
+        });
+    }
+
+    [Fact]
+    public async Task Effort_ModelThatKnowsTheLevel_GoesOutAlongWithTheSchema()
+    {
+        var api = new FakeApi { Model = ModelWithEffort(true, "low", "high") };
+
+        await Run(api, NewModel(), Schema, effort: "low");
+
+        api.LastBody.GetProperty("output_config").GetProperty("effort").GetString().Should().Be("low");
+        api.LastBody.GetProperty("output_config").GetProperty("format").GetProperty("type").GetString().Should().Be("json_schema");
+    }
+
+    [Fact]
+    public async Task Effort_WithoutSchema_GoesOutAlone()
+    {
+        var api = new FakeApi { Model = ModelWithEffort(true, "low") };
+
+        await Run(api, NewModel(), "", effort: "low");
+
+        api.LastBody.GetProperty("output_config").GetProperty("effort").GetString().Should().Be("low");
+        api.LastBody.GetProperty("output_config").TryGetProperty("format", out _).Should().BeFalse("a null there is a 400");
+    }
+
+    [Fact]
+    public async Task Effort_WithForcedTool_GoesOutAlone()
+    {
+        var api = new FakeApi { Model = ModelWithEffort(false, "low"), Message = ToolAnswer };
+
+        await Run(api, NewModel(), Schema, effort: "low");
+
+        api.LastBody.GetProperty("tool_choice").GetProperty("type").GetString().Should().Be("tool");
+        api.LastBody.GetProperty("output_config").GetProperty("effort").GetString().Should().Be("low");
+    }
+
+    [Theory]
+    [InlineData("max")]    // listed, but not supported
+    [InlineData("xhigh")]  // not listed at all
+    public async Task Effort_LevelTheModelDoesNotHave_IsLeftOut(string level)
+    {
+        var api = new FakeApi { Model = ModelWithEffort(true, "low", "high") };
+
+        await Run(api, NewModel(), Schema, effort: level);
+
+        api.LastBody.GetProperty("output_config").TryGetProperty("effort", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Effort_ModelThatSaysNothingAboutIt_IsLeftOut()
+    {
+        var api = new FakeApi();
+
+        await Run(api, NewModel(), "", effort: "low");
+
+        api.LastBody.TryGetProperty("output_config", out _).Should().BeFalse("older models answer the field with a 400");
+    }
+
+    [Fact]
+    public async Task Effort_ModelLookupWithoutNetwork_IsLeftOut()
+    {
+        var api = new FakeApi { ModelLookupFails = true };
+
+        await Run(api, NewModel(), "", effort: "low");
+
+        api.LastBody.TryGetProperty("output_config", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Effort_NotSet_LeavesItToTheModel()
+    {
+        var api = new FakeApi { Model = ModelWithEffort(true, "low") };
+
+        await Run(api, NewModel(), "");
+
+        api.LastBody.TryGetProperty("output_config", out _).Should().BeFalse();
     }
 
     // ── Sampling parameters ───────────────────────────────────────────────

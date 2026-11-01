@@ -75,7 +75,8 @@ public sealed class CompilationPipeline
                 var nugetService = new NuGetPackageService(
                     _nugetCacheDir!,
                     Neo.Shared.NeoBuildInfo.RuntimeTargetFramework,
-                    _referenceAssemblyDirs!);
+                    _referenceAssemblyDirs!,
+                    frameworkDlls);
 
                 var nugetResult = await nugetService.LoadPackagesAsync(
                     nonFrameworkPackages,
@@ -192,7 +193,7 @@ public sealed class CompilationPipeline
             if (nonAvaloniaPackages.Count > 0)
             {
                 var nugetService = new NuGetPackageService(
-                    _nugetCacheDir!, Neo.Shared.NeoBuildInfo.RuntimeTargetFramework, _referenceAssemblyDirs!);
+                    _nugetCacheDir!, Neo.Shared.NeoBuildInfo.RuntimeTargetFramework, _referenceAssemblyDirs!, _avaloniaAdditionalDlls);
                 var nugetResult = await nugetService.LoadPackagesAsync(
                     nonAvaloniaPackages, Enumerable.Empty<string>(), ct);
                 nugetDllPaths.AddRange(nugetResult.DllPaths);
@@ -522,8 +523,47 @@ namespace {{ExportHostNamespace}}
         if (OperatingSystem.IsWindows())
             _wpfAdditionalDlls = DiscoverWpfFromPluginWindow();
 
-        _nugetCacheDir = Path.Combine(Path.GetTempPath(), "neo_mcp_nuget");
-        Directory.CreateDirectory(_nugetCacheDir);
+        _nugetCacheDir = PrepareNuGetFolder();
+    }
+
+    /// <summary>The folder this pipeline downloads NuGet packages into; null before the first compile.</summary>
+    internal string? NuGetFolder => _nugetCacheDir;
+
+    /// <summary>
+    /// The package folder of this server. It starts empty, like the desktop hosts' one, or it only ever
+    /// grows. One per process, because every Claude session has a server of its own; what servers that
+    /// are gone left behind is removed in the background, a first compile need not wait for that.
+    /// </summary>
+    private static string PrepareNuGetFolder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "neo_mcp_nuget");
+        var own = Path.Combine(root, Environment.ProcessId.ToString());
+        Directory.CreateDirectory(own);
+
+        _ = Task.Run(() =>
+        {
+            foreach (var entry in Directory.GetFileSystemEntries(root))
+            {
+                if (int.TryParse(Path.GetFileName(entry), out var pid) && IsRunning(pid)) continue;
+                try
+                {
+                    if (Directory.Exists(entry)) Directory.Delete(entry, recursive: true);
+                    else File.Delete(entry);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[CompilationPipeline] Left for the next server: {entry}: {ex.Message}");
+                }
+            }
+        });
+
+        return own;
+
+        static bool IsRunning(int pid)
+        {
+            try { using var process = System.Diagnostics.Process.GetProcessById(pid); return !process.HasExited; }
+            catch (ArgumentException) { return false; }
+        }
     }
 
     /// <summary>

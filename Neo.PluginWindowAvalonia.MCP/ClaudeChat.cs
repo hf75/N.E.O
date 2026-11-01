@@ -48,6 +48,7 @@ internal sealed class ClaudeChat
             agent.SetOption("Model", _model);
             agent.SetOption("Temperature", 0.2f);
             agent.SetOption("TimeoutSeconds", 120);
+            agent.SetOption("Effort", "low");
 
             var systemPrompt = BuildSystemPrompt();
 

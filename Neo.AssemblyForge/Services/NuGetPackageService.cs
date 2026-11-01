@@ -25,11 +25,17 @@ public sealed class NuGetPackageService : INuGetPackageService
     private readonly string _nuGetPackageDirectory;
     private readonly string _targetFramework;
     private readonly IReadOnlyList<string> _referenceAssemblyDirectories;
+    private readonly IReadOnlyList<string>? _hostDlls;
 
+    /// <param name="hostDlls">
+    /// What the host ships, for a caller that does not list it among the existing DLLs (the MCP
+    /// server's plugin window). Never downloaded, also not as a dependency of an add-on.
+    /// </param>
     public NuGetPackageService(
         string nuGetPackageDirectory,
         string targetFramework,
-        IReadOnlyList<string> referenceAssemblyDirectories)
+        IReadOnlyList<string> referenceAssemblyDirectories,
+        IReadOnlyList<string>? hostDlls = null)
     {
         if (string.IsNullOrWhiteSpace(nuGetPackageDirectory))
             throw new ArgumentException("Value cannot be null/empty.", nameof(nuGetPackageDirectory));
@@ -39,6 +45,7 @@ public sealed class NuGetPackageService : INuGetPackageService
         _nuGetPackageDirectory = nuGetPackageDirectory;
         _targetFramework = targetFramework;
         _referenceAssemblyDirectories = referenceAssemblyDirectories ?? Array.Empty<string>();
+        _hostDlls = hostDlls;
 
         Directory.CreateDirectory(_nuGetPackageDirectory);
     }
@@ -56,23 +63,36 @@ public sealed class NuGetPackageService : INuGetPackageService
             return new NuGetResult(existingList, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
         }
 
-        // The host's own assemblies (its Avalonia) win over whatever version was asked for.
+        // The host's own assemblies (its Avalonia) win over whatever version was asked for,
+        // and nothing it ships is downloaded.
         var existingPaths = existingDlls.ToList();
-        var hostIndex = HostProvidedAssemblies.IndexOutside(existingPaths, _nuGetPackageDirectory);
+        var hostIndex = HostProvidedAssemblies.IndexOutside(existingPaths, _nuGetPackageDirectory)
+            .Concat(HostProvidedAssemblies.Index(_hostDlls))
+            .GroupBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Value, StringComparer.OrdinalIgnoreCase);
         existingDlls = existingPaths;
 
-        var loader = new NuGetPackageLoaderAgent();
-        loader.SetInput("PackageNames", HostProvidedAssemblies.WithHostVersions(packages, hostIndex));
-        loader.SetInput("OutputDirectory", _nuGetPackageDirectory);
-        loader.SetInput("TargetFramework", _targetFramework);
+        var provided = HostProvidedAssemblies.ProvidedPackages(packages, hostIndex);
+        var toDownload = HostProvidedAssemblies.WithoutProvidedPackages(packages, hostIndex);
+        var newDllPaths = new List<string>();
+        var newPackageVersions = new Dictionary<string, string>(provided, StringComparer.OrdinalIgnoreCase);
 
-        await loader.ExecuteAsync(cancellationToken);
+        if (toDownload.Count > 0)
+        {
+            var loader = new NuGetPackageLoaderAgent();
+            loader.SetInput("PackageNames", toDownload);
+            loader.SetInput("HostAssemblies", hostIndex);
+            loader.SetInput("OutputDirectory", _nuGetPackageDirectory);
+            loader.SetInput("TargetFramework", _targetFramework);
 
-        var newDllPaths = loader.GetOutput<List<string>>("DllPaths") ?? new List<string>();
-        var newPackageVersions = loader.GetOutput<Dictionary<string, string>>("PackageVersions")
-            ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            await loader.ExecuteAsync(cancellationToken);
 
-        HostProvidedAssemblies.RemoveShadowing(newDllPaths, hostIndex);
+            newDllPaths = loader.GetOutput<List<string>>("DllPaths") ?? newDllPaths;
+            foreach (var package in loader.GetOutput<Dictionary<string, string>>("PackageVersions") ?? new Dictionary<string, string>())
+                newPackageVersions[package.Key] = package.Value;
+
+            HostProvidedAssemblies.RemoveShadowing(newDllPaths, hostIndex);
+        }
 
         var combined = existingDlls
             .Concat(newDllPaths)

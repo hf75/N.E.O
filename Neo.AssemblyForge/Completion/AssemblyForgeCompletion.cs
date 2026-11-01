@@ -12,6 +12,9 @@ public sealed record AssemblyForgeCompletionRequest
 
     public float Temperature { get; init; } = 0.1f;
     public float TopP { get; init; } = 0.9f;
+
+    /// <summary>1 for the first try; higher when the code of the tries before did not build.</summary>
+    public int Attempt { get; init; } = 1;
 }
 
 public interface IAssemblyForgeCompletionProvider

@@ -16,6 +16,7 @@ internal sealed class StandInClaudeApi : IDisposable
     private readonly HttpListener _listener = new();
     private readonly ConcurrentQueue<string> _answers = new();
     private readonly ConcurrentQueue<string> _prompts = new();
+    private readonly ConcurrentQueue<string> _requests = new();
 
     public StandInClaudeApi()
     {
@@ -30,9 +31,12 @@ internal sealed class StandInClaudeApi : IDisposable
     /// <summary>The user messages received so far: what the window asked Claude, with the code it sent.</summary>
     public IReadOnlyList<string> Prompts => _prompts.ToArray();
 
-    /// <summary>The next answer: replace the app with this code.</summary>
-    public void AnswerWithCode(string code)
-        => _answers.Enqueue(JsonSerializer.Serialize(new { Code = code, Explanation = "From the stand-in." }));
+    /// <summary>The whole requests received so far, as JSON.</summary>
+    public IReadOnlyList<string> Requests => _requests.ToArray();
+
+    /// <summary>The next answer: replace the app with this code, which needs these packages.</summary>
+    public void AnswerWithCode(string code, params string[] nuGetPackages)
+        => _answers.Enqueue(JsonSerializer.Serialize(new { Code = code, NuGetPackages = nuGetPackages, Explanation = "From the stand-in." }));
 
     private async Task ServeAsync()
     {
@@ -54,13 +58,14 @@ internal sealed class StandInClaudeApi : IDisposable
             if (context.Request.HttpMethod == "GET")
             {
                 // GET /v1/models/{id}
-                await WriteAsync(response, "application/json", """{"capabilities":{"structured_outputs":{"supported":true}},"allowed_fallback_models":[]}""");
+                await WriteAsync(response, "application/json", """{"capabilities":{"structured_outputs":{"supported":true},"effort":{"supported":true,"low":{"supported":true},"medium":{"supported":true},"high":{"supported":true}}},"allowed_fallback_models":[]}""");
                 return;
             }
 
             using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
-            var request = JsonNode.Parse(await reader.ReadToEndAsync())!;
-            _prompts.Enqueue(request["messages"]!.AsArray().Last()!["content"]!.GetValue<string>());
+            var body = await reader.ReadToEndAsync();
+            _requests.Enqueue(body);
+            _prompts.Enqueue(JsonNode.Parse(body)!["messages"]!.AsArray().Last()!["content"]!.GetValue<string>());
 
             if (!_answers.TryDequeue(out var answer))
             {

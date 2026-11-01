@@ -21,6 +21,8 @@ namespace Neo.App.Avalonia
         {
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
+                Neo.App.AppController.StartLocalEndpointChecks(SettingsService.Load());
+
                 // A living app: this executable was exported with a project next to it (or was
                 // started with --play). The host stays hidden behind the app window.
                 var player = PlayerProject.Detect(desktop.Args ?? Array.Empty<string>(), AppContext.BaseDirectory);

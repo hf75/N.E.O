@@ -1,4 +1,5 @@
-﻿using Neo.Agents;
+﻿using System.Collections.Concurrent;
+using Neo.Agents;
 using Neo.Agents.Core;
 using Neo.IPC;
 using Microsoft.CodeAnalysis.CSharp;
@@ -145,6 +146,7 @@ namespace Neo.App
                 Claude = new AnthropicTextChatAgent();
                 Claude.SetOption("ApiKey", anthropicKey);
                 Claude.SetOption("Model", Settings.ClaudeModel);
+                Claude.SetOption("Effort", Settings.ClaudeEffort);
                 Claude.SetOption("Temperature", 0.1f);
                 Claude.SetOption("TopP", 0.90f);
                 Claude.SetInput("SystemMessage", systemMessage);
@@ -162,6 +164,8 @@ namespace Neo.App
                 Gemini.SetInput("SystemMessage", systemMessage);
                 AvailableAgents.Add(Gemini);
             }
+
+            StartLocalEndpointChecks(Settings);
 
             if (IsLocalEndpointReachable(Settings.OllamaEndpoint))
             {
@@ -199,6 +203,7 @@ namespace Neo.App
         public void ApplyModelSettings()
         {
             Claude?.SetOption("Model", Settings.ClaudeModel);
+            Claude?.SetOption("Effort", Settings.ClaudeEffort);
             ChatGPT?.SetOption("Model", Settings.OpenAiModel);
             Gemini?.SetOption("Model", Settings.GeminiModel);
             Ollama?.SetOption("Model", Settings.OllamaModel);
@@ -207,7 +212,25 @@ namespace Neo.App
             LmStudio?.SetOption("Endpoint", Settings.LmStudioEndpoint);
         }
 
-        private static bool IsLocalEndpointReachable(string endpoint)
+        // When nothing runs on a port, the answer takes 2 s. So the checks run side by side, and the hosts
+        // start them before their splash screen: by the time the controller asks, they are done.
+        private static readonly ConcurrentDictionary<string, Task<bool>> s_localEndpointChecks = new(StringComparer.OrdinalIgnoreCase);
+
+        public static void StartLocalEndpointChecks(SettingsModel settings)
+        {
+            foreach (var endpoint in new[] { settings.OllamaEndpoint, settings.LmStudioEndpoint })
+            {
+                if (!string.IsNullOrWhiteSpace(endpoint))
+                    s_localEndpointChecks.TryAdd(endpoint, Task.Run(() => AskLocalEndpoint(endpoint)));
+            }
+        }
+
+        internal static bool IsLocalEndpointReachable(string endpoint)
+            => s_localEndpointChecks.TryRemove(endpoint ?? "", out var started)
+                ? started.GetAwaiter().GetResult()
+                : AskLocalEndpoint(endpoint);
+
+        private static bool AskLocalEndpoint(string endpoint)
         {
             try
             {

@@ -211,6 +211,7 @@ namespace Neo.App
                 Claude = new AnthropicTextChatAgent();
                 Claude.SetOption("ApiKey", anthropicKey);
                 Claude.SetOption("Model", Settings.ClaudeModel);
+                Claude.SetOption("Effort", Settings.ClaudeEffort);
                 Claude.SetOption("Temperature", 0.1f);
                 Claude.SetOption("TopP", 0.90f);
                 Claude.SetInput("SystemMessage", systemMessage);
@@ -228,6 +229,8 @@ namespace Neo.App
                 Gemini.SetInput("SystemMessage", systemMessage);
                 AvailableAgents.Add(Gemini);
             }
+
+            StartLocalEndpointChecks(Settings);
 
             // Ollama (local server, no API key required)
             if (IsLocalEndpointReachable(Settings.OllamaEndpoint))

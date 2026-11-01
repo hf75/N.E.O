@@ -17,7 +17,8 @@ namespace Neo.App
         private bool _usePython = false;
         private bool _useAvalonia = false;
         private bool _acceptAutomatic = false;
-        private string _claudeModel = "claude-opus-4-6";
+        private string _claudeModel = "claude-sonnet-5-5";
+        private string _claudeEffort = "low";
         private string _openAiModel = "gpt-5.4";
         private string _geminiModel = "gemini-3-pro-preview";
         private string _aiQueryProvider = "Claude";
@@ -119,6 +120,25 @@ namespace Neo.App
                 if (_claudeModel != value)
                 {
                     _claudeModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public static IReadOnlyList<string> ClaudeEffortLevels { get; } = ["low", "medium", "high", "xhigh", "max"];
+
+        /// <summary>
+        /// How much care Claude takes on the first try: low is several times faster and enough for a
+        /// small tool. When its code does not build, the next try goes one level higher by itself.
+        /// </summary>
+        public string ClaudeEffort
+        {
+            get { return _claudeEffort; }
+            set
+            {
+                if (_claudeEffort != value)
+                {
+                    _claudeEffort = value;
                     OnPropertyChanged();
                 }
             }

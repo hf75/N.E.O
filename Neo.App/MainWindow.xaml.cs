@@ -326,6 +326,9 @@ namespace Neo.App
 
             try
             {
+                // Until the app window is connected a build has nowhere to go, and the prompt would be lost.
+                txtPrompt.IsEnabled = false;
+
                 // NuGet-Pakete verwalten
                 FileHelper.ClearDirectory(_appController.NuGetPackageDirectory);
                 // Achtung: PreloadMandatoryNugetPacks immer nach FileHelper.ClearDirectory(NuGetPackageDirectory) ausführen!
@@ -350,6 +353,8 @@ namespace Neo.App
                 RegisterFullScreenHotKey();
 
                 EnsureAppDataFolderExists();
+
+                txtPrompt.IsEnabled = true;
 
                 Activate();
 

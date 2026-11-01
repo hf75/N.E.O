@@ -36,13 +36,20 @@ namespace Neo.App
 
             if (packages != null && packages.Count > 0)
             {
-                // The host's own assemblies (its Avalonia) win over whatever version was asked for.
+                // The host's own assemblies (its Avalonia) win over whatever version was asked for,
+                // and nothing it ships is downloaded.
                 var existingPaths = existingDlls.ToList();
                 var hostIndex = HostProvidedAssemblies.IndexOutside(existingPaths, _nuGetPackageDirectory);
                 existingDlls = existingPaths;
 
+                var provided = HostProvidedAssemblies.ProvidedPackages(packages, hostIndex);
+                var toDownload = HostProvidedAssemblies.WithoutProvidedPackages(packages, hostIndex);
+                if (toDownload.Count == 0)
+                    return new NuGetResult(existingPaths, provided);
+
                 var agentLoader = new NuGetPackageLoaderAgent();
-                agentLoader.SetInput("PackageNames", HostProvidedAssemblies.WithHostVersions(packages, hostIndex));
+                agentLoader.SetInput("PackageNames", toDownload);
+                agentLoader.SetInput("HostAssemblies", hostIndex);
                 agentLoader.SetInput("OutputDirectory", _nuGetPackageDirectory);
                 agentLoader.SetInput("TargetFramework", OperatingSystem.IsWindows()
                     ? $"net{Environment.Version.Major}.0-windows"
@@ -52,6 +59,8 @@ namespace Neo.App
 
                 var newDllPaths = agentLoader.GetOutput<List<string>>("DllPaths") ?? new List<string>();
                 var newPackageVersions = agentLoader.GetOutput<Dictionary<string, string>>("PackageVersions") ?? new Dictionary<string, string>();
+                foreach (var package in provided)
+                    newPackageVersions[package.Key] = package.Value;
 
                 HostProvidedAssemblies.RemoveShadowing(newDllPaths, hostIndex);
 

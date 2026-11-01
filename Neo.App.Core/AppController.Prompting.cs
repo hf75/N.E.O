@@ -81,6 +81,17 @@ namespace Neo.App
             }
         }
 
+        /// <summary>
+        /// Quick on the first try. Another try means the code before it did not build, so it gets one
+        /// level more care, up to high. A level above that, or none (the model's default), stays.
+        /// </summary>
+        internal static string EffortForAttempt(string configured, int attempt)
+        {
+            string[] levels = ["low", "medium", "high"];
+            var start = Array.IndexOf(levels, configured);
+            return start < 0 ? configured : levels[Math.Min(start + Math.Max(attempt, 1) - 1, levels.Length - 1)];
+        }
+
         private void RecreatePromptToDllSession(bool preserveState)
         {
             // Also without an AI agent: the project (code editor, shared sessions) must exist; a
@@ -120,6 +131,8 @@ namespace Neo.App
 
                 AiAgent.SetOption("Temperature", req.Temperature);
                 AiAgent.SetOption("TopP", req.TopP);
+                if (ReferenceEquals(AiAgent, Claude))
+                    Claude.SetOption("Effort", EffortForAttempt(Settings.ClaudeEffort, req.Attempt));
 
                 await AiAgent.ExecuteAsync(ct);
 

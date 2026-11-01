@@ -54,6 +54,8 @@ Each provider shows a model dropdown (only visible if the API key is set):
 
 Models are fetched dynamically from each provider's API.
 
+**Claude Effort** (default `low`) sets how much care Claude takes on the first try. A small tool gets written several times faster at `low`: Sonnet 5.5 took 9.5 s instead of 42 s in our measurement. When the code does not compile, the next try goes one level higher by itself (`low` → `medium` → `high`). Raise it for larger apps. Models that do not know a level simply use their own default.
+
 ### AI Query Provider (Embedded)
 
 Choose which AI provider is used for `AIQuery` calls inside your generated apps. This lets your created applications make their own AI requests.

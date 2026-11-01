@@ -42,6 +42,7 @@ namespace Neo.App
                 UsePython = loaded.UsePython,
                 AcceptAutomatic = loaded.AcceptAutomatic,
                 ClaudeModel = loaded.ClaudeModel,
+                ClaudeEffort = loaded.ClaudeEffort,
                 OpenAiModel = loaded.OpenAiModel,
                 GeminiModel = loaded.GeminiModel,
                 AIQueryProvider = loaded.AIQueryProvider,
@@ -66,6 +67,8 @@ namespace Neo.App
             {
                 RowClaudeModel.Visibility = Visibility.Visible;
                 SetComboBoxSingleItem(ClaudeModelComboBox, _workingCopy.ClaudeModel);
+                ClaudeEffortComboBox.ItemsSource = SettingsModel.ClaudeEffortLevels;
+                ClaudeEffortComboBox.SelectedItem = _workingCopy.ClaudeEffort;
                 _availableProviders.Add("Claude");
             }
 
@@ -382,6 +385,8 @@ namespace Neo.App
             // Save model selections from ComboBoxes
             if (ClaudeModelComboBox.SelectedItem is string claudeModel && !string.IsNullOrWhiteSpace(claudeModel))
                 _workingCopy.ClaudeModel = claudeModel;
+            if (ClaudeEffortComboBox.SelectedItem is string claudeEffort)
+                _workingCopy.ClaudeEffort = claudeEffort;
             if (OpenAiModelComboBox.SelectedItem is string openAiModel && !string.IsNullOrWhiteSpace(openAiModel))
                 _workingCopy.OpenAiModel = openAiModel;
             if (GeminiModelComboBox.SelectedItem is string geminiModel && !string.IsNullOrWhiteSpace(geminiModel))
@@ -432,7 +437,8 @@ namespace Neo.App
             _workingCopy.UsePython = false;
             _workingCopy.UseAvalonia = false;
             _workingCopy.AcceptAutomatic = false;
-            _workingCopy.ClaudeModel = "claude-opus-4-6";
+            _workingCopy.ClaudeModel = "claude-sonnet-5-5";
+            _workingCopy.ClaudeEffort = "low";
             _workingCopy.OpenAiModel = "gpt-5.2";
             _workingCopy.GeminiModel = "gemini-3-pro-preview";
             _workingCopy.OllamaModel = "llama3.1:latest";
@@ -443,6 +449,7 @@ namespace Neo.App
             _workingCopy.AIQueryModel = "claude-sonnet-4-5";
 
             SetComboBoxSingleItem(ClaudeModelComboBox, _workingCopy.ClaudeModel);
+            ClaudeEffortComboBox.SelectedItem = _workingCopy.ClaudeEffort;
             SetComboBoxSingleItem(OpenAiModelComboBox, _workingCopy.OpenAiModel);
             SetComboBoxSingleItem(GeminiModelComboBox, _workingCopy.GeminiModel);
             SetComboBoxSingleItem(OllamaModelComboBox, _workingCopy.OllamaModel);

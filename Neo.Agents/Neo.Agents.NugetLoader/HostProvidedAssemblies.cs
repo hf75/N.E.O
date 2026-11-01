@@ -8,16 +8,18 @@ namespace Neo.Agents
     /// model — or a project saved with an older N.E.O. — asks NuGet for. A second Avalonia.Base
     /// with another version in the reference list makes every Avalonia type ambiguous, an error
     /// no model can fix by editing the code. So wherever a host knows which assemblies it
-    /// provides, its copies win:
+    /// provides, its copies win, and nothing it provides is downloaded (the Avalonia closure is
+    /// 2.3 GB of native libraries for every platform, and takes half a minute):
     ///
     /// <list type="bullet">
-    ///   <item><see cref="WithHostVersions"/> — a requested package the host provides is moved to
-    ///         the host's version (hosts that still resolve the framework through NuGet because
-    ///         they also export it for other platforms),</item>
-    ///   <item><see cref="WithoutProvidedPackages"/> — or is not requested at all (hosts that
-    ///         reference their own copies only),</item>
-    ///   <item><see cref="RemoveShadowing"/> — and assemblies that arrive as dependencies of other
-    ///         packages (NuGet picks the lowest version an add-on allows) are dropped.</item>
+    ///   <item><see cref="WithoutProvidedPackages"/> — a requested package the host provides is not
+    ///         requested at all,</item>
+    ///   <item><see cref="ProvidedPackages"/> — only remembered, for the hosts that export it for
+    ///         other platforms,</item>
+    ///   <item><see cref="Provides"/> — the NuGet loader stops at it when it follows the
+    ///         dependencies of an add-on,</item>
+    ///   <item><see cref="RemoveShadowing"/> — and assemblies that arrive inside other packages
+    ///         are dropped.</item>
     /// </list>
     /// </summary>
     public static class HostProvidedAssemblies
@@ -50,18 +52,37 @@ namespace Neo.Agents
                 !Path.GetFullPath(p.Trim()).StartsWith(nugetRoot, StringComparison.OrdinalIgnoreCase)));
         }
 
-        /// <summary>True if the package's main assembly (<c>&lt;PackageId&gt;.dll</c>) is provided by the host.</summary>
+        /// <summary>
+        /// True if the host provides the package: its main assembly (<c>&lt;PackageId&gt;.dll</c>), or, for a
+        /// package without one, the assembly it only brings the native libraries or build tools for.
+        /// </summary>
         public static bool Provides(IReadOnlyDictionary<string, string> hostIndex, string packageId)
-            => !string.IsNullOrWhiteSpace(packageId) && hostIndex.ContainsKey(packageId.Trim() + ".dll");
+        {
+            if (string.IsNullOrWhiteSpace(packageId)) return false;
+            var id = packageId.Trim();
+            if (hostIndex.ContainsKey(id + ".dll")) return true;
 
-        /// <summary>The requested packages, with every package the host provides moved to the host's version.</summary>
-        public static Dictionary<string, string> WithHostVersions(
+            var native = id.IndexOf(".NativeAssets.", StringComparison.OrdinalIgnoreCase);
+            if (native > 0) return hostIndex.ContainsKey(id[..native] + ".dll");
+
+            return (id.StartsWith("Avalonia.Angle.", StringComparison.OrdinalIgnoreCase) || id.Equals("Avalonia.BuildServices", StringComparison.OrdinalIgnoreCase))
+                && hostIndex.ContainsKey("Avalonia.dll");
+        }
+
+        /// <summary>
+        /// The requested packages the host provides: nothing to download, but a project still names
+        /// them, and an export for another platform restores them from there. Avalonia's own packages
+        /// at the version the host ships, whatever was asked for.
+        /// </summary>
+        public static Dictionary<string, string> ProvidedPackages(
             IEnumerable<KeyValuePair<string, string>>? packages, IReadOnlyDictionary<string, string> hostIndex)
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var (id, version) in packages ?? [])
             {
-                var hostVersion = Provides(hostIndex, id) ? TryReadPackageVersion(hostIndex[id.Trim() + ".dll"]) : null;
+                if (!Provides(hostIndex, id)) continue;
+                var hostVersion = id.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase) && hostIndex.TryGetValue(id.Trim() + ".dll", out var path)
+                    ? TryReadPackageVersion(path) : null;
                 result[id] = hostVersion ?? version;
             }
             return result;

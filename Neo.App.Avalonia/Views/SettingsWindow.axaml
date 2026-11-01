@@ -58,6 +58,8 @@
                         Margin="0,4,0,0" IsVisible="False">
                 <TextBlock Text="Claude Model:" Margin="0,0,0,4"/>
                 <ComboBox x:Name="ClaudeModelComboBox" Classes="rounded"/>
+                <TextBlock Text="Claude Effort (low is the fastest, a retry goes higher by itself):" Margin="0,8,0,4"/>
+                <ComboBox x:Name="ClaudeEffortComboBox" Classes="rounded"/>
             </StackPanel>
 
             <StackPanel x:Name="RowOpenAiModel" Grid.Row="8" Grid.ColumnSpan="2"

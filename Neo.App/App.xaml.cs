@@ -17,6 +17,8 @@ namespace Neo.App
         {
             base.OnStartup(e);
 
+            AppController.StartLocalEndpointChecks(SettingsService.Load());
+
             // A living app: this executable was exported with a project next to it (or was
             // started with --play). No splash — the window is the app.
             var player = PlayerProject.Detect(e.Args, AppContext.BaseDirectory);

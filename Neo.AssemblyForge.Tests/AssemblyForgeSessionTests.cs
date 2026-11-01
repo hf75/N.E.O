@@ -117,6 +117,23 @@ public class AssemblyForgeSessionTests
         result.ErrorMessage.Should().NotBeNullOrWhiteSpace();
     }
 
+    [Fact]
+    public async Task RunAsync_EveryTry_SaysWhichAttemptItIs()
+    {
+        var attempts = new List<int>();
+        var session = CreateSession(
+            (request, _) =>
+            {
+                attempts.Add(request.Attempt);
+                return Task.FromResult(MakeJsonResponse(new StructuredResponse { Code = "class NotAUserControl { }" }));
+            },
+            pipelineOptions: new AssemblyForgePipelineOptions { MaxAttempts = 3 });
+
+        await session.RunAsync("make something");
+
+        attempts.Should().Equal(1, 2, 3);
+    }
+
     #endregion
 
     #region Successful code with compilation

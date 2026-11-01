@@ -113,6 +113,7 @@ public sealed class AssemblyForgeSession
                         JsonSchema = AssemblyForgeJsonSchemata.StructuredResponse,
                         Temperature = _pipelineOptions.Temperature,
                         TopP = _pipelineOptions.TopP,
+                        Attempt = attempt,
                     },
                     cancellationToken);
 
