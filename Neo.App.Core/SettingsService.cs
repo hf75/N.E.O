@@ -19,6 +19,7 @@ namespace Neo.App
         private bool _acceptAutomatic = false;
         private string _claudeModel = "claude-sonnet-5-5";
         private string _claudeEffort = "low";
+        private bool _claudeWebSearch;
         private string _openAiModel = "gpt-5.4";
         private string _geminiModel = "gemini-3-pro-preview";
         private string _aiQueryProvider = "Claude";
@@ -139,6 +140,26 @@ namespace Neo.App
                 if (_claudeEffort != value)
                 {
                     _claudeEffort = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Lets Claude search the web while it writes the code, for services it does not know and facts
+        /// from after its training. Off unless the user wants it: what it reads can influence code that
+        /// runs on this computer at once, and only being offered the search makes every tool about a
+        /// third slower, because the model then first thinks about whether to use it (measured 2026-11-01:
+        /// 13 s against 18 s; it searched for 2 of 21 tools, both times with good reason).
+        /// </summary>
+        public bool ClaudeWebSearch
+        {
+            get { return _claudeWebSearch; }
+            set
+            {
+                if (_claudeWebSearch != value)
+                {
+                    _claudeWebSearch = value;
                     OnPropertyChanged();
                 }
             }

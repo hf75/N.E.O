@@ -81,6 +81,42 @@ namespace Neo.App
             }
         }
 
+        // How often Claude may search in one try at the code.
+        private const int WebSearchesPerTry = 3;
+
+        // What Claude looked up for the current prompt. Someone who decides about its code should know.
+        private readonly List<string> _webSearches = new();
+        private readonly List<WebSource> _webSources = new();
+        private string? _webSearchProblem;
+
+        /// <summary>What to tell about the searches behind a result; null when there were none.</summary>
+        internal static string? WebSearchReport(IReadOnlyList<string> searches, IReadOnlyList<WebSource> sources, string? problem)
+        {
+            var lines = new List<string>();
+            if (!string.IsNullOrEmpty(problem))
+                lines.Add(problem + " Built without it.");
+
+            if (searches.Count > 0)
+            {
+                lines.Add("Searched the web: " + string.Join(", ", searches.Distinct().Select(s => $"\"{ToSingleLine(s)}\"")));
+
+                var pages = sources.DistinctBy(s => s.Url).ToList();
+                const int shown = 5;
+                lines.AddRange(pages.Take(shown).Select(s => $"{ToSingleLine(s.Title)}: {s.Url}"));
+                if (pages.Count > shown)
+                    lines.Add($"... and {pages.Count - shown} more pages.");
+            }
+
+            return lines.Count > 0 ? string.Join("\n", lines) : null;
+        }
+
+        // After the answer: the chat scrolls to its end, and a long patch would push this out of sight.
+        private void LogWebSearches()
+        {
+            if (WebSearchReport(_webSearches, _webSources, _webSearchProblem) is { } report)
+                Logger.LogMessage(report, BubbleType.Info);
+        }
+
         /// <summary>
         /// Quick on the first try. Another try means the code before it did not build, so it gets one
         /// level more care, up to high. A level above that, or none (the model's default), stays.
@@ -131,10 +167,33 @@ namespace Neo.App
 
                 AiAgent.SetOption("Temperature", req.Temperature);
                 AiAgent.SetOption("TopP", req.TopP);
-                if (ReferenceEquals(AiAgent, Claude))
-                    Claude.SetOption("Effort", EffortForAttempt(Settings.ClaudeEffort, req.Attempt));
+                var claude = ReferenceEquals(AiAgent, Claude) ? AiAgent as AnthropicTextChatAgent : null;
+                if (claude != null)
+                {
+                    claude.SetOption("Effort", EffortForAttempt(Settings.ClaudeEffort, req.Attempt));
+                    claude.SetOption("WebSearchMaxUses", Settings.ClaudeWebSearch ? WebSearchesPerTry : 0);
+                    claude.SetInput("WebSearchGuidance", AISystemMessages.WebSearchWhileBuilding());
+                    claude.WebSearchProgress = query => _view.InvokeOnUIThreadAsync(() =>
+                        _view.SetWaitIndicatorStatus(query == null ? "Generating..." : "Searching the web: " + Truncate(ToSingleLine(query), 60)));
+                }
 
-                await AiAgent.ExecuteAsync(ct);
+                try
+                {
+                    await AiAgent.ExecuteAsync(ct);
+                }
+                catch (WebSearchUnavailableException ex) when (claude != null)
+                {
+                    // The tool can be built without it.
+                    _webSearchProblem = ex.Message;
+                    claude.SetOption("WebSearchMaxUses", 0);
+                    await AiAgent.ExecuteAsync(ct);
+                }
+
+                if (claude != null)
+                {
+                    _webSearches.AddRange(claude.GetOutput<List<string>>("WebSearches"));
+                    _webSources.AddRange(claude.GetOutput<List<WebSource>>("WebSources"));
+                }
 
                 var result = AiAgent.GetOutput<string>("Result");
                 if (string.IsNullOrWhiteSpace(result))
@@ -377,12 +436,19 @@ namespace Neo.App
         {
             string originalPrompt = prompt ?? string.Empty;
 
+            _webSearches.Clear();
+            _webSources.Clear();
+            _webSearchProblem = null;
+
             AssemblyForgeReviewCallback? reviewCallback = null;
             if (showResultInChild && !Settings.AcceptAutomatic)
             {
                 reviewCallback = async (ctx, ct) =>
                 {
-                    PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(ctx.Patch, ctx.NuGetPackages, ctx.Explanation);
+                    var explanation = WebSearchReport(_webSearches, _webSources, _webSearchProblem) is { } report
+                        ? $"{ctx.Explanation}\n\n{report}"
+                        : ctx.Explanation;
+                    PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(ctx.Patch, ctx.NuGetPackages, explanation);
 
                     return decision switch
                     {
@@ -405,6 +471,7 @@ namespace Neo.App
                 string chat = result.StructuredResponse?.Chat ?? string.Empty;
                 Logger.LogMessage(originalPrompt, BubbleType.Prompt);
                 Logger.LogMessageWithMarkdownFormating(chat, BubbleType.CompletionSuccess);
+                LogWebSearches();
 
                 // Keep undo/redo graph stable for chat-only turns.
                 AppState.History = _promptToDllSession.State.History;
@@ -421,6 +488,7 @@ namespace Neo.App
                 result.Status == AssemblyForgeStatus.ConsoleAppReady)
             {
                 Logger.LogMessage(originalPrompt, BubbleType.Prompt);
+                LogWebSearches();
                 await ExecuteSingleShotToolAsync(originalPrompt, result.StructuredResponse!, cancellationToken);
                 return;
             }
@@ -456,6 +524,7 @@ namespace Neo.App
             Logger.LogMessageWithMarkdownFormating(
                 AssemblyForgeHistoryFormatter.StructuredResponseToText(structuredResponse),
                 BubbleType.Answer);
+            LogWebSearches();
 
             string historyTitle = $"Prompt: {Truncate(ToSingleLine(originalPrompt), 60)}";
             string historyDescription = "Update";

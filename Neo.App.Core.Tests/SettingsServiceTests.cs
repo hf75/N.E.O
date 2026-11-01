@@ -58,6 +58,23 @@ public class SettingsModelTests
         model.AIQueryProvider.Should().Be("Claude");
     }
 
+    [Fact]
+    public void DefaultValues_ClaudeWebSearch_IsFalse()
+    {
+        // What Claude reads on the web can influence code that runs at once: the user decides.
+        var model = new SettingsModel();
+
+        model.ClaudeWebSearch.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ClaudeWebSearch_SurvivesSavingAndLoading()
+    {
+        var json = JsonSerializer.Serialize(new SettingsModel { ClaudeWebSearch = true });
+
+        JsonSerializer.Deserialize<SettingsModel>(json)!.ClaudeWebSearch.Should().BeTrue();
+    }
+
     // ── PropertyChanged fires when setting changes ──────────────────
 
     [Fact]

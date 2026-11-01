@@ -172,7 +172,10 @@ namespace Neo.App
                 AdditionalDlls.Add(ResolveAppDll("Neo.App.Api.dll"));
             foreach (var plugin in PluginAgents)
             {
-                AdditionalDlls.Add(ResolveAppDll(plugin.AgentDllName));
+                // The web search lives in the DLL of the AI query helper, which is on the list already.
+                var pluginDll = ResolveAppDll(plugin.AgentDllName);
+                if (!AdditionalDlls.Contains(pluginDll, StringComparer.OrdinalIgnoreCase))
+                    AdditionalDlls.Add(pluginDll);
 
                 // Ensure default model is in settings
                 if (!Settings.PluginAgentModels.ContainsKey(plugin.SettingsKey))

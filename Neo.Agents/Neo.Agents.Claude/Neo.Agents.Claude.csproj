@@ -7,6 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="WebSearchHelper.cs" />
+    <EmbeddedResource Include="WebSearchHelper.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Neo.Agents.Core\Neo.Agents.Core.csproj" />
   </ItemGroup>
 

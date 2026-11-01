@@ -41,6 +41,7 @@ namespace Neo.App
                 AcceptAutomatic = loaded.AcceptAutomatic,
                 ClaudeModel = loaded.ClaudeModel,
                 ClaudeEffort = loaded.ClaudeEffort,
+                ClaudeWebSearch = loaded.ClaudeWebSearch,
                 OpenAiModel = loaded.OpenAiModel,
                 GeminiModel = loaded.GeminiModel,
                 AIQueryProvider = loaded.AIQueryProvider,
@@ -353,6 +354,7 @@ namespace Neo.App
             _workingCopy.AcceptAutomatic = false;
             _workingCopy.ClaudeModel = "claude-sonnet-5-5";
             _workingCopy.ClaudeEffort = "low";
+            _workingCopy.ClaudeWebSearch = false;
             _workingCopy.OpenAiModel = "gpt-5.2";
             _workingCopy.GeminiModel = "gemini-3-pro-preview";
             _workingCopy.OllamaModel = "llama3.1:latest";

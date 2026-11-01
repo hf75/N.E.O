@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text;
@@ -19,16 +20,26 @@ namespace Neo.Agents
         // key must not go wherever that points.
         private static readonly string BaseUrl = Environment.GetEnvironmentVariable("NEO_ANTHROPIC_BASE_URL") ?? "https://api.anthropic.com";
         private static readonly string ApiUrl = BaseUrl + "/v1/messages";
-        private static readonly string ModelsUrl = BaseUrl + "/v1/models";
-        private const string ApiVersion = "2023-06-01";
+        internal static readonly string ModelsUrl = BaseUrl + "/v1/models";
+        internal const string ApiVersion = "2023-06-01";
         private const string FallbackRequestBeta = "server-side-fallback-2026-07-01";
         private const string FallbackListingBeta = "server-side-fallback-2026-06-01";
+
+        // Direct search. The newer versions filter the results through code execution: on a simple
+        // question that took more than twice as long, cost twice as much and left out the citations.
+        private const string WebSearchTool = "web_search_20250305";
+
+        // A search turn this many pauses long has gone wrong; the docs suggest about this limit.
+        private const int MaxPauses = 5;
 
         // What the API reports about a model, asked once per model so that a new model needs no code change.
         private static readonly ConcurrentDictionary<string, ModelCapabilities> KnownModels = new();
 
         // Lets tests answer in place of the real API.
         internal HttpMessageHandler? Handler { get; set; }
+
+        /// <summary>What the model is searching for right now; null when that search is done.</summary>
+        public Action<string?>? WebSearchProgress { get; set; }
 
         public override string Name => "AnthropicTextChatAgent";
 
@@ -47,16 +58,28 @@ namespace Neo.Agents
             metadata.Options.Add(new Option<int>("TimeoutSeconds", false, 600, "So lange darf die API schweigen, in Sekunden (0 = unendlich). Die Antwort selbst darf beliebig lange dauern."));
             metadata.Options.Add(new Option<float>("TopP", false, 0.9f, "Top-P für nucleus sampling."));
             metadata.Options.Add(new Option<string>("Effort", false, "", "Wie gründlich das Modell arbeitet: low, medium, high, xhigh, max. Leer: die Vorgabe des Modells."));
+            metadata.Options.Add(new Option<int>("WebSearchMaxUses", false, 0, "So oft darf das Modell im Web suchen. 0: gar nicht."));
 
             metadata.InputParameters.Add(new InputParameter<string>("SystemMessage", true, "System-Instruction für das Modell."));
             metadata.InputParameters.Add(new InputParameter<string>("History", false, "Bisherige Unterhaltung."));
             metadata.InputParameters.Add(new InputParameter<string>("Prompt", true, "User-Eingabe."));
             metadata.InputParameters.Add(new InputParameter<string>("JsonSchema", false, "Das JSON-Schema für die Antwort."));
+            metadata.InputParameters.Add(new InputParameter<string>("WebSearchGuidance", false, "Kommt zur System-Instruction, wenn das Modell suchen darf."));
 
             metadata.OutputParameters.Add(new OutputParameter<string>(
                 name: "Result",
                 isAlwaysProvided: true,
                 description: "Die rohe Antwort des Modells."
+            ));
+            metadata.OutputParameters.Add(new OutputParameter<List<WebSource>>(
+                name: "WebSources",
+                isAlwaysProvided: true,
+                description: "Die Seiten, auf die sich die Antwort stützt: die zitierten, sonst alle gefundenen."
+            ));
+            metadata.OutputParameters.Add(new OutputParameter<List<string>>(
+                name: "WebSearches",
+                isAlwaysProvided: true,
+                description: "Wonach das Modell gesucht hat."
             ));
 
             return metadata;
@@ -111,6 +134,12 @@ namespace Neo.Agents
 
             var capabilities = await GetCapabilitiesAsync(httpClient, model, ct);
 
+            // A failed lookup says nothing about the model; the request that follows reports what is wrong.
+            var webSearches = GetOption<int>("WebSearchMaxUses");
+            var schemaAllowsSearch = capabilities.StructuredOutput || string.IsNullOrEmpty(jsonSchema);
+            if (webSearches > 0 && capabilities.Known && !(capabilities.WebSearch && schemaAllowsSearch))
+                throw new WebSearchUnavailableException($"The model {model} cannot search the web.");
+
             var request = new ApiRequest
             {
                 Model = model,
@@ -121,18 +150,25 @@ namespace Neo.Agents
                 Fallbacks = capabilities.ServerSideFallback ? "default" : null
             };
 
+            if (webSearches > 0 && schemaAllowsSearch)
+            {
+                request.Tools = [new ApiTool { Type = WebSearchTool, Name = "web_search", MaxUses = webSearches }];
+                request.System += GetInput<string>("WebSearchGuidance");
+            }
+
             // Only where the model knows this level: older ones answer the field with a 400.
             var effort = GetOption<string>("Effort");
             if (!string.IsNullOrEmpty(effort) && capabilities.EffortLevels?.Contains(effort) == true)
                 request.OutputConfig = new ApiOutputConfig { Effort = effort };
 
             string rawJsonResponse;
+            ApiResponse result;
 
             if (string.IsNullOrEmpty(jsonSchema))
             {
                 // Plain text mode
-                var result = await PostAsync(httpClient, request, timeout, ct);
-                rawJsonResponse = AllText(result)
+                result = await PostUntilFinishedAsync(httpClient, request, timeout, ct);
+                rawJsonResponse = AnswerText(result)
                     ?? throw new InvalidOperationException("No text response from Anthropic API.");
             }
             else if (capabilities.StructuredOutput)
@@ -142,9 +178,9 @@ namespace Neo.Agents
                 request.OutputConfig ??= new ApiOutputConfig();
                 request.OutputConfig.Format = new ApiOutputFormat { Schema = JsonNode.Parse(jsonSchema) };
 
-                var result = await PostAsync(httpClient, request, timeout, ct);
+                result = await PostUntilFinishedAsync(httpClient, request, timeout, ct);
                 ThrowIfCutOff(result);
-                rawJsonResponse = AllText(result)
+                rawJsonResponse = AnswerText(result)
                     ?? throw new InvalidOperationException("No structured output from Anthropic API.");
             }
             else
@@ -162,7 +198,7 @@ namespace Neo.Agents
                     Name = "record_summary"
                 };
 
-                var result = await PostAsync(httpClient, request, timeout, ct);
+                result = await PostAsync(httpClient, request, timeout, ct);
                 ThrowIfCutOff(result);
                 var toolUse = result.Content.LastOrDefault(c => c.Type == "tool_use");
                 rawJsonResponse = toolUse?.Input?.ToJsonString()
@@ -170,6 +206,8 @@ namespace Neo.Agents
             }
 
             SetOutput("Result", rawJsonResponse);
+            SetOutput("WebSources", SourcesOf(result));
+            SetOutput("WebSearches", SearchesOf(result));
         }
 
         private static async Task<ModelCapabilities> GetCapabilitiesAsync(HttpClient httpClient, string model, CancellationToken ct)
@@ -194,7 +232,9 @@ namespace Neo.Agents
                         .Where(level => level.Value.ValueKind == JsonValueKind.Object
                             && level.Value.TryGetProperty("supported", out var supported) && supported.ValueKind == JsonValueKind.True)
                         .Select(level => level.Key)
-                        .ToHashSet(StringComparer.OrdinalIgnoreCase));
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase),
+                    info?.Capabilities?.ServerTools?.WebSearch?.Supported == true,
+                    Known: true);
             }
             catch (HttpRequestException)
             {
@@ -204,7 +244,7 @@ namespace Neo.Agents
         }
 
         // Always streams: an answer can take many minutes, and only silence should end the wait.
-        private static async Task<ApiResponse> PostAsync(HttpClient httpClient, ApiRequest request, TimeSpan silenceLimit, CancellationToken ct)
+        private async Task<ApiResponse> PostAsync(HttpClient httpClient, ApiRequest request, TimeSpan silenceLimit, CancellationToken ct)
         {
             using var message = new HttpRequestMessage(HttpMethod.Post, ApiUrl) { Content = JsonContent.Create(request) };
             if (request.Fallbacks != null)
@@ -215,6 +255,8 @@ namespace Neo.Agents
             if (!response.IsSuccessStatusCode)
             {
                 var content = await response.Content.ReadAsStringAsync(ct);
+                if (response.StatusCode == HttpStatusCode.BadRequest && request.Tools?.Any(t => t.Type == WebSearchTool) == true && SaysSearchIsSwitchedOff(content))
+                    throw new WebSearchUnavailableException("Web search is switched off for this Anthropic organization. An administrator can switch it on in the Claude Console.");
                 throw new HttpRequestException($"Anthropic API error ({response.StatusCode}): {Truncate(content, 500)}");
             }
 
@@ -226,7 +268,35 @@ namespace Neo.Agents
             return result;
         }
 
-        private static async Task<ApiResponse> ReadAnswerAsync(HttpResponseMessage response, TimeSpan silenceLimit, CancellationToken ct)
+        private static bool SaysSearchIsSwitchedOff(string error) =>
+            error.Contains("not enabled", StringComparison.OrdinalIgnoreCase)
+            && (error.Contains("web search", StringComparison.OrdinalIgnoreCase) || error.Contains("web_search", StringComparison.OrdinalIgnoreCase));
+
+        // A long search can pause the turn. It goes on where it stopped when the paused part comes back
+        // unchanged, and each request answers only with what is new.
+        private async Task<ApiResponse> PostUntilFinishedAsync(HttpClient httpClient, ApiRequest request, TimeSpan silenceLimit, CancellationToken ct)
+        {
+            var whole = await PostAsync(httpClient, request, silenceLimit, ct);
+            var part = whole;
+
+            for (int pauses = 0; part.StopReason == "pause_turn" && pauses < MaxPauses; pauses++)
+            {
+                request.Messages.Add(new ApiMessage
+                {
+                    Role = "assistant",
+                    Content = new JsonArray(part.Content.Select(block => (JsonNode?)block.Raw.DeepClone()).ToArray()),
+                });
+
+                part = await PostAsync(httpClient, request, silenceLimit, ct);
+                whole.Content.AddRange(part.Content);
+                whole.StopReason = part.StopReason;
+                whole.StopCategory = part.StopCategory;
+            }
+
+            return whole;
+        }
+
+        private async Task<ApiResponse> ReadAnswerAsync(HttpResponseMessage response, TimeSpan silenceLimit, CancellationToken ct)
         {
             using var silence = CancellationTokenSource.CreateLinkedTokenSource(ct);
             silence.CancelAfter(silenceLimit);
@@ -251,18 +321,24 @@ namespace Neo.Agents
                     switch ((string?)data?["type"])
                     {
                         case "content_block_start":
-                            result.Content.Add(new ApiContentBlock { Type = (string?)data?["content_block"]?["type"] ?? "" });
+                            result.Content.Add(StartBlock(data?["content_block"]));
                             buffer.Clear();
                             break;
 
                         case "content_block_delta":
-                            // text_delta or input_json_delta; thinking is not kept.
-                            buffer.Append((string?)data?["delta"]?["text"] ?? (string?)data?["delta"]?["partial_json"]);
+                            if (result.Content.LastOrDefault() is { } open)
+                                ApplyDelta(open, data?["delta"], buffer);
                             break;
 
                         case "content_block_stop":
                             if (result.Content.LastOrDefault() is { } block)
+                            {
                                 FinishBlock(block, buffer.ToString());
+                                if (block.Type == "server_tool_use" && (string?)block.Input?["query"] is { } query)
+                                    WebSearchProgress?.Invoke(query);
+                                else if (block.Type == "web_search_tool_result")
+                                    WebSearchProgress?.Invoke(null);
+                            }
                             break;
 
                         case "message_delta":
@@ -292,17 +368,62 @@ namespace Neo.Agents
             return result;
         }
 
+        // The stream announces a block with empty fields, and a null in a block sent back is a 400.
+        private static ApiContentBlock StartBlock(JsonNode? announced)
+        {
+            var raw = announced?.DeepClone() as JsonObject ?? new JsonObject();
+            foreach (var empty in raw.Where(field => field.Value == null).Select(field => field.Key).ToList())
+                raw.Remove(empty);
+
+            return new ApiContentBlock { Type = (string?)raw["type"] ?? "", Raw = raw };
+        }
+
+        private static void ApplyDelta(ApiContentBlock block, JsonNode? delta, StringBuilder buffer)
+        {
+            switch ((string?)delta?["type"])
+            {
+                case "signature_delta":
+                    block.Raw["signature"] = (string?)delta?["signature"];
+                    break;
+
+                case "citations_delta":
+                    if (block.Raw["citations"] is not JsonArray citations)
+                        block.Raw["citations"] = citations = new JsonArray();
+                    citations.Add(delta?["citation"]?.DeepClone());
+                    break;
+
+                default:
+                    // text_delta, input_json_delta or thinking_delta
+                    buffer.Append((string?)delta?["text"] ?? (string?)delta?["partial_json"] ?? (string?)delta?["thinking"]);
+                    break;
+            }
+        }
+
         private static void FinishBlock(ApiContentBlock block, string content)
         {
-            if (block.Type == "text")
+            switch (block.Type)
             {
-                block.Text = content;
-            }
-            else if (block.Type == "tool_use")
-            {
-                // JSON cut off at max_tokens does not parse; ThrowIfCutOff reports that.
-                try { block.Input = JsonNode.Parse(content); }
-                catch (JsonException) { }
+                case "text":
+                    block.Text = content;
+                    block.Raw["text"] = content;
+                    break;
+
+                case "thinking":
+                    block.Raw["thinking"] = content;
+                    break;
+
+                case "tool_use":
+                case "server_tool_use":
+                    // JSON cut off at max_tokens does not parse; ThrowIfCutOff reports that.
+                    try
+                    {
+                        block.Input = JsonNode.Parse(content);
+                        block.Raw["input"] = block.Input?.DeepClone();
+                    }
+                    catch (JsonException) { }
+                    if (block.Raw["input"] == null)
+                        block.Raw["input"] = new JsonObject();
+                    break;
             }
         }
 
@@ -311,19 +432,56 @@ namespace Neo.Agents
         {
             if (result.StopReason == "max_tokens")
                 throw new InvalidOperationException("Claude's answer reached the output limit and was cut off.");
+            if (result.StopReason == "pause_turn")
+                throw new InvalidOperationException("Claude's web search did not finish.");
         }
 
-        // All blocks together: a fallback model that takes over mid-answer continues the text.
-        private static string? AllText(ApiResponse result)
+        // What comes after the last search: before it the model says what it is about to do ("I'll
+        // search for ..."). All blocks together: a fallback model that takes over mid-answer continues the text.
+        private static string? AnswerText(ApiResponse result)
         {
-            var texts = result.Content.Where(c => c.Type == "text").Select(c => c.Text).ToList();
+            var lastSearch = result.Content.FindLastIndex(c => c.Type == "web_search_tool_result");
+            var texts = result.Content.Skip(lastSearch + 1).Where(c => c.Type == "text").Select(c => c.Text).ToList();
             return texts.Count > 0 ? string.Concat(texts) : null;
+        }
+
+        // The cited pages; an answer in a schema has no citations, so then the pages found.
+        private static List<WebSource> SourcesOf(ApiResponse result)
+        {
+            var cited = result.Content.Where(c => c.Type == "text")
+                .SelectMany(c => c.Raw["citations"] as JsonArray ?? [])
+                .Where(citation => (string?)citation?["type"] == "web_search_result_location")
+                .ToList();
+
+            // After an error the content is one object instead of a list of pages.
+            var found = result.Content.Where(c => c.Type == "web_search_tool_result")
+                .SelectMany(c => c.Raw["content"] as JsonArray ?? []);
+
+            return (cited.Count > 0 ? cited : found)
+                .Select(page => (Url: (string?)page?["url"], Title: (string?)page?["title"]))
+                .Where(page => !string.IsNullOrEmpty(page.Url))
+                .DistinctBy(page => page.Url)
+                .Select(page => new WebSource(string.IsNullOrEmpty(page.Title) ? page.Url! : page.Title, page.Url!))
+                .ToList();
+        }
+
+        // Only what really ran. Past max_uses the model still tries, once with the query "placeholder".
+        private static List<string> SearchesOf(ApiResponse result)
+        {
+            var failed = result.Content.Where(c => c.Type == "web_search_tool_result" && c.Raw["content"] is not JsonArray)
+                .Select(c => (string?)c.Raw["tool_use_id"])
+                .ToHashSet();
+
+            return result.Content.Where(c => c.Type == "server_tool_use" && (string?)c.Raw["name"] == "web_search" && !failed.Contains((string?)c.Raw["id"]))
+                .Select(c => (string?)c.Input?["query"])
+                .OfType<string>()
+                .ToList();
         }
 
         private static string Truncate(string value, int maxLength) =>
             value.Length <= maxLength ? value : value[..maxLength] + "...";
 
-        private readonly record struct ModelCapabilities(bool StructuredOutput, bool ServerSideFallback, IReadOnlySet<string>? EffortLevels);
+        private readonly record struct ModelCapabilities(bool StructuredOutput, bool ServerSideFallback, IReadOnlySet<string>? EffortLevels, bool WebSearch, bool Known);
 
         #region Anthropic REST DTOs
 
@@ -344,6 +502,15 @@ namespace Neo.Agents
             // {"supported":true,"low":{"supported":true},…}
             [JsonPropertyName("effort")]
             public Dictionary<string, JsonElement>? Effort { get; set; }
+
+            [JsonPropertyName("server_tools")]
+            public ApiServerTools? ServerTools { get; set; }
+        }
+
+        private class ApiServerTools
+        {
+            [JsonPropertyName("web_search")]
+            public ApiSupported? WebSearch { get; set; }
         }
 
         private class ApiSupported
@@ -412,12 +579,18 @@ namespace Neo.Agents
             [JsonPropertyName("role")]
             public string Role { get; set; } = "";
 
+            // A text, or the blocks of a paused answer.
             [JsonPropertyName("content")]
-            public string Content { get; set; } = "";
+            public JsonNode Content { get; set; } = "";
         }
 
         private class ApiTool
         {
+            // Only a server tool has one; such a tool has no input schema.
+            [JsonPropertyName("type")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string? Type { get; set; }
+
             [JsonPropertyName("name")]
             public string Name { get; set; } = "";
 
@@ -426,7 +599,12 @@ namespace Neo.Agents
             public string? Description { get; set; }
 
             [JsonPropertyName("input_schema")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public JsonNode? InputSchema { get; set; }
+
+            [JsonPropertyName("max_uses")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public int? MaxUses { get; set; }
         }
 
         private class ApiToolChoice
@@ -452,6 +630,9 @@ namespace Neo.Agents
             public string Type { get; set; } = "";
             public string? Text { get; set; }
             public JsonNode? Input { get; set; }
+
+            // The block as the API sent it, for sending it back after a pause.
+            public JsonObject Raw { get; set; } = new();
         }
 
         #endregion
