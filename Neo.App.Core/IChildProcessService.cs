@@ -31,6 +31,12 @@ namespace Neo.App
         /// </summary>
         Task<HotReloadResultMessage?> HotReloadAsync(HotReloadRequest request, IEnumerable<string> dependencyFiles);
 
+        /// <summary>The state of the running app as data, to go into another instance. Null: no answer.</summary>
+        Task<AppStateCapturedMessage?> CaptureAppStateAsync() => Task.FromResult<AppStateCapturedMessage?>(null);
+
+        /// <summary>Puts such a state into the running app. Null: no answer.</summary>
+        Task<AppStateRestoredMessage?> RestoreAppStateAsync(RestoreAppStateRequest request) => Task.FromResult<AppStateRestoredMessage?>(null);
+
         /// <summary>
         /// Captures a screenshot of the child window. Returns a platform-specific image object
         /// (e.g. BitmapSource on WPF) or null if unavailable.

@@ -267,6 +267,43 @@ namespace Neo.PluginWindowAvalonia
         }
 
         // ================================
+        // 0b) The state of the running app as data (fusion, teleport)
+        // ================================
+        public AppStateImage CaptureAppState()
+        {
+            if (dynamicContent.Content is not Avalonia.Controls.UserControl control)
+                throw new InvalidOperationException("No plugin is loaded.");
+            return AppStateImage.Capture(control) with { Ui = UiStateSnapshot.Capture(control).ToPortable().ToJson() };
+        }
+
+        /// <summary>Puts the values in, builds the UI again so that it shows them, and puts back what the user did to the UI.</summary>
+        public AppStateRestoredMessage RestoreAppState(AppStateImage image, RestoreAppStateRequest request)
+        {
+            if (dynamicContent.Content is not Avalonia.Controls.UserControl control)
+                throw new InvalidOperationException("No plugin is loaded.");
+
+            var restored = image.RestoreTo(control, request.FieldPrefix);
+
+            if (HotReloadRuntime.FirstMethodOf(control, request.RebuildMethods) is { } buildUi)
+            {
+                var rebuild = HotReloadRuntime.Rebuild(control, buildUi, RoutedEventHandlers.Instance);
+                if (rebuild.NewRoot is Control newRoot && !ReferenceEquals(newRoot, control))
+                    control.Content = newRoot;
+            }
+
+            int uiValues = 0;
+            if (request.RestoreUi && image.Ui != null && PortableUiState.FromJson(image.Ui) is { } portable)
+            {
+                var uiState = UiStateSnapshot.FromPortable(portable);
+                uiValues = uiState.Restore(control);
+                Dispatcher.UIThread.Post(() => { try { uiState.Restore(control); } catch { } }, DispatcherPriority.Loaded);
+            }
+
+            HotReloadRuntime.InvokeOnHotReloaded(control);
+            return new AppStateRestoredMessage(true, restored.Values, uiValues, restored.Failed);
+        }
+
+        // ================================
         // 1) Bytes-basierter Ladeweg
         // ================================
         /// <summary>

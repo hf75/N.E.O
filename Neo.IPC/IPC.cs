@@ -104,7 +104,28 @@ namespace Neo.IPC
         public const string ChildWindowBounds = "ChildWindowBounds";
         /// <summary>Child → host, unsolicited: the user pressed the shortcut that shows or hides the host window.</summary>
         public const string ToggleHostWindow = "ToggleHostWindow";
+
+        // ── The state of the running app as data (fusion, teleport) ─────────
+        public const string CaptureAppState = "CaptureAppState";
+        public const string AppStateCaptured = "AppStateCaptured";
+        public const string RestoreAppState = "RestoreAppState";
+        public const string AppStateRestored = "AppStateRestored";
     }
+
+    /// <param name="Image">The app's state as JSON (<c>Neo.Shared.AppStateImage</c>); null: nothing is loaded.</param>
+    /// <param name="Values">How many values go along.</param>
+    /// <param name="Bytes">How much data that is.</param>
+    /// <param name="Left">What stays behind, with the reason.</param>
+    public record AppStateCapturedMessage(string? Image, int Values, long Bytes, List<string> Left);
+
+    /// <param name="Image">The state to put into the running app.</param>
+    /// <param name="RebuildMethods">The names an app's UI build method may have; the first it has is called, so that the UI shows the values.</param>
+    /// <param name="FieldPrefix">The state comes from another program: its fields may carry this prefix here.</param>
+    /// <param name="RestoreUi">Also put back what the user did to the UI: only makes sense in the same app.</param>
+    public record RestoreAppStateRequest(string Image, List<string> RebuildMethods, string? FieldPrefix = null, bool RestoreUi = true);
+
+    /// <param name="Failed">Values that could not go in, with the reason.</param>
+    public record AppStateRestoredMessage(bool Success, int Values, int UiValues, List<string> Failed, string? Error = null);
 
     public record StartWebBridgeRequest(string HtmlContent, int Port = 0);
     public record StartWebBridgeResult(bool Success, string? Url, string? WsUrl, string? Error);

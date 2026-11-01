@@ -10,6 +10,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.VisualTree;
+using Neo.Shared;
 
 namespace Neo.PluginWindowAvalonia
 {
@@ -40,7 +41,31 @@ namespace Neo.PluginWindowAvalonia
         private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
         private List<string> _focusedKeys = [];
 
-        private sealed record Entry(Type ControlType, Dictionary<string, object?> Values);
+        private sealed record Entry(string ControlType, Dictionary<string, object?> Values);
+
+        /// <summary>The same as data, to go into another process.</summary>
+        public PortableUiState ToPortable() => new(
+            _entries.Select(e => new PortableUiEntry(e.Key, e.Value.ControlType, e.Value.Values
+                .Where(v => v.Key is not ("SelectedItems" or "SelectedIndexes"))
+                .ToDictionary(v => v.Key, v => v.Value is Vector offset
+                    ? new PortableValue(nameof(Vector), FormattableString.Invariant($"{offset.X};{offset.Y}"))
+                    : PortableValue.Of(v.Value)))).ToList(),
+            _focusedKeys);
+
+        public static UiStateSnapshot FromPortable(PortableUiState state)
+        {
+            var snapshot = new UiStateSnapshot { _focusedKeys = state.Focused };
+            foreach (var e in state.Entries)
+                snapshot._entries[e.Key] = new Entry(e.ControlType, e.Values.ToDictionary(v => v.Key, v => v.Value.Type == nameof(Vector) ? ParseVector(v.Value.Json) : v.Value.Value));
+            snapshot.Count = state.Entries.Count;
+            return snapshot;
+        }
+
+        private static object ParseVector(string text)
+        {
+            var parts = text.Split(';');
+            return new Vector(double.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture), double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture));
+        }
 
         /// <summary>How many controls had a value worth carrying over.</summary>
         public int Count { get; private set; }
@@ -59,7 +84,7 @@ namespace Neo.PluginWindowAvalonia
                 if (keys.Count == 0) continue;
                 if (values != null)
                 {
-                    var entry = new Entry(control.GetType(), values);
+                    var entry = new Entry(control.GetType().FullName!, values);
                     foreach (var key in keys) snapshot._entries[key] = entry;
                     snapshot.Count++;
                 }
@@ -95,7 +120,7 @@ namespace Neo.PluginWindowAvalonia
 
                 // Name first, then position.
                 var entry = keys.Select(k => _entries.TryGetValue(k, out var e) ? e : null)
-                                .FirstOrDefault(e => e != null && e.ControlType == control.GetType());
+                                .FirstOrDefault(e => e != null && e.ControlType == control.GetType().FullName);
                 if (entry == null) continue;
                 try
                 {

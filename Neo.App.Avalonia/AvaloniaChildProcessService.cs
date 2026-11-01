@@ -268,6 +268,12 @@ namespace Neo.App
                                     pendingHotReload.TrySetResult(Json.FromJson<HotReloadResultMessage>(env.PayloadJson));
                                 break;
 
+                            case IpcTypes.AppStateCaptured:
+                            case IpcTypes.AppStateRestored:
+                                if (_pendingAppState.TryRemove(env.CorrelationId, out var pendingAppState))
+                                    pendingAppState.TrySetResult(env.PayloadJson);
+                                break;
+
                             case IpcTypes.Hello:
                                 var hello = Json.FromJson<HelloMessage>(env.PayloadJson);
                                 HotReloadCapabilities = hello?.HotReloadCapabilities;
@@ -599,6 +605,38 @@ namespace Neo.App
             finally
             {
                 _pendingHotReloads.TryRemove(correlationId, out _);
+            }
+        }
+
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<string>> _pendingAppState = new();
+
+        public async Task<AppStateCapturedMessage?> CaptureAppStateAsync() =>
+            await AskForAppStateAsync(IpcTypes.CaptureAppState, "{}") is { } json ? Json.FromJson<AppStateCapturedMessage>(json) : null;
+
+        public async Task<AppStateRestoredMessage?> RestoreAppStateAsync(RestoreAppStateRequest request) =>
+            await AskForAppStateAsync(IpcTypes.RestoreAppState, Json.ToJson(request)) is { } json ? Json.FromJson<AppStateRestoredMessage>(json) : null;
+
+        private async Task<string?> AskForAppStateAsync(string type, string payload)
+        {
+            if (_messenger == null || _pipeStream == null || !_pipeStream.IsConnected) return null;
+
+            var correlationId = Guid.NewGuid().ToString("N");
+            var pending = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pendingAppState[correlationId] = pending;
+            try
+            {
+                await SafeSendControlAsync(new IpcEnvelope(type, correlationId, payload));
+                var finished = await Task.WhenAny(pending.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+                return finished == pending.Task ? await pending.Task : null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[AppState] {type} failed: {ex.Message}");
+                return null;
+            }
+            finally
+            {
+                _pendingAppState.TryRemove(correlationId, out _);
             }
         }
 

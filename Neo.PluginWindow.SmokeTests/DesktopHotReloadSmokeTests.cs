@@ -648,7 +648,7 @@ public class DesktopHotReloadSmokeTests : IDisposable
     }
 
     /// <summary>A property of the named control in the tree JSON the windows send for InspectVisualTree.</summary>
-    private static string? Property(string? treeJson, string controlName, string property)
+    internal static string? Property(string? treeJson, string controlName, string property)
     {
         if (treeJson == null) return null;
         using var document = System.Text.Json.JsonDocument.Parse(treeJson);
@@ -667,7 +667,7 @@ public class DesktopHotReloadSmokeTests : IDisposable
     }
 
     /// <summary>The compile agent with the hosts' defaults — hot-reloadable builds with a baseline file.</summary>
-    private static async Task CompileAsync(string source, string dllPath, bool wpf, IEnumerable<string>? packages = null)
+    internal static async Task CompileAsync(string source, string dllPath, bool wpf, IEnumerable<string>? packages = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(dllPath)!);
 

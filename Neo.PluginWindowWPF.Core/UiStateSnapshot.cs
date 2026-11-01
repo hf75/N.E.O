@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using Neo.Shared;
 
 namespace Neo.PluginWindowWPF
 {
@@ -39,7 +40,23 @@ namespace Neo.PluginWindowWPF
         private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
         private List<string> _focusedKeys = new();
 
-        private sealed record Entry(Type ControlType, Dictionary<string, object?> Values);
+        private sealed record Entry(string ControlType, Dictionary<string, object?> Values);
+
+        /// <summary>The same as data, to go into another process.</summary>
+        public PortableUiState ToPortable() => new(
+            _entries.Select(e => new PortableUiEntry(e.Key, e.Value.ControlType, e.Value.Values
+                .Where(v => v.Key is not ("SelectedItems" or "SelectedIndexes"))
+                .ToDictionary(v => v.Key, v => PortableValue.Of(v.Value)))).ToList(),
+            _focusedKeys);
+
+        public static UiStateSnapshot FromPortable(PortableUiState state)
+        {
+            var snapshot = new UiStateSnapshot { _focusedKeys = state.Focused };
+            foreach (var e in state.Entries)
+                snapshot._entries[e.Key] = new Entry(e.ControlType, e.Values.ToDictionary(v => v.Key, v => v.Value.Value));
+            snapshot.Count = state.Entries.Count;
+            return snapshot;
+        }
 
         /// <summary>How many controls had a value worth carrying over.</summary>
         public int Count { get; private set; }
@@ -58,7 +75,7 @@ namespace Neo.PluginWindowWPF
                 if (keys.Count == 0) continue;
                 if (values != null)
                 {
-                    var entry = new Entry(element.GetType(), values);
+                    var entry = new Entry(element.GetType().FullName!, values);
                     foreach (var key in keys) snapshot._entries[key] = entry;
                     snapshot.Count++;
                 }
@@ -96,7 +113,7 @@ namespace Neo.PluginWindowWPF
                 Entry? entry = null;
                 foreach (var key in keys)
                 {
-                    if (_entries.TryGetValue(key, out var candidate) && candidate.ControlType == element.GetType())
+                    if (_entries.TryGetValue(key, out var candidate) && candidate.ControlType == element.GetType().FullName)
                     {
                         entry = candidate;
                         break;

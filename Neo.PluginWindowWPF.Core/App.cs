@@ -463,6 +463,41 @@ namespace Neo.PluginWindowWPF
                         break;
                     }
 
+                case IpcTypes.CaptureAppState:
+                    {
+                        AppStateCapturedMessage captured;
+                        try
+                        {
+                            var image = await Dispatcher.InvokeAsync(() => MainWin.CaptureAppState());
+                            captured = new AppStateCapturedMessage(image.ToJson(), image.Fields.Count, image.Bytes, image.Left);
+                        }
+                        catch (Exception ex)
+                        {
+                            captured = new AppStateCapturedMessage(null, 0, 0, [ex.Message]);
+                        }
+                        await SafeSendAsync(new IpcEnvelope(IpcTypes.AppStateCaptured, env.CorrelationId, Json.ToJson(captured)));
+                        break;
+                    }
+
+                case IpcTypes.RestoreAppState:
+                    {
+                        AppStateRestoredMessage restored;
+                        try
+                        {
+                            var request = Json.FromJson<RestoreAppStateRequest>(env.PayloadJson)!;
+                            var image = Neo.Shared.AppStateImage.FromJson(request.Image)!;
+                            restored = await Dispatcher.InvokeAsync(() => MainWin.RestoreAppState(image, request));
+                            await PublishOnAppNetworkAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            var cause = (ex as System.Reflection.TargetInvocationException)?.InnerException ?? ex;
+                            restored = new AppStateRestoredMessage(false, 0, 0, [], $"{cause.GetType().Name}: {cause.Message}");
+                        }
+                        await SafeSendAsync(new IpcEnvelope(IpcTypes.AppStateRestored, env.CorrelationId, Json.ToJson(restored)));
+                        break;
+                    }
+
                 case IpcTypes.UnloadControl:
                     {
                         _repairPending = false;

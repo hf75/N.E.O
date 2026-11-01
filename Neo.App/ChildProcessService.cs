@@ -421,6 +421,36 @@ namespace Neo.App
             }
         }
 
+        public async Task<AppStateCapturedMessage?> CaptureAppStateAsync()
+        {
+            if (_pipeServer == null || !_pipeServer.IsConnected) return null;
+            try
+            {
+                var reply = await SendRequestAsync(IpcTypes.CaptureAppState, new AckMessage("Capture"), TimeSpan.FromSeconds(30), _pipeCts.Token);
+                return reply.Type == IpcTypes.AppStateCaptured ? IPC.Json.FromJson<AppStateCapturedMessage>(reply.PayloadJson) : null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[CaptureAppStateAsync] Failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<AppStateRestoredMessage?> RestoreAppStateAsync(RestoreAppStateRequest request)
+        {
+            if (_pipeServer == null || !_pipeServer.IsConnected) return null;
+            try
+            {
+                var reply = await SendRequestAsync(IpcTypes.RestoreAppState, request, TimeSpan.FromSeconds(30), _pipeCts.Token);
+                return reply.Type == IpcTypes.AppStateRestored ? IPC.Json.FromJson<AppStateRestoredMessage>(reply.PayloadJson) : null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[RestoreAppStateAsync] Failed: {ex.Message}");
+                return null;
+            }
+        }
+
         public async Task UnloadControlAsync()
         {
             HasLoadedControl = false;

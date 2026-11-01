@@ -205,6 +205,10 @@ namespace Neo.Shared
             return false;
         }
 
+        /// <summary>The first of these names the app has as a parameterless method: how it builds its UI. Null: it has none.</summary>
+        public static string? FirstMethodOf(object root, IEnumerable<string> names) =>
+            names.FirstOrDefault(name => FindParameterless(root.GetType(), name) != null);
+
         private static MethodInfo? FindParameterless(Type type, string name)
         {
             for (var t = type; t != null && t != typeof(object); t = t.BaseType)
