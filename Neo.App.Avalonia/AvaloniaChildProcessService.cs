@@ -272,7 +272,13 @@ namespace Neo.App
                                 var hello = Json.FromJson<HelloMessage>(env.PayloadJson);
                                 HotReloadCapabilities = hello?.HotReloadCapabilities;
                                 _childHwnd = new IntPtr(hello?.Hwnd ?? 0);
-                                Dispatcher.UIThread.Post(WatchForeground);
+                                Dispatcher.UIThread.Post(() =>
+                                {
+                                    WatchForeground();
+                                    // The window opens in the middle of the screen and leaves the focus alone,
+                                    // so no activation of N.E.O. follows that would tell it where it belongs.
+                                    if (DockChildToHost) UpdatePosition();
+                                });
                                 Debug.WriteLine("[ChildProcess] Hello received from child");
                                 await SafeSendControlAsync(new IpcEnvelope(
                                     IpcTypes.Ack, env.CorrelationId,

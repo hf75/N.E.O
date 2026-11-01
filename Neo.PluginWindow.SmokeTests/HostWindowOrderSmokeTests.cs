@@ -69,6 +69,50 @@ public class HostWindowOrderSmokeTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task The_app_window_opens_docked_beside_N_E_O()
+    {
+        var startInfo = new ProcessStartInfo(TestEnvironment.HostExe("Neo.App.Avalonia")) { UseShellExecute = false };
+        startInfo.WorkingDirectory = Path.GetDirectoryName(startInfo.FileName)!;
+        startInfo.Environment[SettingsService.FolderEnvironmentVariable] = _settings;
+        startInfo.Environment["ANTHROPIC_API_KEY"] = "not-a-real-key";
+        using var host = Process.Start(startInfo)!;
+
+        try
+        {
+            // In front from the start, as when the user starts it: N.E.O. is not activated again once
+            // the app window is there, and activation is not what may place that window.
+            var neo = await WaitForAsync(() => TopLevelWindows.Find(w => w.Pid == host.Id && w.Title.StartsWith("N.E.O")), 90, "the N.E.O. window");
+            TopLevelWindows.Foreground(neo);
+            var app = await WaitForAsync(() =>
+            {
+                foreach (var p in Process.GetProcessesByName("Neo.PluginWindowAvalonia"))
+                    if (TopLevelWindows.ParentProcessId(p.Id) == host.Id && TopLevelWindows.Find(w => w.Pid == p.Id) is { } window)
+                        return window;
+                return null;
+            }, 60, "the app window");
+
+            var sw = Stopwatch.StartNew();
+            while (sw.Elapsed.TotalSeconds < 5 && !IsDockedBeside(neo, app))
+                await Task.Delay(100);
+
+            IsDockedBeside(neo, app).Should().BeTrue($"the app window belongs right of N.E.O. (N.E.O. {neo.Current.BoundingRectangle}, app {app.Current.BoundingRectangle})");
+            Native.GetForegroundWindow().Should().Be((IntPtr)neo.Current.NativeWindowHandle, "docking must not take the focus");
+        }
+        finally
+        {
+            try { if (!host.HasExited) host.Kill(entireProcessTree: true); } catch { }
+            TopLevelWindows.KillChildrenOf(host.Id);
+        }
+    }
+
+    private static bool IsDockedBeside(AutomationElement neo, AutomationElement app)
+    {
+        var n = neo.Current.BoundingRectangle;
+        var a = app.Current.BoundingRectangle;
+        return Math.Abs(a.Left - (n.Right + 8)) <= 16 && Math.Abs(a.Top - n.Top) <= 16 && Math.Abs(a.Height - n.Height) <= 16;
+    }
+
     private static async Task<bool> WaitForOrderAsync(IntPtr upper, IntPtr lower)
     {
         var sw = Stopwatch.StartNew();
