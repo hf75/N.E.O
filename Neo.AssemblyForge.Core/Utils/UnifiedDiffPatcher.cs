@@ -44,19 +44,11 @@ public static class UnifiedDiffPatcher
         {
             int expectedIndex = Math.Max(0, hunk.OldStart - 1 + lineOffset);
 
-            if (TryApplyHunkAt(originalLines, hunk, expectedIndex, out int delta))
-            {
-                lineOffset += delta;
-                continue;
-            }
-
-            var oldPattern = hunk.Lines
-                .Where(l => l.Op is ' ' or '-')
-                .Select(l => l.Text)
-                .ToList();
-
-            int fuzzyIndex = FindBestHunkStart(originalLines, oldPattern, expectedIndex);
-            if (fuzzyIndex >= 0 && TryApplyHunkAt(originalLines, hunk, fuzzyIndex, out delta))
+            // Lines without a mark (see ParseHunksForTargetFile) are blank context if the file has
+            // them there, and otherwise only spacing in the patch.
+            if (TryPlaceHunk(originalLines, hunk, expectedIndex, out int delta) ||
+                (hunk.Lines.Any(l => l.Unmarked) &&
+                 TryPlaceHunk(originalLines, hunk with { Lines = hunk.Lines.Where(l => !l.Unmarked).ToList() }, expectedIndex, out delta)))
             {
                 lineOffset += delta;
                 continue;
@@ -170,25 +162,47 @@ public static class UnifiedDiffPatcher
         return string.Equals(a.TrimEnd(), b.TrimEnd(), StringComparison.Ordinal);
     }
 
+    private static bool TryPlaceHunk(List<string> fileLines, Hunk hunk, int expectedIndex, out int delta)
+    {
+        if (TryApplyHunkAt(fileLines, hunk, expectedIndex, out delta))
+            return true;
+
+        var oldPattern = hunk.Lines
+            .Where(l => l.Op is ' ' or '-')
+            .Select(l => l.Text)
+            .ToList();
+
+        int fuzzyIndex = FindBestHunkStart(fileLines, oldPattern, expectedIndex);
+        return fuzzyIndex >= 0 && TryApplyHunkAt(fileLines, hunk, fuzzyIndex, out delta);
+    }
+
     private static bool TryApplyHunkAt(List<string> fileLines, Hunk hunk, int startIndex, out int delta)
     {
         delta = 0;
 
-        int index = startIndex;
+        if (startIndex > fileLines.Count)
+            return false;
 
+        // Look before touching anything. The next try searches these same lines, and one that gave
+        // up halfway would leave its added lines behind: the patch then succeeds with them twice.
+        int index = startIndex;
+        foreach (var line in hunk.Lines.Where(l => l.Op is ' ' or '-'))
+        {
+            if (index >= fileLines.Count || !LinesEqual(fileLines[index], line.Text))
+                return false;
+            index++;
+        }
+
+        index = startIndex;
         foreach (var line in hunk.Lines)
         {
             switch (line.Op)
             {
                 case ' ':
-                    if (index >= fileLines.Count || !LinesEqual(fileLines[index], line.Text))
-                        return false;
                     index++;
                     break;
 
                 case '-':
-                    if (index >= fileLines.Count || !LinesEqual(fileLines[index], line.Text))
-                        return false;
                     fileLines.RemoveAt(index);
                     delta--;
                     break;
@@ -198,9 +212,6 @@ public static class UnifiedDiffPatcher
                     index++;
                     delta++;
                     break;
-
-                default:
-                    return false;
             }
         }
 
@@ -257,6 +268,7 @@ public static class UnifiedDiffPatcher
 
         var lines = patchNormalized.Split('\n', StringSplitOptions.None);
         Hunk? currentHunk = null;
+        int emptyLinesPending = 0;
 
         foreach (var raw in lines)
         {
@@ -308,6 +320,7 @@ public static class UnifiedDiffPatcher
                     Lines: new List<OpLine>());
 
                 hunks.Add(currentHunk);
+                emptyLinesPending = 0;
                 continue;
             }
 
@@ -317,12 +330,22 @@ public static class UnifiedDiffPatcher
             if (line.StartsWith("\\ No newline at end of file", StringComparison.Ordinal))
                 continue;
 
+            // A blank context line that lost its leading space, if another line of the hunk follows.
+            // Before the next hunk or at the end of the patch it is only spacing.
             if (line.Length == 0)
+            {
+                emptyLinesPending++;
                 continue;
+            }
 
             char op = line[0];
             if (op is ' ' or '+' or '-')
+            {
+                for (; emptyLinesPending > 0; emptyLinesPending--)
+                    currentHunk.Lines.Add(new OpLine(' ', string.Empty, Unmarked: true));
+
                 currentHunk.Lines.Add(new OpLine(op, line.Substring(1)));
+            }
         }
 
         return hunks;
@@ -360,6 +383,6 @@ public static class UnifiedDiffPatcher
         return true;
     }
 
-    private sealed record OpLine(char Op, string Text);
+    private sealed record OpLine(char Op, string Text, bool Unmarked = false);
     private sealed record Hunk(int OldStart, int OldCount, int NewStart, int NewCount, List<OpLine> Lines);
 }

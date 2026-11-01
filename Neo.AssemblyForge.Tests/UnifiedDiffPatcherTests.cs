@@ -264,6 +264,92 @@ public class UnifiedDiffPatcherTests
         result.ErrorMessage.Should().NotBeNullOrEmpty();
     }
 
+    // ── A try that fails leaves nothing behind ──────────────────────
+
+    // A hunk with a stale line number begins like the right place at the end of A: the same
+    // closing brace and blank line. Models get the line number wrong in most patches.
+    private const string ThreeMethods = "class C\n{\n    void A()\n    {\n    }\n\n    void B()\n    {\n    }\n\n    void D()\n    {\n    }\n}";
+
+    [Fact]
+    public void TryApplyToCurrentCode_StaleLineNumberWhereThePlaceBeginsAlike_AddsOnlyOnce()
+    {
+        var patch = MakePatch("@@ -5,3 +5,4 @@\n     }\n \n+    void New() { }\n     void D()");
+
+        var result = ApplyToCurrentCode(ThreeMethods, patch);
+
+        result.Success.Should().BeTrue();
+        result.PatchedText.Should().Be("class C\n{\n    void A()\n    {\n    }\n\n    void B()\n    {\n    }\n\n    void New() { }\n    void D()\n    {\n    }\n}");
+    }
+
+    [Fact]
+    public void TryApplyToCurrentCode_StaleLineNumberWhereThePlaceBeginsAlike_RemovesOnlyOnce()
+    {
+        var patch = MakePatch("@@ -5,3 +5,2 @@\n     }\n-\n     void D()");
+
+        var result = ApplyToCurrentCode(ThreeMethods, patch);
+
+        result.Success.Should().BeTrue();
+        result.PatchedText.Should().Be("class C\n{\n    void A()\n    {\n    }\n\n    void B()\n    {\n    }\n    void D()\n    {\n    }\n}");
+    }
+
+    [Fact]
+    public void TryApplyToCurrentCode_AddedLinesWithALineNumberPastTheEnd_FailsInsteadOfThrowing()
+    {
+        var patch = MakePatch("@@ -99,0 +99,1 @@\n+new");
+
+        var result = ApplyToCurrentCode("a\nb", patch);
+
+        result.Success.Should().BeFalse();
+    }
+
+    // ── A blank context line that lost its leading space ────────────
+
+    [Fact]
+    public void TryApplyToCurrentCode_BlankContextLineWithoutItsSpace_Applies()
+    {
+        var patch = MakePatch("@@ -1,3 +1,4 @@\n a\n\n+new\n b");
+
+        var result = ApplyToCurrentCode("a\n\nb", patch);
+
+        result.Success.Should().BeTrue();
+        result.PatchedText.Should().Be("a\n\nnew\nb");
+    }
+
+    [Fact]
+    public void TryApplyToCurrentCode_EmptyLineTheFileDoesNotHave_IsOnlySpacingInThePatch()
+    {
+        var patch = MakePatch("@@ -1,2 +1,4 @@\n a\n+one\n\n+two\n b");
+
+        var result = ApplyToCurrentCode("a\nb", patch);
+
+        result.Success.Should().BeTrue();
+        result.PatchedText.Should().Be("a\none\ntwo\nb");
+    }
+
+    [Fact]
+    public void TryApplyToCurrentCode_EmptyLineAtTheEndOfThePatch_IsNotContext()
+    {
+        // As context it would send the hunk to the second brace, the only one with a blank line after it.
+        var patch = MakePatch("@@ -1,1 +1,2 @@\n }\n+new") + "\n";
+
+        var result = ApplyToCurrentCode("}\nx\n}\n\ny", patch);
+
+        result.Success.Should().BeTrue();
+        result.PatchedText.Should().Be("}\nnew\nx\n}\n\ny");
+    }
+
+    [Fact]
+    public void TryApplyToCurrentCode_EmptyLineBetweenTwoHunks_IsNotContext()
+    {
+        // As context it would send the second hunk to the second brace, the only one with a blank line before it.
+        var patch = MakePatch("@@ -1,1 +1,2 @@\n a\n+one\n\n@@ -2,1 +3,2 @@\n }\n+two");
+
+        var result = ApplyToCurrentCode("a\n}\nx\n\n}\ny", patch);
+
+        result.Success.Should().BeTrue();
+        result.PatchedText.Should().Be("a\none\n}\ntwo\nx\n\n}\ny");
+    }
+
     // ── Full code replacement does NOT trigger for actual diff text ──
 
     [Fact]
