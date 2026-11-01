@@ -35,6 +35,9 @@ namespace Neo.App
                 files["./agenthelpercode.cs"] = templated;
             }
 
+            if (!string.IsNullOrWhiteSpace(ForeignAppHelperCode))
+                files["./foreignapphelper.cs"] = ForeignAppHelperCode!;
+
             // Plugin agent templates (ImageGen, STT, etc.)
             foreach (var plugin in PluginAgents)
             {
@@ -83,6 +86,9 @@ namespace Neo.App
 
         // The start of the files the current prompt names, added to what the model reads and kept out of the history.
         private string _namedFilesForTheModel = string.Empty;
+
+        // The same for the running programs it names.
+        private string _foreignProgramsForTheModel = string.Empty;
 
         // How often Claude may search in one try at the code.
         private const int WebSearchesPerTry = 3;
@@ -168,7 +174,7 @@ namespace Neo.App
                     throw new InvalidOperationException("AI agent is not configured.");
 
                 AiAgent.SetInput("SystemMessage", req.SystemMessage ?? string.Empty);
-                AiAgent.SetInput("Prompt", (req.Prompt ?? string.Empty) + _namedFilesForTheModel);
+                AiAgent.SetInput("Prompt", (req.Prompt ?? string.Empty) + _namedFilesForTheModel + _foreignProgramsForTheModel);
                 AiAgent.SetInput("History", req.History ?? string.Empty);
                 AiAgent.SetInput("JsonSchema", req.JsonSchema ?? string.Empty);
 
@@ -234,7 +240,7 @@ namespace Neo.App
                 InitialCode = preserveState ? (AppState.LastCode ?? string.Empty) : GetUserControlBaseCode(),
                 InitialHistoryPrefix = preserveState ? string.Empty : "Code:\n\n",
                 AdditionalSourceFiles = additionalSourceFiles,
-                SystemMessageOverride = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython, PluginAgents, OtherRunningApps()),
+                SystemMessageOverride = AISystemMessages.GetSystemMessage(Settings.UseAvalonia, Settings.UseReactUi, Settings.UsePython, PluginAgents, OtherRunningApps(), otherPrograms: ForeignAppHelperCode != null && OperatingSystem.IsWindows()),
             };
 
             _promptToDllSession = _promptToDllClient.CreateSession(sessionOptions);
@@ -459,6 +465,11 @@ namespace Neo.App
             _namedFilesForTheModel = NamedFiles.ForTheModel(namedFiles);
             if (namedFiles.Count > 0)
                 Logger.LogMessage("The AI sees the start of " + string.Join(", ", namedFiles.Select(f => f.Path)) + ", so that the tool fits the file.", BubbleType.Info);
+
+            var foreignPrograms = await Task.Run(() => ForeignPrograms.Find(originalPrompt), cancellationToken);
+            _foreignProgramsForTheModel = ForeignPrograms.ForTheModel(foreignPrograms);
+            if (foreignPrograms.Count > 0)
+                Logger.LogMessage(ForeignPrograms.ChatLine(foreignPrograms), BubbleType.Info);
 
             AssemblyForgeReviewCallback? reviewCallback = null;
             if (showResultInChild)

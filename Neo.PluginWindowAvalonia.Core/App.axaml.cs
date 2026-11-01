@@ -432,7 +432,7 @@ namespace Neo.PluginWindowAvalonia
                 case IpcTypes.ParentWindowBounds:
                     {
                         var bounds = Json.FromJson<ParentWindowBoundsMessage>(env.PayloadJson);
-                        if (bounds != null)
+                        if (bounds != null && !DockedToAnotherProgram)
                         {
                             Dispatcher.UIThread.Post(() =>
                             {
@@ -475,7 +475,7 @@ namespace Neo.PluginWindowAvalonia
                 case IpcTypes.PositionWindow:
                     {
                         var bounds = Json.FromJson<ParentWindowBoundsMessage>(env.PayloadJson);
-                        if (bounds != null)
+                        if (bounds != null && !DockedToAnotherProgram)
                         {
                             Dispatcher.UIThread.Post(() =>
                             {
@@ -902,6 +902,10 @@ namespace Neo.PluginWindowAvalonia
                     return args[i + 1];
             return null;
         }
+
+        // A tool that docked itself to another program (ForeignApp.Attach, compiled into the app) follows that
+        // program: it neither follows N.E.O. any more nor shows N.E.O.'s state when N.E.O. is minimised.
+        private static bool DockedToAnotherProgram => AppDomain.CurrentDomain.GetData("Neo.ForeignApp.Attached") is true;
 
         /// <summary>Where the app window is on screen (standalone mode), for a host that docks next to it.</summary>
         private Task SendWindowBoundsAsync()

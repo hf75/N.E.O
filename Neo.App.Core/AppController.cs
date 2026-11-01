@@ -93,6 +93,7 @@ namespace Neo.App
 
         // AgentHelper.cs musste extra in der csproj Datei hinzugefügt werden damit es eine EmbeddedResource ist!
         public string? AgentHelperCode { get; set; } = null;
+        public string? ForeignAppHelperCode { get; set; } = null;
         public Dictionary<string, string> PythonHelperCode { get; set; } = new();
 
         /// <summary>
@@ -162,6 +163,7 @@ namespace Neo.App
                 PythonHelperCode["PythonHost.cs"] = pythonHost;
             if (TryReadEmbedded(hostAssembly, "PythonModuleLoader.cs") is { } moduleLoader)
                 PythonHelperCode["PythonModuleLoader.cs"] = moduleLoader;
+            ForeignAppHelperCode = TryReadEmbedded(typeof(AppController).Assembly, "ForeignApp.cs");
 
             // Auto-discover plugin agents (ImageGen, STT, etc.)
             PluginAgents = DiscoverPluginAgents();

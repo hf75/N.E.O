@@ -10,6 +10,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Compiled here for N.E.O.'s own use, and as source into every generated app. -->
+    <EmbeddedResource Include="ForeignApp.cs" LogicalName="ForeignApp.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="NuGet.Commands" Version="7.0.1" />
   </ItemGroup>

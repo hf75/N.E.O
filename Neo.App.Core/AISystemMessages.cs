@@ -15,7 +15,7 @@ namespace Neo.App
     /// </summary>
     public static class AISystemMessages
     {
-        public static string GetSystemMessage(bool useAvalonia = false, bool useReact = false, bool usePython = false, IEnumerable<IAppIntegratedAgent>? pluginAgents = null, IReadOnlyList<string>? runningApps = null)
+        public static string GetSystemMessage(bool useAvalonia = false, bool useReact = false, bool usePython = false, IEnumerable<IAppIntegratedAgent>? pluginAgents = null, IReadOnlyList<string>? runningApps = null, bool otherPrograms = false)
         {
             if (useAvalonia == true && useReact == true)
                 throw new NotImplementedException("Avalonia and React cannot be used in conjunction, yet!");
@@ -39,6 +39,9 @@ namespace Neo.App
             // The other N.E.O. apps running right now — what this app can use (app network).
             if (runningApps != null && !useReact)
                 sp += AppNetworkGuidance.RunningApps(runningApps);
+
+            if (otherPrograms && !useReact)
+                sp += ForeignAppGuidance.Notes;
 
             return sp + QuickToolRule;
         }

@@ -32,6 +32,7 @@ N.E.O. comes in three flavours that share the same core: a **desktop host** (WPF
 - [[Living Apps]] — Export an app its user keeps changing with prompts (Ctrl+Shift+N inside the app)
 - [[Shared Sessions]] — Build one app together over the internet: invitation code, reply code, no server
 - [[App Network]] — Apps that use each other: every running app offers methods and values, any app can call them, the AI knows who is running
+- [[Exoskeleton]] — New features for programs you have no source of: a panel docks to their window, reads them and uses them
 - [[Web Search]] — Apps that answer from the current web with their sources; Claude looks things up while it builds, if you want
 - [[Export and Import]] — Save, share, and export as `.exe`
 - [[Live-MCP]] — Every generated app is an MCP server (Claude calls into it, reads state, subscribes)

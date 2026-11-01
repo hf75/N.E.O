@@ -174,6 +174,10 @@ Switch between frameworks in **Settings**:
 | Avalonia | Enable Avalonia | Cross-platform apps (Win/Linux/macOS) |
 | React | Enable REACT-UI | Web-based UIs, JavaScript ecosystem |
 
+## Exoskeleton
+
+"Give Notepad a live word count": a tool docks to the window of another program, reads it, presses its buttons, and looks like a part of it, without the program's source. Also as an exported program. See **[[Exoskeleton]]**.
+
 ## Web Search
 
 With an Anthropic key, generated apps can answer from the current web with their sources, as text or as typed data for tables; the AI uses this where it knows no free API. If you switch it on in the settings, Claude also looks things up while it builds. See **[[Web Search]]**.
