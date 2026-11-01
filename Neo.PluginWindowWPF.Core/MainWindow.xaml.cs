@@ -311,7 +311,7 @@ namespace Neo.PluginWindowWPF
             if (dynamicContent.Content is not UserControl control)
                 throw new InvalidOperationException("No plugin is loaded.");
 
-            var restored = image.RestoreTo(control, request.FieldPrefix);
+            var restored = image.RestoreTo(control, request.FieldPrefix, request.KeepFields);
 
             if (HotReloadRuntime.FirstMethodOf(control, request.RebuildMethods) is { } buildUi)
             {

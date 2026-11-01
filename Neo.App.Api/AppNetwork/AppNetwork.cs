@@ -31,6 +31,21 @@ public static class AppNetwork
     /// <summary>How many app-to-app calls the current work is nested in (0 outside of any call).</summary>
     public static int CurrentHops => s_hops.Value;
 
+    /// <summary>
+    /// Messages between the N.E.O.s behind the apps, not between the apps: "take this program over". Set by
+    /// the window that runs the app; generated code has no use for it. In: what kind of message and its
+    /// content. Out: the answer.
+    /// </summary>
+    public static Func<string, string?, Task<string?>>? SystemHandler { get; set; }
+
+    /// <summary>Sends such a message to the N.E.O. behind another app and returns its answer.</summary>
+    public static async Task<string?> SendSystemAsync(AppDescriptor target, string kind, string? payload, TimeSpan timeout)
+    {
+        var args = payload == null ? null : new[] { JsonSerializer.SerializeToElement(payload, WireJson) };
+        var result = await Apps.SendToAsync(target, "system", kind, args, timeout).ConfigureAwait(false);
+        return result is { ValueKind: JsonValueKind.String } text ? text.GetString() : null;
+    }
+
     /// <summary>The descriptor of this process's published app, or null.</summary>
     public static AppDescriptor? Published => s_server?.Descriptor;
 
@@ -204,6 +219,14 @@ public static class AppNetwork
             {
                 case "describe":
                     return new Response(true, JsonSerializer.SerializeToElement(descriptor, AppRegistry.Json), null);
+
+                case "system":
+                {
+                    if (SystemHandler is not { } handler)
+                        return new Response(false, null, "This N.E.O. does not take such messages.");
+                    var answer = await handler(request.Name ?? "", request.Args is { Length: > 0 } given ? given[0].GetString() : null).ConfigureAwait(false);
+                    return new Response(true, JsonSerializer.SerializeToElement(answer, WireJson), null);
+                }
 
                 case "read":
                 {

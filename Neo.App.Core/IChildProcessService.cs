@@ -37,6 +37,12 @@ namespace Neo.App
         /// <summary>Puts such a state into the running app. Null: no answer.</summary>
         Task<AppStateRestoredMessage?> RestoreAppStateAsync(RestoreAppStateRequest request) => Task.FromResult<AppStateRestoredMessage?>(null);
 
+        /// <summary>The window of the app has something only the host can decide: (kind, content), the answer goes back to it.</summary>
+        event Func<string, string?, Task<string?>>? AppMessageReceived { add { } remove { } }
+
+        /// <summary>Shows or hides the window of the app, or a banner over it.</summary>
+        Task SetAppWindowAsync(AppWindowMessage message) => Task.CompletedTask;
+
         /// <summary>
         /// Captures a screenshot of the child window. Returns a platform-specific image object
         /// (e.g. BitmapSource on WPF) or null if unavailable.

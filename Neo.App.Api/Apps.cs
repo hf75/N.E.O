@@ -108,12 +108,15 @@ public static class Apps
     private static async Task<JsonElement?> SendAsync(string app, string op, string name, object?[]? args)
     {
         var target = Find(app) ?? throw new AppNotFoundException(app);
-        var request = new AppNetwork.Request(op, name,
-            args?.Select(a => JsonSerializer.SerializeToElement(a, AppNetwork.WireJson)).ToArray(),
-            AppNetwork.CurrentHops);
         var timeout = op == "call"
             ? TimeSpan.FromSeconds((target.Methods.FirstOrDefault(m => m.Name == name)?.TimeoutSeconds ?? 30) + 5)
             : TimeSpan.FromSeconds(15);
+        return await SendToAsync(target, op, name, args?.Select(a => JsonSerializer.SerializeToElement(a, AppNetwork.WireJson)).ToArray(), timeout).ConfigureAwait(false);
+    }
+
+    internal static async Task<JsonElement?> SendToAsync(AppDescriptor target, string op, string name, JsonElement[]? args, TimeSpan timeout)
+    {
+        var request = new AppNetwork.Request(op, name, args, AppNetwork.CurrentHops);
 
         using var pipe = new NamedPipeClientStream(".", target.Pipe, PipeDirection.InOut, PipeOptions.Asynchronous);
         try

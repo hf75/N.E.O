@@ -158,6 +158,9 @@ namespace Neo.App
         // all of them keep the state of the running app when the change allows it.
         private readonly Neo.HotReload.HotReloadCoordinator _hotReload = new();
 
+        // Whether the last build went into the running app, or replaced it and with it what the app held.
+        private bool _lastBuildPatchedIn;
+
         private async Task<bool> DisplayCompiledDllAsync(string compiledUserControlDllPath)
         {
             // First choice: patch the running app in place. Its instance survives, and with it
@@ -170,6 +173,7 @@ namespace Neo.App
             var attempt = await _hotReload.TryAsync(compiledUserControlDllPath, request => ChildProcessService.HotReloadAsync(
                 request with { IsRepair = repair.Active, ReplayAction = repair.Active ? repair.Action : null },
                 (AppState.NuGetDlls ?? new List<string>()).Concat(AdditionalDlls).ToList()));
+            _lastBuildPatchedIn = attempt.Applied;
             if (attempt.Applied)
             {
                 _inPlaceRepair = default; // healed: PerformAutomaticRepairAsync reports it that way

@@ -80,6 +80,39 @@ internal static class TopLevelWindows
         mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
     }
 
+    /// <summary>
+    /// A real drag with the mouse, from a point of <paramref name="window"/>: only if that point really is on it.
+    /// <paramref name="whileHeld"/> runs at the end of the way, with the button still down.
+    /// </summary>
+    public static async Task DragAsync(AutomationElement window, int fromX, int fromY, int toX, int toY, Func<Task>? whileHeld = null)
+    {
+        Foreground(window);
+        var under = AutomationElement.FromPoint(new System.Windows.Point(fromX, fromY));
+        if (under == null || under.Current.ProcessId != window.Current.ProcessId)
+            throw new InvalidOperationException($"Another window lies at {fromX},{fromY} (process {under?.Current.ProcessId}); not dragging.");
+
+        SetCursorPos(fromX, fromY);
+        await Task.Delay(120);
+        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+        try
+        {
+            await Task.Delay(120);
+            const int Steps = 25;
+            for (int step = 1; step <= Steps; step++)
+            {
+                SetCursorPos(fromX + (toX - fromX) * step / Steps, fromY + (toY - fromY) * step / Steps);
+                await Task.Delay(15);
+            }
+            await Task.Delay(100);
+            if (whileHeld != null) await whileHeld();
+            await Task.Delay(350);
+        }
+        finally
+        {
+            mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+        }
+    }
+
     // The point may report a part of the target (the text in a button) or what contains it (a control
     // without a hit test). Anything else, a dialog of the same process for one, is in the way.
     private static bool IsWithin(AutomationElement inner, AutomationElement outer)

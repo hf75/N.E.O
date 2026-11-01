@@ -21,6 +21,12 @@
             </StackPanel>
         </Border>
 
+        <!-- Another program is being dragged over this one: dropping it merges the two -->
+        <Border x:Name="FusionOverlay" IsVisible="False" IsHitTestVisible="False" Background="#C01565C0" ZIndex="200">
+            <TextBlock x:Name="FusionText" Foreground="White" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap"
+                       TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,20"/>
+        </Border>
+
         <!-- One-line hint over the app, e.g. how to call N.E.O. up in a living app; goes away by itself or on click -->
         <Border x:Name="HintBanner" IsVisible="False" HorizontalAlignment="Center" VerticalAlignment="Bottom"
                 Margin="0,0,0,18" Padding="14,8" CornerRadius="16" Background="#D0202020" ZIndex="100">

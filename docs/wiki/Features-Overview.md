@@ -178,6 +178,10 @@ Switch between frameworks in **Settings**:
 
 "Give Notepad a live word count": a tool docks to the window of another program, reads it, presses its buttons, and looks like a part of it, without the program's source. Also as an exported program. See **[[Exoskeleton]]**.
 
+## Fusion
+
+Drag the window of one running app onto another: one program that does both, with the data of both. The app you dropped it on keeps running and stays in use meanwhile. If it does not work out, the dropped window comes back with everything it held. See **[[Fusion]]**.
+
 ## Web Search
 
 With an Anthropic key, generated apps can answer from the current web with their sources, as text or as typed data for tables; the AI uses this where it knows no free API. If you switch it on in the settings, Claude also looks things up while it builds. See **[[Web Search]]**.

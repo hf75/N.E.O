@@ -29,6 +29,9 @@ public sealed record HotReloadAttempt(bool Applied, string Message);
 /// </summary>
 public sealed class HotReloadCoordinator : IDisposable
 {
+    /// <summary>The names an app's parameterless UI build method may have.</summary>
+    public static IReadOnlyList<string> UiMethodNames => StateMigrationAnalyzer.RebuildMethodNames;
+
     private readonly HotReloadOptions _options;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private HotReloadSession? _session;

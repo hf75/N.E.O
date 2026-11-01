@@ -268,6 +268,21 @@ namespace Neo.App
                                     pendingHotReload.TrySetResult(Json.FromJson<HotReloadResultMessage>(env.PayloadJson));
                                 break;
 
+                            case IpcTypes.AppMessage:
+                                // Not awaited: the answer may take this loop reading further messages.
+                                if (Json.FromJson<AppMessage>(env.PayloadJson) is { } appMessage)
+                                {
+                                    var replyTo = env.CorrelationId;
+                                    _ = Dispatcher.UIThread.InvokeAsync(async () =>
+                                    {
+                                        string? answer = null;
+                                        try { if (AppMessageReceived is { } received) answer = await received(appMessage.Kind, appMessage.Payload); }
+                                        catch (Exception ex) { Debug.WriteLine($"[AppMessage] {appMessage.Kind}: {ex.Message}"); }
+                                        await SafeSendControlAsync(new IpcEnvelope(IpcTypes.AppMessageAnswer, replyTo, Json.ToJson(new AppMessageAnswer(answer))));
+                                    });
+                                }
+                                break;
+
                             case IpcTypes.AppStateCaptured:
                             case IpcTypes.AppStateRestored:
                                 if (_pendingAppState.TryRemove(env.CorrelationId, out var pendingAppState))
@@ -607,6 +622,11 @@ namespace Neo.App
                 _pendingHotReloads.TryRemove(correlationId, out _);
             }
         }
+
+        public event Func<string, string?, Task<string?>>? AppMessageReceived;
+
+        public Task SetAppWindowAsync(AppWindowMessage message) =>
+            SafeSendControlAsync(new IpcEnvelope(IpcTypes.AppWindow, "", Json.ToJson(message)));
 
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<string>> _pendingAppState = new();
 

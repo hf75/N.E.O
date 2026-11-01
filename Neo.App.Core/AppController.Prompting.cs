@@ -174,7 +174,7 @@ namespace Neo.App
                     throw new InvalidOperationException("AI agent is not configured.");
 
                 AiAgent.SetInput("SystemMessage", req.SystemMessage ?? string.Empty);
-                AiAgent.SetInput("Prompt", (req.Prompt ?? string.Empty) + _namedFilesForTheModel + _foreignProgramsForTheModel);
+                AiAgent.SetInput("Prompt", (req.Prompt ?? string.Empty) + _namedFilesForTheModel + _foreignProgramsForTheModel + _fusionForTheModel);
                 AiAgent.SetInput("History", req.History ?? string.Empty);
                 AiAgent.SetInput("JsonSchema", req.JsonSchema ?? string.Empty);
 

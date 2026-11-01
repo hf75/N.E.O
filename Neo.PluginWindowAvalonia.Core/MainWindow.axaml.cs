@@ -87,6 +87,46 @@ namespace Neo.PluginWindowAvalonia
             HintBanner.IsVisible = false;
         }
 
+        /// <summary>Another program is dragged over this one (its name), or not any more (null).</summary>
+        public void ShowFusionTarget(string? name)
+        {
+            FusionText.Text = name == null ? "" : $"Drop to merge {name} into this app";
+            FusionOverlay.IsVisible = name != null;
+        }
+
+        /// <summary>What the host wants from this window.</summary>
+        public void Apply(AppWindowMessage message)
+        {
+            if (message.Banner != null) ShowBanner(message.Banner, message.BannerColor ?? "#D0202020", message.BannerSeconds);
+            if (message.Visible == false) Hide();
+            if (message.Visible == true && !IsVisible) Show();
+            if (message.GrowWidth > 0) Grow(message.GrowWidth, message.AtLeastHeight, message.StayInPlace);
+            if (message.BringToFront) Activate();
+            if (message.Close) Close();
+        }
+
+        // It took another program in: that one's room comes on top of its own, as far as the screen goes.
+        private void Grow(double width, double atLeastHeight, bool stayInPlace)
+        {
+            var newWidth = ClientSize.Width + width;
+            var newHeight = Math.Max(ClientSize.Height, atLeastHeight);
+            if (Screens.ScreenFromPoint(Position) is { } screen)
+            {
+                var area = screen.WorkingArea;
+                var scaling = screen.Scaling;
+                var frame = FrameSize is { } outer ? outer - ClientSize : default;
+
+                var beyond = Position.X + (int)((newWidth + frame.Width) * scaling) - area.Right;
+                if (beyond > 0 && !stayInPlace)
+                    Position = new PixelPoint(Math.Max(area.X, Position.X - beyond), Position.Y);
+
+                newWidth = Math.Min(newWidth, (area.Right - Position.X) / scaling - frame.Width);
+                newHeight = Math.Min(newHeight, (area.Bottom - Position.Y) / scaling - frame.Height);
+            }
+            Width = Math.Max(ClientSize.Width, newWidth);
+            Height = Math.Max(ClientSize.Height, newHeight);
+        }
+
         // ── Heal in place: which action ran into the error, and doing it again after the fix ──
 
         private WeakReference<Avalonia.Controls.Control>? _lastClicked;
@@ -282,7 +322,7 @@ namespace Neo.PluginWindowAvalonia
             if (dynamicContent.Content is not Avalonia.Controls.UserControl control)
                 throw new InvalidOperationException("No plugin is loaded.");
 
-            var restored = image.RestoreTo(control, request.FieldPrefix);
+            var restored = image.RestoreTo(control, request.FieldPrefix, request.KeepFields);
 
             if (HotReloadRuntime.FirstMethodOf(control, request.RebuildMethods) is { } buildUi)
             {

@@ -119,6 +119,39 @@ public class AppNetworkTests : IDisposable
     }
 
     [Fact]
+    public async Task The_NEOs_behind_two_apps_can_talk_past_them()
+    {
+        var published = Publish(new SalesApp());
+        string? kind = null, content = null;
+        AppNetwork.SystemHandler = (k, c) => { kind = k; content = c; return Task.FromResult<string?>("taken"); };
+        try
+        {
+            var large = new string('x', 2_000_000);
+            var answer = await AppNetwork.SendSystemAsync(published, "offer", large, TimeSpan.FromSeconds(5));
+
+            answer.Should().Be("taken");
+            kind.Should().Be("offer");
+            content.Should().Be(large, "a whole program with its data goes this way");
+            (await AppNetwork.SendSystemAsync(published, "ping", null, TimeSpan.FromSeconds(5))).Should().Be("taken");
+            content.Should().BeNull();
+        }
+        finally
+        {
+            AppNetwork.SystemHandler = null;
+        }
+    }
+
+    [Fact]
+    public async Task Without_someone_to_answer_the_NEO_behind_an_app_says_so()
+    {
+        var published = Publish(new SalesApp());
+
+        var refused = await Assert.ThrowsAsync<AppCallException>(() => AppNetwork.SendSystemAsync(published, "offer", "x", TimeSpan.FromSeconds(5)));
+
+        refused.Message.Should().Contain("does not take such messages");
+    }
+
+    [Fact]
     public async Task Errors_reach_the_caller_as_exceptions_that_say_what_happened()
     {
         Publish(new SalesApp());

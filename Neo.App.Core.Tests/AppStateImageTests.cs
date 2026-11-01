@@ -179,6 +179,23 @@ public class AppStateImageTests
         target.currency_Amount.Should().Be(4);
     }
 
+    private class OwnField { public string _note = "mine"; public string currency__note = ""; public string _other = "mine too"; }
+    private class TheirField { public string _note = "theirs"; public string _other = "theirs too"; }
+
+    [Fact]
+    public void A_field_with_the_prefix_goes_first_and_what_the_app_had_stays_its_own()
+    {
+        var target = new OwnField();
+
+        var restored = AppStateImage.Capture(new TheirField()).RestoreTo(target, "currency", ["_note", "_other", "currency__unused"]);
+
+        target.currency__note.Should().Be("theirs", "this is where the model put it");
+        target._note.Should().Be("mine");
+        target._other.Should().Be("mine too", "no field was made for it: the value does not take the place of this app's own");
+        restored.Values.Should().Be(1);
+        restored.Failed.Should().ContainSingle().Which.Should().Contain("_other").And.Contain("its own");
+    }
+
     private class WithProperty { public int Amount { get; set; } }
     private class WithPrefixedProperty { public int currency_Amount { get; set; } }
 

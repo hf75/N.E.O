@@ -147,12 +147,17 @@ namespace Neo.PluginWindowAvalonia
             MainWin.HostToggleRequested += () => _ = SafeSendAsync(new IpcEnvelope(IpcTypes.ToggleHostWindow, "", "{}"));
             MainWin.TrackUserActions();
             MainWin.Hint = GetArgValue(args, "--hint");
+            if (isStandalone && !hostOptions.EnableMcpHostFeatures)
+                StartFusion();
 
             lifetime.MainWindow = MainWin;
 
             // Opened: Hier existiert sicher ein Native Handle
             MainWin.Opened += async (_, __) =>
             {
+                // A window shown again after Hide opens again; there is one connection to the host.
+                if (_client != null) return;
+
                 // Pipe-Name aus Args
                 var pipeName = GetPipeNameFromArgs(lifetime.Args ?? Array.Empty<string>());
                 if (string.IsNullOrWhiteSpace(pipeName))
@@ -369,6 +374,7 @@ namespace Neo.PluginWindowAvalonia
                                     managedAssembliesByFullName: managedByFull,
                                     nativeLibrariesByBasename: nativeByBase
                                 );
+                                BackFromTheDrop();
                                 if (!_stayInactive)
                                     MainWin.Activate();
                             });
@@ -464,7 +470,7 @@ namespace Neo.PluginWindowAvalonia
                                         MainWin.Height = dockH;
                                     }
 
-                                    if (!MainWin.IsVisible)
+                                    if (!MainWin.IsVisible && !_droppedAway)
                                         MainWin.Show();
                                 }
                             });
@@ -483,7 +489,7 @@ namespace Neo.PluginWindowAvalonia
                                 MainWin.Width = bounds.Width;
                                 MainWin.Height = bounds.Height;
 
-                                if (!MainWin.IsVisible)
+                                if (!MainWin.IsVisible && !_droppedAway)
                                     MainWin.Show();
 
                                 if (MainWin.HasEverLoadedControl)
@@ -529,6 +535,7 @@ namespace Neo.PluginWindowAvalonia
                             var details = await Dispatcher.UIThread.InvokeAsync(() =>
                             {
                                 var d = MainWin.HandleHotReload(request);
+                                BackFromTheDrop();
                                 _repairPending = false;
                                 if (request.IsRepair)
                                 {
@@ -555,6 +562,24 @@ namespace Neo.PluginWindowAvalonia
                         }
 
                         await SafeSendAsync(new IpcEnvelope(IpcTypes.HotReloadResult, env.CorrelationId, Json.ToJson(result)));
+                        break;
+                    }
+
+                case IpcTypes.AppMessageAnswer:
+                    {
+                        if (_pendingAppMessages.TryRemove(env.CorrelationId, out var waiting))
+                            waiting.TrySetResult(Json.FromJson<AppMessageAnswer>(env.PayloadJson)?.Answer);
+                        break;
+                    }
+
+                case IpcTypes.AppWindow:
+                    {
+                        if (Json.FromJson<AppWindowMessage>(env.PayloadJson) is { } windowMessage)
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                if (windowMessage.Visible == true) _droppedAway = false;
+                                MainWin.Apply(windowMessage);
+                            });
                         break;
                     }
 
@@ -936,6 +961,65 @@ namespace Neo.PluginWindowAvalonia
                 if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
                     return args[i + 1];
             return null;
+        }
+
+        // ── Fusion: this window is dragged onto another app, or another app onto this one ──
+
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<string?>> _pendingAppMessages = new();
+        private FusionDrag? _fusionDrag;
+
+        // Dropped onto another app. A host brings its window back whenever it comes to the front: not this one.
+        private bool _droppedAway;
+
+        private void StartFusion()
+        {
+            Neo.App.AppNetwork.SystemHandler = HandleSystemMessageAsync;
+            _fusionDrag = new FusionDrag(MainWin, () => !DockedToAnotherProgram && MainWin.GetLoadedUserControl() != null, DroppedOnAnotherApp);
+        }
+
+        private void DroppedOnAnotherApp(Neo.App.AppDescriptor target, PixelPoint cameFrom)
+        {
+            // The window goes at once; if the merge does not happen, the host brings it back to where it was.
+            _droppedAway = true;
+            MainWin.Hide();
+            MainWin.Position = cameFrom;
+            var self = Neo.App.AppNetwork.Published;
+            var drop = new FusionDropMessage(target.Id, target.Name, self?.Id ?? "", self?.Name ?? "", MainWin.ClientSize.Width, MainWin.ClientSize.Height);
+            _ = AskHostAsync(FusionMessages.Drop, Json.ToJson(drop));
+        }
+
+        // New code of its own: the user is working on this app again.
+        private void BackFromTheDrop()
+        {
+            if (!_droppedAway) return;
+            _droppedAway = false;
+            MainWin.Show();
+        }
+
+        private async Task<string?> HandleSystemMessageAsync(string kind, string? payload)
+        {
+            if (kind != FusionMessages.Hover)
+                return await AskHostAsync(kind, payload);
+
+            var hover = payload == null ? null : Json.FromJson<FusionHoverMessage>(payload);
+            Dispatcher.UIThread.Post(() => MainWin.ShowFusionTarget(hover?.Name));
+            return "ok";
+        }
+
+        private async Task<string?> AskHostAsync(string kind, string? payload)
+        {
+            var correlationId = Guid.NewGuid().ToString("N");
+            var answer = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pendingAppMessages[correlationId] = answer;
+            try
+            {
+                await SafeSendAsync(new IpcEnvelope(IpcTypes.AppMessage, correlationId, Json.ToJson(new AppMessage(kind, payload))));
+                return await Task.WhenAny(answer.Task, Task.Delay(TimeSpan.FromSeconds(15))) == answer.Task ? await answer.Task : null;
+            }
+            finally
+            {
+                _pendingAppMessages.TryRemove(correlationId, out _);
+            }
         }
 
         // A tool that docked itself to another program (ForeignApp.Attach, compiled into the app) follows that

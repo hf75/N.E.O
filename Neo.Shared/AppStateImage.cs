@@ -89,7 +89,8 @@ namespace Neo.Shared
         /// filled, not replaced: its UI may be bound to that very object.
         /// </summary>
         /// <param name="prefix">Where the app got the fields from another program: a field that was taken may carry this prefix.</param>
-        public Restored RestoreTo(object app, string? prefix = null)
+        /// <param name="keep">Fields the app had before it took anything in: they stay its own, whatever comes in under their name.</param>
+        public Restored RestoreTo(object app, string? prefix = null, IReadOnlyCollection<string>? keep = null)
         {
             var failed = new List<string>();
             var plugin = app.GetType().Assembly;
@@ -102,6 +103,11 @@ namespace Neo.Shared
                 if (field == null)
                 {
                     failed.Add($"{name}: this app has no such field");
+                    continue;
+                }
+                if (keep != null && keep.Contains(field.Name))
+                {
+                    failed.Add($"{name}: this app has its own");
                     continue;
                 }
                 if (!IsData(field.FieldType, plugin, []))
@@ -150,23 +156,26 @@ namespace Neo.Shared
             }
         }
 
+        // Under its prefix first: then the field without it, if there is one, belongs to the app that took this one in.
         private static IEnumerable<string> NamesFor(string name, string? prefix)
         {
-            yield return name;
-            if (string.IsNullOrEmpty(prefix)) yield break;
-
-            // An auto-property is stored under <Name>k__BackingField.
-            const string Backing = "k__BackingField";
-            if (name.StartsWith('<') && name.EndsWith(">" + Backing, StringComparison.Ordinal))
+            if (!string.IsNullOrEmpty(prefix))
             {
-                var property = name[1..^(Backing.Length + 1)];
-                yield return $"<{prefix}_{property}>{Backing}";
-                yield break;
+                // An auto-property is stored under <Name>k__BackingField.
+                const string Backing = "k__BackingField";
+                if (name.StartsWith('<') && name.EndsWith(">" + Backing, StringComparison.Ordinal))
+                {
+                    var property = name[1..^(Backing.Length + 1)];
+                    yield return $"<{prefix}_{property}>{Backing}";
+                }
+                else
+                {
+                    yield return $"{prefix}_{name}";                  // currency__rates
+                    yield return $"{prefix}_{name.TrimStart('_')}";   // currency_rates
+                    if (name.StartsWith('_')) yield return $"_{prefix}{name}";  // _currency_rates
+                }
             }
-
-            yield return $"{prefix}_{name}";                  // currency__rates
-            yield return $"{prefix}_{name.TrimStart('_')}";   // currency_rates
-            if (name.StartsWith('_')) yield return $"_{prefix}{name}";  // _currency_rates
+            yield return name;
         }
 
         private static bool IsData(Type type, Assembly plugin, HashSet<Type> seen)

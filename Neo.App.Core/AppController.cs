@@ -306,6 +306,7 @@ namespace Neo.App
             ChildProcessService = _view.CreateChildProcessService();
             ChildProcessService.ChildProcessCrashed += HandleChildProcessCrashed;
             ChildProcessService.ChildLogReceived += (log) => Debug.WriteLine($"[Child Log] {log.Message}");
+            ChildProcessService.AppMessageReceived += HandleAppMessageAsync;
 
             RecreatePromptToDllSession(preserveState: false);
 

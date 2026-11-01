@@ -110,7 +110,44 @@ namespace Neo.IPC
         public const string AppStateCaptured = "AppStateCaptured";
         public const string RestoreAppState = "RestoreAppState";
         public const string AppStateRestored = "AppStateRestored";
+
+        // ── The window of the app and its host about things beyond the app ──
+        /// <summary>Child → host: something only the host can decide; answered with <see cref="AppMessageAnswer"/>.</summary>
+        public const string AppMessage = "AppMessage";
+        public const string AppMessageAnswer = "AppMessageAnswer";
+        /// <summary>Host → child: show or hide the window, show a banner over the app.</summary>
+        public const string AppWindow = "AppWindow";
     }
+
+    /// <summary>What a program does to another one when it is dragged onto it (see Fusion in the docs).</summary>
+    public static class FusionMessages
+    {
+        /// <summary>To the N.E.O. behind the app under the dragged window: show that a drop would merge. Its window answers itself.</summary>
+        public const string Hover = "fusion-hover";
+        /// <summary>From the dragged window to its own host: it was dropped there.</summary>
+        public const string Drop = "fusion-drop";
+        /// <summary>To the N.E.O. behind the target: here is the program, take it over?</summary>
+        public const string Offer = "fusion-offer";
+        /// <summary>Back to the N.E.O. of the dropped program: it went well, or it did not.</summary>
+        public const string Result = "fusion-result";
+    }
+
+    /// <param name="Name">The name of the program dragged over this one; null: it left again.</param>
+    public record FusionHoverMessage(string? Name);
+
+    public record FusionDropMessage(string TargetId, string TargetName, string SourceId, string SourceName, double Width = 0, double Height = 0);
+
+    public record AppMessage(string Kind, string? Payload);
+
+    public record AppMessageAnswer(string? Answer);
+
+    /// <param name="Visible">True, false: show or hide the window. Null: leave it.</param>
+    /// <param name="Close">Close the window, which ends the app.</param>
+    /// <param name="BringToFront">Bring the window to the front.</param>
+    /// <param name="Banner">One line over the app; null: leave the banner as it is.</param>
+    /// <param name="BannerColor">Its background, like #D01F7A3F.</param>
+    /// <param name="BannerSeconds">It goes away after this long; 0: it stays.</param>
+    public record AppWindowMessage(bool? Visible = null, bool Close = false, bool BringToFront = false, string? Banner = null, string? BannerColor = null, int BannerSeconds = 0, double GrowWidth = 0, double AtLeastHeight = 0, bool StayInPlace = false);
 
     /// <param name="Image">The app's state as JSON (<c>Neo.Shared.AppStateImage</c>); null: nothing is loaded.</param>
     /// <param name="Values">How many values go along.</param>
@@ -122,7 +159,7 @@ namespace Neo.IPC
     /// <param name="RebuildMethods">The names an app's UI build method may have; the first it has is called, so that the UI shows the values.</param>
     /// <param name="FieldPrefix">The state comes from another program: its fields may carry this prefix here.</param>
     /// <param name="RestoreUi">Also put back what the user did to the UI: only makes sense in the same app.</param>
-    public record RestoreAppStateRequest(string Image, List<string> RebuildMethods, string? FieldPrefix = null, bool RestoreUi = true);
+    public record RestoreAppStateRequest(string Image, List<string> RebuildMethods, string? FieldPrefix = null, bool RestoreUi = true, List<string>? KeepFields = null);
 
     /// <param name="Failed">Values that could not go in, with the reason.</param>
     public record AppStateRestoredMessage(bool Success, int Values, int UiValues, List<string> Failed, string? Error = null);
