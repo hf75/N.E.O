@@ -46,6 +46,8 @@ namespace Neo.PluginWindowWPF
         public static int Run(PluginHostOptions? options = null)
         {
             Options = options ?? new PluginHostOptions();
+            // Windows-1252 and friends: tools read such files, and .NET knows them only after this.
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
             return new App().Run();
         }
     }

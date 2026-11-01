@@ -60,11 +60,11 @@ public class ExportIntegrationTests : IDisposable
         try { if (Directory.Exists(_exportRoot)) Directory.Delete(_exportRoot, recursive: true); } catch { }
     }
 
-    private async Task<string> ExportAsync(string appName, bool mcpMode)
+    private async Task<string> ExportAsync(string appName, bool mcpMode, string source = TodoSource)
     {
         var pipeline = new CompilationPipeline();
         var result = await pipeline.ExportAsync(
-            new[] { TodoSource }, appName, _exportRoot, platform: "windows", nugetPackages: null, mcpMode: mcpMode);
+            new[] { source }, appName, _exportRoot, platform: "windows", nugetPackages: null, mcpMode: mcpMode);
 
         result.Success.Should().BeTrue("export should succeed, errors: " + string.Join(" | ", result.Errors));
         File.Exists(result.ExePath).Should().BeTrue();
@@ -122,6 +122,39 @@ public class ExportIntegrationTests : IDisposable
         try
         {
             process.WaitForExit(5_000).Should().BeFalse("a healthy GUI app keeps running");
+        }
+        finally
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "UiSmoke")]
+    public async Task Plain_export_knows_the_old_code_pages()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        const string source = """
+            using Avalonia.Controls;
+
+            public class DynamicUserControl : UserControl
+            {
+                public DynamicUserControl()
+                {
+                    // A tool that reads a German bank export needs this, and .NET knows it only when told.
+                    try { _ = System.Text.Encoding.GetEncoding(1252); }
+                    catch { System.Environment.Exit(42); }
+                    Content = new TextBlock { Text = "ok" };
+                }
+            }
+            """;
+
+        var exe = await ExportAsync("smoke-codepage", mcpMode: false, source);
+        using var process = Process.Start(new ProcessStartInfo { FileName = exe, UseShellExecute = false })!;
+        try
+        {
+            process.WaitForExit(5_000).Should().BeFalse("it ends with exit code 42 if the code page is unknown");
         }
         finally
         {

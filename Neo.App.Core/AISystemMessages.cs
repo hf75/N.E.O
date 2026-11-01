@@ -40,8 +40,14 @@ namespace Neo.App
             if (runningApps != null && !useReact)
                 sp += AppNetworkGuidance.RunningApps(runningApps);
 
-            return sp;
+            return sp + QuickToolRule;
         }
+
+        /// <summary>
+        /// Small tools built fast are the goal. Without this a model writes far more than was asked for: in a
+        /// measurement a tool took 15 s instead of 10 s and about 80 % more output, and the extra was polish.
+        /// </summary>
+        public const string QuickToolRule = "\n\nThe user is waiting, so be quick. No extra features and no polishing unless the user asks for them, but give every input a visible label.";
 
         public static string GetPatchReviewerSystemMessage()
             => AssemblyForgeSystemMessages.GetPatchReviewerSystemMessage();

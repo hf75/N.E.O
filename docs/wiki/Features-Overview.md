@@ -78,6 +78,8 @@ From left to right:
 - **Iterate**: Start simple, then add features in follow-up prompts
 - **Reference elements**: "Make the submit button blue" — the AI understands context from previous code
 - **Request NuGet packages**: "Create a chart using LiveCharts2" — the AI will include the right packages
+- **Name your file with its full path**: "Read C:\Data\export.csv and show the sum per category" — N.E.O. shows the AI the start of the file (up to 2000 characters), so the tool fits its real separator, columns and encoding. The chat says which file went out; it stays out of the history, and binary files are passed over
+- **Ask for the looks**: the AI builds what you asked for, quickly and plainly. If you want more, say so: "with a nice design and a chart"
 
 ### Response Types
 

@@ -4,6 +4,7 @@ using System.Windows.Automation;
 using FluentAssertions;
 using Neo.App;
 using Xunit;
+using static Neo.PluginWindow.SmokeTests.RealHost;
 
 namespace Neo.PluginWindow.SmokeTests;
 
@@ -20,91 +21,9 @@ public class WebSearchSmokeTests : IDisposable
     private const string PageTitle = "The page it found";
     private const string PageUrl = "https://example.test/found";
 
-    private static string WithContent(string host, string body) => host == "Neo.App.Avalonia"
-        ? $$"""
-            using System.Collections.Generic;
-            using Avalonia.Controls;
-            using Neo.App;
+    private const string LaunchRecord = "public record Launch(string Name, int Year);";
 
-            public class DynamicUserControl : UserControl
-            {
-                private readonly TextBlock _text = new TextBlock { Text = "working" };
-                public DynamicUserControl() { Content = _text; Loaded += async (_, _) => { {{body}} }; }
-                private void Show(string text) => _text.Text = text;
-            }
-            """
-        : $$"""
-            using System.Collections.Generic;
-            using System.Windows.Controls;
-            using Neo.App;
-
-            public class DynamicUserControl : UserControl
-            {
-                private readonly TextBlock _text = new TextBlock { Text = "working" };
-                public DynamicUserControl() { Content = _text; Loaded += async (_, _) => { {{body}} }; }
-                private void Show(string text) => _text.Text = text;
-            }
-            """;
-
-    private const string Counter = "public record Launch(string Name, int Year);";
-
-    private Process Start(string host, StandInClaudeApi api, object settings)
-    {
-        Directory.CreateDirectory(_settings);
-        File.WriteAllText(Path.Combine(_settings, "settings.json"), JsonSerializer.Serialize(settings));
-
-        var startInfo = new ProcessStartInfo(TestEnvironment.HostExe(host)) { UseShellExecute = false };
-        startInfo.WorkingDirectory = Path.GetDirectoryName(startInfo.FileName)!;
-        startInfo.Environment[SettingsService.FolderEnvironmentVariable] = _settings;
-        startInfo.Environment["NEO_ANTHROPIC_BASE_URL"] = api.BaseUrl;
-        startInfo.Environment["ANTHROPIC_API_KEY"] = "not-a-real-key";
-        startInfo.Environment.Remove("OPENAI_API_KEY");
-        startInfo.Environment.Remove("GEMINI_API_KEY");
-        return Process.Start(startInfo)!;
-    }
-
-    private static string ChildProcessName(string host) => host == "Neo.App.Avalonia" ? "Neo.PluginWindowAvalonia" : "Neo.PluginWindowWPF";
-
-    private static async Task<AutomationElement> SendPromptAsync(Process host, string prompt)
-    {
-        var window = await WaitForAsync(() => TopLevelWindows.Find(w => w.Pid == host.Id && w.Title.StartsWith("N.E.O")), 60, "the N.E.O. window");
-        var box = await WaitForAsync(() => window.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "txtPrompt")) is { Current.IsEnabled: true } found ? found : null, 60, "the prompt box");
-
-        TopLevelWindows.Click(window, box);
-        ((ValuePattern)box.GetCurrentPattern(ValuePattern.Pattern)).SetValue(prompt);
-        await Task.Delay(200);
-        TopLevelWindows.Keys(window, "{ENTER}");
-        return window;
-    }
-
-    private static IEnumerable<string> TextsIn(AutomationElement window) =>
-        window.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text))
-            .Cast<AutomationElement>().Select(e => e.Current.Name).Where(n => n.Length > 0);
-
-    /// <summary>A text in the window of the host's app, or in the host itself where the app sits inside it.</summary>
-    private static async Task<string> WaitForTextAsync(Process host, string childProcess, Func<string, bool> wanted, int seconds, string what, StandInClaudeApi api)
-    {
-        string? Probe()
-        {
-            foreach (var p in Process.GetProcessesByName(childProcess))
-            {
-                if (TopLevelWindows.ParentProcessId(p.Id) == host.Id && TopLevelWindows.Find(w => w.Pid == p.Id) is { } window
-                    && TextsIn(window).FirstOrDefault(wanted) is { } text)
-                    return text;
-            }
-            return TopLevelWindows.Find(w => w.Pid == host.Id && w.Title.StartsWith("N.E.O")) is { } neo ? TextsIn(neo).FirstOrDefault(wanted) : null;
-        }
-
-        try
-        {
-            return await WaitForAsync(Probe, seconds, what);
-        }
-        catch (TimeoutException)
-        {
-            var neo = TopLevelWindows.Find(w => w.Pid == host.Id && w.Title.StartsWith("N.E.O"));
-            throw new TimeoutException($"not found: {what}. {api.Requests.Count} request(s) reached the API. N.E.O. says: " + (neo == null ? "(no window)" : string.Join(" | ", TextsIn(neo))));
-        }
-    }
+    private Process Start(string host, StandInClaudeApi api, object settings) => RealHost.Start(host, api, _settings, settings);
 
     [Theory]
     [InlineData("Neo.App")]
@@ -112,7 +31,7 @@ public class WebSearchSmokeTests : IDisposable
     public async Task A_generated_app_asks_the_web_and_shows_the_answer_with_its_source(string hostProject)
     {
         using var api = new StandInClaudeApi();
-        api.AnswerWithCode(WithContent(hostProject, """
+        api.AnswerWithCode(Tool(hostProject, """
             try
             {
                 var answer = await AIWebSearch.AskAsync("How is the weather?");
@@ -120,7 +39,7 @@ public class WebSearchSmokeTests : IDisposable
                 Show("ANSWER " + answer.Text + " FROM " + answer.Sources[0].Title + " AT " + answer.Sources[0].Url + " DATA " + data.Data[0].Name + data.Data[0].Year + " SOURCES " + data.Sources.Count);
             }
             catch (System.Exception ex) { Show("ANSWER failed: " + ex); }
-            """) + Counter);
+            """) + LaunchRecord);
         api.AnswerAfterSearching("weather today", PageTitle, PageUrl, "Sunny in the test.");
         api.AnswerAfterSearching("next launches", PageTitle, PageUrl, $$"""{"result":[{"name":"Ariane","year":2026}],"usedPages":["{{PageUrl}}"]}""", cited: false);
 
@@ -158,7 +77,7 @@ public class WebSearchSmokeTests : IDisposable
     public async Task Claude_looks_something_up_while_building_and_the_user_reads_what(string hostProject)
     {
         using var api = new StandInClaudeApi();
-        api.AnswerWithCodeAfterSearching("widget api docs", PageTitle, PageUrl, WithContent(hostProject, """Show("BUILT AFTER SEARCH");"""));
+        api.AnswerWithCodeAfterSearching("widget api docs", PageTitle, PageUrl, Tool(hostProject, """Show("BUILT AFTER SEARCH");"""));
 
         using var host = Start(hostProject, api, new { UseAvalonia = hostProject == "Neo.App.Avalonia", ClaudeModel = "stand-in", ClaudeEffort = "low", AcceptAutomatic = true, ClaudeWebSearch = true });
 
@@ -195,7 +114,7 @@ public class WebSearchSmokeTests : IDisposable
     {
         const string host = "Neo.App.Avalonia";
         using var api = new StandInClaudeApi();
-        api.AnswerWithCode(WithContent(host, """Show("BUILT WITHOUT A SEARCH");"""));
+        api.AnswerWithCode(Tool(host, """Show("BUILT WITHOUT A SEARCH");"""));
 
         using var process = Start(host, api, new { UseAvalonia = true, ClaudeModel = "stand-in", ClaudeEffort = "low", AcceptAutomatic = true, ClaudeWebSearch = true });
 
@@ -273,7 +192,7 @@ public class WebSearchSmokeTests : IDisposable
     {
         const string host = "Neo.App.Avalonia";
         using var api = new StandInClaudeApi { SearchSwitchedOff = switchedOff, ModelsCannotSearch = !switchedOff };
-        api.AnswerWithCode(WithContent(host, """Show("BUILT WITHOUT SEARCH");"""));
+        api.AnswerWithCode(Tool(host, """Show("BUILT WITHOUT SEARCH");"""));
 
         using var process = Start(host, api, new { UseAvalonia = true, ClaudeModel = "stand-in", ClaudeEffort = "low", AcceptAutomatic = true, ClaudeWebSearch = true });
 
@@ -342,17 +261,6 @@ public class WebSearchSmokeTests : IDisposable
             try { if (!host.HasExited) host.Kill(entireProcessTree: true); } catch { }
             TopLevelWindows.KillChildrenOf(host.Id);
         }
-    }
-
-    private static async Task<T> WaitForAsync<T>(Func<T?> probe, int seconds, string what) where T : class
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed.TotalSeconds < seconds)
-        {
-            try { if (probe() is { } found) return found; } catch { }
-            await Task.Delay(200);
-        }
-        throw new TimeoutException("not found: " + what);
     }
 
     public void Dispose()

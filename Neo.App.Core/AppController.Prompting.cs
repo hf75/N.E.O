@@ -81,6 +81,9 @@ namespace Neo.App
             }
         }
 
+        // The start of the files the current prompt names, added to what the model reads and kept out of the history.
+        private string _namedFilesForTheModel = string.Empty;
+
         // How often Claude may search in one try at the code.
         private const int WebSearchesPerTry = 3;
 
@@ -165,7 +168,7 @@ namespace Neo.App
                     throw new InvalidOperationException("AI agent is not configured.");
 
                 AiAgent.SetInput("SystemMessage", req.SystemMessage ?? string.Empty);
-                AiAgent.SetInput("Prompt", req.Prompt ?? string.Empty);
+                AiAgent.SetInput("Prompt", (req.Prompt ?? string.Empty) + _namedFilesForTheModel);
                 AiAgent.SetInput("History", req.History ?? string.Empty);
                 AiAgent.SetInput("JsonSchema", req.JsonSchema ?? string.Empty);
 
@@ -443,6 +446,12 @@ namespace Neo.App
             _webSearches.Clear();
             _webSources.Clear();
             _webSearchProblem = null;
+
+            // Off the UI thread: a named path can lie on a network drive that takes its time to answer.
+            var namedFiles = await Task.Run(() => NamedFiles.Find(originalPrompt), cancellationToken);
+            _namedFilesForTheModel = NamedFiles.ForTheModel(namedFiles);
+            if (namedFiles.Count > 0)
+                Logger.LogMessage("The AI sees the start of " + string.Join(", ", namedFiles.Select(f => f.Path)) + ", so that the tool fits the file.", BubbleType.Info);
 
             AssemblyForgeReviewCallback? reviewCallback = null;
             if (showResultInChild)

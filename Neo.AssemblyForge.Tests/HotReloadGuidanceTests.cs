@@ -18,6 +18,18 @@ public class HotReloadGuidanceTests
         message.Should().Contain("InitializeComponents()", "the desktop base code builds its UI there");
     }
 
+    [Theory]
+    [InlineData(AssemblyForgeUiFramework.Avalonia)]
+    [InlineData(AssemblyForgeUiFramework.Wpf)]
+    public void UserControl_prompts_warn_about_looking_up_controls_by_name(AssemblyForgeUiFramework framework)
+    {
+        // Models write this to reach controls the UI method rebuilds. It finds nothing and throws nothing:
+        // a countdown tool showed an empty window.
+        var message = AssemblyForgeSystemMessages.GetSystemMessage(framework, useReact: false, usePython: false);
+
+        message.Should().Contain("FindControl").And.Contain("FindName").And.Contain("null");
+    }
+
     [Fact]
     public void Prompts_without_a_patched_UserControl_do_not_get_the_rules()
     {

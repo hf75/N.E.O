@@ -60,6 +60,7 @@ The system prompts of the desktop hosts and the MCP server teach these rules (`N
 
 - Build the complete UI in one parameterless method (`BuildUi()`, or `InitializeComponents()` in the desktop templates) that the constructor calls. It must be re-runnable: create all controls in it, never clear or reload data in it.
 - Keep everything the user did or loaded in **fields** (loaded data, the path of an opened file, lists, the selection) — fields survive, controls are rebuilt.
+- To reach a control later, keep it in a field that the UI method assigns. `FindControl` and `FindName` silently return null for controls created in code.
 - One-time set-up — timers, subscriptions to objects held in fields, background work — belongs in the constructor. Keep timers in fields. (A UI method that subscribes to such objects anyway is cleaned up after a rebuild, see above — the constructor is still the clearer place.)
 - Keep names and types of existing fields and methods stable; add instead of renaming.
 - Optional: `void OnHotReloaded()` is called after every live update.

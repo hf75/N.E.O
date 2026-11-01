@@ -384,6 +384,8 @@ namespace {{ExportHostNamespace}}
             TaskScheduler.UnobservedTaskException += (s, e) => { e.SetObserved(); };
             AppDomain.CurrentDomain.UnhandledException += (s, e) => { };
 
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
             // Preload all DLLs from the app directory BEFORE any Avalonia / MCP types are touched.
             string baseDir = AppContext.BaseDirectory;
             foreach (string dll in Directory.EnumerateFiles(baseDir, "*.dll"))

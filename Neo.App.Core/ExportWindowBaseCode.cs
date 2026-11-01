@@ -131,6 +131,8 @@ namespace Neo.App
             // Handler Nr. 2: Für alle anderen unbehandelten Exceptions (letzte Rettung)
             AppDomain.CurrentDomain.UnhandledException += AppDomain_UnhandledException;
 
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
             PreloadAssemblies();
 
             App app = new App();
@@ -258,6 +260,8 @@ namespace Neo.App
                 // Globale Exception-Handler
                 TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
                 AppDomain.CurrentDomain.UnhandledException += AppDomain_UnhandledException;
+
+                System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
                 // ZUERST: alles aus dem EXE-Verzeichnis laden
                 PreloadAssemblies();

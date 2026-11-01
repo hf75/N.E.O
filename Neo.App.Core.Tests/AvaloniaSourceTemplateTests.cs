@@ -32,6 +32,14 @@ public class AvaloniaSourceTemplateTests
         errors.Should().BeEmpty();
     }
 
+    [Fact]
+    public void Exported_programs_know_the_old_code_pages()
+    {
+        // In the app window the plugin host registers them; an exported program runs without it.
+        ExportWindowBaseCode.CreateBaseCodeForExportAvalonia("Template test").Should().Contain("CodePagesEncodingProvider");
+        ExportWindowBaseCode.CreateBaseCodeForExport("Template test").Should().Contain("CodePagesEncodingProvider");
+    }
+
     private static List<string> Compile(OutputKind kind, params string[] sources)
     {
         var avaloniaDir = PluginWindowBinDir;
