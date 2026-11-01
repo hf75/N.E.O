@@ -456,7 +456,9 @@ namespace Neo.App
             var parentHwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             if (!RegisterHotKey(parentHwnd, HOTKEY_ID_FULLSCREEN, modifiers, virtualKey))
             {
-                MessageBox.Show("Could not register global hotkey Ctrl+Shift+F. It may already be in use by another application.");
+                // Normal with a second N.E.O. open, and no reason to stop the start: a dialog here keeps the
+                // prompt locked (and a living app unloaded) until someone clicks it away.
+                _appController.Logger.LogMessage("Ctrl+Shift+F (full screen) is in use by another program or another N.E.O., so it does nothing here. Ctrl+2 still switches the view.", BubbleType.Info);
             }
         }
 

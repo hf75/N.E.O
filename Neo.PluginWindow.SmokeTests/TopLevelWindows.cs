@@ -11,8 +11,8 @@ namespace Neo.PluginWindow.SmokeTests;
 /// children, and scanning the root by process id trips over processes the test cannot open.
 ///
 /// <para>Clicks and keystrokes go out only when the target window really is in front and the point
-/// under the mouse belongs to its process; otherwise the step fails. Something else on the desktop
-/// (a dialog of another app, a firewall prompt) must never receive a test's input.</para>
+/// under the mouse belongs to the target; otherwise the step fails. Something else on the desktop
+/// (a dialog of another app or of the same one, a firewall prompt) must never receive a test's input.</para>
 /// </summary>
 internal static class TopLevelWindows
 {
@@ -72,10 +72,21 @@ internal static class TopLevelWindows
         var under = AutomationElement.FromPoint(point);
         if (under == null || under.Current.ProcessId != window.Current.ProcessId)
             throw new InvalidOperationException($"Another window covers '{element.Current.Name}' (process {under?.Current.ProcessId}); not clicking.");
+        if (!IsWithin(under, element) && !IsWithin(element, under))
+            throw new InvalidOperationException($"'{under.Current.Name}' ({under.Current.ControlType.ProgrammaticName}) lies over '{element.Current.Name}'; not clicking.");
         SetCursorPos((int)point.X, (int)point.Y);
         Thread.Sleep(80);
         mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
         mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    }
+
+    // The point may report a part of the target (the text in a button) or what contains it (a control
+    // without a hit test). Anything else, a dialog of the same process for one, is in the way.
+    private static bool IsWithin(AutomationElement inner, AutomationElement outer)
+    {
+        for (var e = inner; e != null; e = TreeWalker.RawViewWalker.GetParent(e))
+            if (Automation.Compare(e, outer)) return true;
+        return false;
     }
 
     /// <summary>Keystrokes (SendKeys syntax) into <paramref name="window"/> — only while it is in front.</summary>

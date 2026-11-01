@@ -60,7 +60,7 @@ Normally the next prompt patches the running app ([[Hot Reload]]). When that is 
 
 ## Hotkey Ctrl+Shift+F Not Working (WPF Host Only)
 
-**Cause:** Another application has registered the same global hotkey. This only affects the WPF host which uses a Windows global hotkey.
+**Cause:** Another application, or a second N.E.O., has registered the same global hotkey. This only affects the WPF host which uses a Windows global hotkey. N.E.O. says so in the chat when it starts.
 
 **Fix:** Close the conflicting application or use the toolbar/Ctrl+2 to switch view modes instead.
 
