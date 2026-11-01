@@ -68,6 +68,7 @@ public sealed class AssemblyForgeSession
 
         var allPackagesThisRun = new List<string>();
         var allPackagesThisRunSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        bool sentBackUnfinishedPatch = false;
 
         for (int attempt = 1; attempt <= Math.Max(1, _pipelineOptions.MaxAttempts); attempt++)
         {
@@ -262,6 +263,26 @@ public sealed class AssemblyForgeSession
                         additionalDllPaths: _workspace.AdditionalReferenceDllPaths,
                         assemblyName: _workspace.AssemblyName,
                         cancellationToken: cancellationToken);
+                }
+
+                // The model sometimes stops before the hunk that uses what it wrote: the patch applies, it
+                // compiles, and the app does nothing new. It gets to finish that once, if a try is left.
+                if (!string.IsNullOrWhiteSpace(structuredResponse.Patch) && !sentBackUnfinishedPatch && attempt < _pipelineOptions.MaxAttempts)
+                {
+                    var unused = CodeValidators.NewMethodsNothingCalls(reviewBaseCode, codeToTest, codesToCompile);
+                    if (unused.Count > 0)
+                    {
+                        sentBackUnfinishedPatch = true;
+                        baseCodeForPatch = codeToTest;
+                        historyForModel = string.Empty;
+                        lastErrorForModel = State.LastErrorMessage ?? string.Empty;
+                        currentPrompt = BuildDiffFirstPrompt(
+                            userPrompt: originalPrompt + "\n\n" +
+                                $"Your previous PATCH was applied: the file above already contains it. But nothing calls {string.Join(", ", unused)}, so the app does nothing new yet. Return a patch that finishes the task, starting from the file above.",
+                            currentCode: baseCodeForPatch,
+                            mainFilePath: Options.MainFilePath);
+                        continue;
+                    }
                 }
 
                 structuredResponse.Patch = UnifiedDiffGenerator.CreatePatch(

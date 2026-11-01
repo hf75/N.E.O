@@ -35,6 +35,14 @@
 
 **Avalonia apps written for an older N.E.O.:** N.E.O. ships Avalonia 12. Code that was generated for Avalonia 11 can use APIs that no longer exist (`CheckBox.Checked`, `OpenFileDialog`, `TextBox.Watermark`, `SystemDecorations`, …). The old package versions stored in a project are moved to the shipped version automatically; for the code, just ask the AI to fix the compiler errors — its prompt lists the changed APIs.
 
+## The AI says it added a feature, but the app looks the same
+
+**Cause:** The AI wrote the new code and forgot to use it, for example a method that draws a chart, with no line that calls it. It compiles, and hot reload reports success.
+
+**What happens:** When a patch adds a private method nothing refers to, N.E.O. sends it back to the AI once to finish it. That takes a few seconds longer, and you only see the result.
+
+**If it still happens:** Say so in the next prompt ("the chart does not show"). The check only covers private methods in patches: a new class nothing creates, or a public method, gets through.
+
 ## Web view in a generated app stays empty
 
 **Cause:** The built-in `NativeWebView` renders with the platform browser. On Windows that is the WebView2 runtime — part of Windows 11, optional on Windows 10. On Linux it needs WebKitGTK (`libwebkit2gtk-4.1`) or WPE WebKit.

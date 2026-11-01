@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -70,6 +71,44 @@ public static class CodeValidators
 
         return false;
     }
+
+    /// <summary>
+    /// The methods <paramref name="after"/> adds to <paramref name="before"/> that nothing refers to in
+    /// <paramref name="allSources"/>: code the app never runs, so a change made only of it changes nothing.
+    /// Counts only what nothing else can call: not what is public, protected or internal, and not what has
+    /// an attribute (the framework, a generator or another app may call those), nor the entry point.
+    /// </summary>
+    public static IReadOnlyList<string> NewMethodsNothingCalls(string before, string after, IEnumerable<string> allSources)
+    {
+        var existing = MethodsIn(before).Select(m => m.Identifier.ValueText).ToHashSet(StringComparer.Ordinal);
+        var candidates = MethodsIn(after)
+            .Where(m => OnlyThisCodeCanCall(m) && !existing.Contains(m.Identifier.ValueText))
+            .Select(m => m.Identifier.ValueText)
+            .Distinct()
+            .ToList();
+        if (candidates.Count == 0)
+            return candidates;
+
+        var referenced = allSources
+            .SelectMany(source => CSharpSyntaxTree.ParseText(source).GetRoot().DescendantTokens())
+            .Where(t => t.IsKind(SyntaxKind.IdentifierToken) && candidates.Contains(t.ValueText))
+            // The declaration itself is no reference, and neither is a method calling itself.
+            .Where(t => !t.Parent!.AncestorsAndSelf().OfType<MethodDeclarationSyntax>().Any(m => m.Identifier.ValueText == t.ValueText))
+            .Select(t => t.ValueText)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return candidates.Where(c => !referenced.Contains(c)).ToList();
+    }
+
+    private static IEnumerable<MethodDeclarationSyntax> MethodsIn(string code)
+        => CSharpSyntaxTree.ParseText(code).GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>();
+
+    private static bool OnlyThisCodeCanCall(MethodDeclarationSyntax method)
+        => method.AttributeLists.Count == 0
+           && method.ExplicitInterfaceSpecifier == null
+           && method.Parent is not InterfaceDeclarationSyntax
+           && method.Identifier.ValueText != "Main"
+           && !method.Modifiers.Any(m => m.Kind() is SyntaxKind.PublicKeyword or SyntaxKind.ProtectedKeyword or SyntaxKind.InternalKeyword or SyntaxKind.PartialKeyword);
 
     private static bool IsUserControlType(TypeSyntax typeSyntax)
     {

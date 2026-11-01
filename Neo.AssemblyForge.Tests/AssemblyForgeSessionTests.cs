@@ -459,6 +459,207 @@ namespace Neo.Dynamic
 
     #endregion
 
+    #region A patch that adds a method nothing calls
+
+    private const string ControlWithUi = @"using System.Windows.Controls;
+
+public sealed class DynamicUserControl : UserControl
+{
+    public DynamicUserControl()
+    {
+        BuildUi();
+    }
+
+    private void BuildUi()
+    {
+        Content = new Grid();
+    }
+}";
+
+    private const string PatchAddingChart = @"--- a/./currentcode.cs
++++ b/./currentcode.cs
+@@ -11,4 +11,6 @@
+     {
+         Content = new Grid();
+     }
++
++    private Control Chart() => new Canvas();
+ }";
+
+    private const string PatchCallingChart = @"--- a/./currentcode.cs
++++ b/./currentcode.cs
+@@ -10,5 +10,5 @@
+     private void BuildUi()
+     {
+-        Content = new Grid();
++        Content = Chart();
+     }";
+
+    private const string PatchAddingChartAndItsCall = @"--- a/./currentcode.cs
++++ b/./currentcode.cs
+@@ -10,5 +10,7 @@
+     private void BuildUi()
+     {
+-        Content = new Grid();
++        Content = Chart();
+     }
++
++    private Control Chart() => new Canvas();
+ }";
+
+    private const string PatchAddingLegend = @"--- a/./currentcode.cs
++++ b/./currentcode.cs
+@@ -15,2 +15,4 @@
+     private Control Chart() => new Canvas();
++
++    private Control Legend() => new Canvas();
+ }";
+
+    private const string PatchChangingSomethingElse = @"--- a/./currentcode.cs
++++ b/./currentcode.cs
+@@ -11,3 +11,3 @@
+     {
+-        Content = new Grid();
++        Content = new Grid { Name = ""root"" };
+     }";
+
+    private const string PatchCallingChartAfterTheOtherChange = @"--- a/./currentcode.cs
++++ b/./currentcode.cs
+@@ -11,3 +11,3 @@
+     {
+-        Content = new Grid { Name = ""root"" };
++        Content = Chart();
+     }";
+
+    private static (AssemblyForgeSession Session, List<AssemblyForgeCompletionRequest> Requests) SessionAnsweringWith(
+        IEnumerable<string> patches, int maxAttempts = 5, ICompilationService? compiler = null)
+    {
+        var answers = patches.ToList();
+        var requests = new List<AssemblyForgeCompletionRequest>();
+        var session = CreateSession(
+            (request, _) =>
+            {
+                requests.Add(request);
+                return Task.FromResult(MakeJsonResponse(new StructuredResponse { Patch = answers[requests.Count - 1], Explanation = "From the test." }));
+            },
+            options: new AssemblyForgeSessionOptions { InitialCode = ControlWithUi },
+            pipelineOptions: new AssemblyForgePipelineOptions { MaxAttempts = maxAttempts },
+            compiler: compiler);
+        return (session, requests);
+    }
+
+    [Fact]
+    public async Task RunAsync_PatchAddsMethodNothingCalls_GoesBackToTheModelToFinishIt()
+    {
+        var (session, requests) = SessionAnsweringWith([PatchAddingChart, PatchCallingChart]);
+
+        var result = await session.RunAsync("add a chart");
+
+        result.Status.Should().Be(AssemblyForgeStatus.Success);
+        result.AttemptsUsed.Should().Be(2);
+        requests.Should().HaveCount(2);
+        requests[1].Prompt.Should().Contain("add a chart");
+        requests[1].Prompt.Should().Contain("nothing calls Chart");
+        requests[1].Prompt.Should().Contain("was applied", "the model must not write the method a second time");
+        requests[1].Prompt.Should().Contain("private Control Chart()", "the file it gets already holds its first patch");
+        requests[1].Prompt.Should().NotContain("could not be applied");
+        session.State.CurrentCode.Should().Contain("Content = Chart();");
+        session.State.CurrentCode.Should().Contain("private Control Chart()");
+    }
+
+    [Fact]
+    public async Task RunAsync_PatchGoesBack_TheReviewSeesTheWholeChangeOnce()
+    {
+        var (session, _) = SessionAnsweringWith([PatchAddingChart, PatchCallingChart]);
+        var reviewed = new List<AssemblyForgeReviewContext>();
+
+        await session.RunAsync("add a chart", default, (context, _) =>
+        {
+            reviewed.Add(context);
+            return Task.FromResult(new AssemblyForgeReviewDecision(AssemblyForgeReviewAction.Accept));
+        });
+
+        reviewed.Should().ContainSingle();
+        reviewed[0].Patch.Should().Contain("private Control Chart()").And.Contain("Content = Chart();");
+    }
+
+    [Fact]
+    public async Task RunAsync_SecondPatchLeavesAMethodUnusedToo_IsAccepted()
+    {
+        var (session, requests) = SessionAnsweringWith([PatchAddingChart, PatchAddingLegend]);
+
+        var result = await session.RunAsync("add a chart");
+
+        result.Status.Should().Be(AssemblyForgeStatus.Success, "a model that insists must not use up the attempts");
+        requests.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task RunAsync_UnfinishedPatchOnTheLastTry_IsAcceptedInsteadOfFailing()
+    {
+        var (session, requests) = SessionAnsweringWith([PatchAddingChart], maxAttempts: 1);
+
+        var result = await session.RunAsync("add a chart");
+
+        result.Status.Should().Be(AssemblyForgeStatus.Success);
+        requests.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task RunAsync_PatchWithItsCall_DoesNotGoBack()
+    {
+        var (session, requests) = SessionAnsweringWith([PatchAddingChartAndItsCall]);
+
+        var result = await session.RunAsync("add a chart");
+
+        result.Status.Should().Be(AssemblyForgeStatus.Success);
+        requests.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task RunAsync_CodeAnswerWithAnUnusedMethod_DoesNotGoBack()
+    {
+        var calls = 0;
+        var session = CreateSession((_, _) =>
+        {
+            calls++;
+            return Task.FromResult(MakeJsonResponse(new StructuredResponse { Code = ControlWithUi.Replace("private void BuildUi()", "private void Spare() { }\n    private void BuildUi()") }));
+        });
+
+        var result = await session.RunAsync("make a control");
+
+        result.Status.Should().Be(AssemblyForgeStatus.Success);
+        calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RunAsync_MethodFromAnEarlierTryOfThisRun_StillCounts_AndItsCompileErrorIsGone()
+    {
+        var (session, requests) = SessionAnsweringWith(
+            [PatchAddingChart, PatchChangingSomethingElse, PatchCallingChartAfterTheOtherChange],
+            compiler: new FailOnceCompilationService());
+
+        var result = await session.RunAsync("add a chart");
+
+        result.Status.Should().Be(AssemblyForgeStatus.Success);
+        requests.Should().HaveCount(3);
+        requests[2].Prompt.Should().Contain("nothing calls Chart");
+        requests[2].Prompt.Should().NotContain("Simulated compilation failure", "that was fixed in the try before");
+    }
+
+    [Fact]
+    public async Task RunAsync_PatchGoesBack_TheErrorTheRunIsAboutStaysInThePrompt()
+    {
+        var (session, requests) = SessionAnsweringWith([PatchAddingChart, PatchCallingChart]);
+        session.State.LastErrorMessage = "The app threw a FormatException.";
+
+        await session.RunAsync("please fix the error");
+
+        requests[1].Prompt.Should().Contain("The app threw a FormatException.");
+    }
+
+    #endregion
+
     #region Test doubles
 
     private sealed class StubCompilationService : ICompilationService
