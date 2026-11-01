@@ -1249,10 +1249,11 @@ namespace Neo.App
             IReadOnlyList<string>? nugetPackages,
             string? explanation,
             bool isPowerShellMode,
-            bool isConsoleAppMode)
+            bool isConsoleAppMode,
+            string? webSearchReport)
         {
             var review = new PatchReviewWindow(patchOrCode, nugetPackages, explanation,
-                isPowerShellMode: isPowerShellMode, isConsoleAppMode: isConsoleAppMode)
+                isPowerShellMode: isPowerShellMode, isConsoleAppMode: isConsoleAppMode, webSearchReport: webSearchReport)
             {
                 Owner = this
             };

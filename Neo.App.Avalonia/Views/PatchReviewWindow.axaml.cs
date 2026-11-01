@@ -13,11 +13,15 @@ namespace Neo.App
         public PatchReviewDecision Decision { get; private set; } = PatchReviewDecision.Reject;
 
         public PatchReviewWindow(string patch, IEnumerable<string>? nugetPackages, string? explanation,
-            PatchReviewInfo? reviewInfo = null, bool isPowerShellMode = false, bool isConsoleAppMode = false)
+            PatchReviewInfo? reviewInfo = null, bool isPowerShellMode = false, bool isConsoleAppMode = false, string? webSearchReport = null)
         {
             InitializeComponent();
 
             PatchTextBox.Text = patch ?? string.Empty;
+
+            // In plain sight: the code was written after reading these pages.
+            WebSearchText.Text = webSearchReport ?? string.Empty;
+            WebSearchText.IsVisible = !string.IsNullOrWhiteSpace(webSearchReport);
 
             if (isPowerShellMode)
             {

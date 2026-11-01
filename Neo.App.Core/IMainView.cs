@@ -48,7 +48,8 @@ namespace Neo.App
             IReadOnlyList<string>? nugetPackages,
             string? explanation,
             bool isPowerShellMode = false,
-            bool isConsoleAppMode = false);
+            bool isConsoleAppMode = false,
+            string? webSearchReport = null);
 
         // ─── Factory Methods ──────────────────────────────────────────────
         IChildProcessService CreateChildProcessService();

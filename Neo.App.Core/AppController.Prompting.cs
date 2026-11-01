@@ -110,6 +110,10 @@ namespace Neo.App
             return lines.Count > 0 ? string.Join("\n", lines) : null;
         }
 
+        // Code written after reading the web is shown first, whatever the setting says: a web page may
+        // have tried to get something into it, and it would run at once with the user's rights.
+        private bool ReviewBeforeRunning => !Settings.AcceptAutomatic || _webSearches.Count > 0;
+
         // After the answer: the chat scrolls to its end, and a long patch would push this out of sight.
         private void LogWebSearches()
         {
@@ -441,14 +445,15 @@ namespace Neo.App
             _webSearchProblem = null;
 
             AssemblyForgeReviewCallback? reviewCallback = null;
-            if (showResultInChild && !Settings.AcceptAutomatic)
+            if (showResultInChild)
             {
                 reviewCallback = async (ctx, ct) =>
                 {
-                    var explanation = WebSearchReport(_webSearches, _webSources, _webSearchProblem) is { } report
-                        ? $"{ctx.Explanation}\n\n{report}"
-                        : ctx.Explanation;
-                    PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(ctx.Patch, ctx.NuGetPackages, explanation);
+                    if (!ReviewBeforeRunning)
+                        return new AssemblyForgeReviewDecision(AssemblyForgeReviewAction.Accept);
+
+                    PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(ctx.Patch, ctx.NuGetPackages, ctx.Explanation,
+                        webSearchReport: WebSearchReport(_webSearches, _webSources, _webSearchProblem));
 
                     return decision switch
                     {

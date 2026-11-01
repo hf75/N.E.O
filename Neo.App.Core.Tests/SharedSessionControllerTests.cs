@@ -202,7 +202,7 @@ public sealed class SharedSessionControllerTests : IDisposable
         public void HideRepairOverlay() { }
         public void SetWaitIndicatorStatus(string text) { }
         public Task<CrashDialogResult> ShowCrashDialogAsync() => Task.FromResult(CrashDialogResult.Button3);
-        public Task<PatchReviewDecision> ShowPatchReviewDialogAsync(string patchOrCode, IReadOnlyList<string>? nugetPackages, string? explanation, bool isPowerShellMode = false, bool isConsoleAppMode = false)
+        public Task<PatchReviewDecision> ShowPatchReviewDialogAsync(string patchOrCode, IReadOnlyList<string>? nugetPackages, string? explanation, bool isPowerShellMode = false, bool isConsoleAppMode = false, string? webSearchReport = null)
             => Task.FromResult(PatchReviewDecision.Apply);
         public IChildProcessService CreateChildProcessService() => Child;
         public IAppLogger CreateLogger(ApplicationState appState) => Log;

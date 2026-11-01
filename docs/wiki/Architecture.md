@@ -104,7 +104,7 @@ Neo.Shared                    PipeClient, PeUtils, and the bytes-only plugin loa
 
 Neo.Agents/                   One project per AI provider / capability:
   Neo.Agents.Core             IAgent / AgentBase.
-  Neo.Agents.Claude           Anthropic SDK.
+  Neo.Agents.Claude           Anthropic API (plain HTTP); also the web search for generated apps.
   Neo.Agents.OpenAI           OpenAI SDK (also used by Ollama, LM Studio).
   Neo.Agents.Gemini           Google Gemini SDK.
   Neo.Agents.Ollama           OpenAI-compatible local endpoint.

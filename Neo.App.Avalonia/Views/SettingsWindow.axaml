@@ -62,7 +62,7 @@
                 <ComboBox x:Name="ClaudeEffortComboBox" Classes="rounded"/>
                 <CheckBox x:Name="ClaudeWebSearchCheckBox" Classes="rounded" Content="Let Claude search the web while building"
                           IsChecked="{Binding ClaudeWebSearch, Mode=TwoWay}" Margin="0,8,0,0"
-                          ToolTip.Tip="Claude can look things up while it writes a tool: services it does not know, facts from after its training. Every tool then takes about a third longer, even without a search. A search costs about 5 US cents, and what Claude reads on the web can influence code that runs on this computer."/>
+                          ToolTip.Tip="Claude can look things up while it writes a tool: services it does not know, facts from after its training. Every tool then takes about a third longer, even without a search. A search costs about 5 US cents. What Claude reads on the web can influence code that runs on this computer, so code written after a search is always shown to you first."/>
             </StackPanel>
 
             <StackPanel x:Name="RowOpenAiModel" Grid.Row="8" Grid.ColumnSpan="2"

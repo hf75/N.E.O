@@ -172,6 +172,10 @@ Switch between frameworks in **Settings**:
 | Avalonia | Enable Avalonia | Cross-platform apps (Win/Linux/macOS) |
 | React | Enable REACT-UI | Web-based UIs, JavaScript ecosystem |
 
+## Web Search
+
+With an Anthropic key, generated apps can answer from the current web with their sources, as text or as typed data for tables; the AI uses this where it knows no free API. If you switch it on in the settings, Claude also looks things up while it builds. See **[[Web Search]]**.
+
 ## Other surfaces
 
 The desktop host is one of three ways to use Neo. The same prompt → compile → run loop is also available:

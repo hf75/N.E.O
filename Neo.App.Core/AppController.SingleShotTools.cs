@@ -128,10 +128,10 @@ namespace Neo.App
 
         private async Task<AgentStepResult> ExecutePowerShellStepAsync(string script, string? explanation, CancellationToken cancellationToken)
         {
-            // Review if AcceptAutomatic is off
-            if (!Settings.AcceptAutomatic)
+            if (ReviewBeforeRunning)
             {
-                PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(script, null, explanation, isPowerShellMode: true);
+                PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(script, null, explanation, isPowerShellMode: true,
+                    webSearchReport: WebSearchReport(_webSearches, _webSources, _webSearchProblem));
 
                 if (decision == PatchReviewDecision.Reject)
                 {
@@ -171,10 +171,10 @@ namespace Neo.App
 
         private async Task<AgentStepResult> ExecuteConsoleAppStepAsync(string code, List<string>? nugetPackages, string? explanation, CancellationToken cancellationToken)
         {
-            // Review if AcceptAutomatic is off
-            if (!Settings.AcceptAutomatic)
+            if (ReviewBeforeRunning)
             {
-                PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(code, nugetPackages, explanation, isConsoleAppMode: true);
+                PatchReviewDecision decision = await _view.ShowPatchReviewDialogAsync(code, nugetPackages, explanation, isConsoleAppMode: true,
+                    webSearchReport: WebSearchReport(_webSearches, _webSources, _webSearchProblem));
 
                 if (decision == PatchReviewDecision.Reject)
                 {

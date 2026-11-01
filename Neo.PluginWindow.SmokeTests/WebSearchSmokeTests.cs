@@ -166,6 +166,15 @@ public class WebSearchSmokeTests : IDisposable
         {
             await SendPromptAsync(host, "Build a widget tool.");
 
+            // Accept changes automatically is on, but this code was written after reading the web: it is shown first.
+            var review = await WaitForAsync(() => TopLevelWindows.Find(w => w.Pid == host.Id && w.Title == "Review Changes"), 60, "the review dialog");
+            var report = await WaitForAsync(() => review.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "WebSearchText")), 15, "the report in the dialog");
+            report.Current.Name.Should().Contain("Searched the web").And.Contain("widget api docs").And.Contain(PageUrl);
+            report.Current.IsOffscreen.Should().BeFalse("whoever decides about the code should read this without opening anything");
+
+            var apply = await WaitForAsync(() => review.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "ApplyButton")), 15, "the Apply button");
+            ((InvokePattern)apply.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+
             await WaitForTextAsync(host, ChildProcessName(hostProject), t => t == "BUILT AFTER SEARCH", 60, "the tool", api);
             await WaitForTextAsync(host, ChildProcessName(hostProject), t => t.Contains("Searched the web") && t.Contains("widget api docs") && t.Contains(PageUrl), 15, "the report in the chat", api);
 
@@ -178,6 +187,30 @@ public class WebSearchSmokeTests : IDisposable
         {
             try { if (!host.HasExited) host.Kill(entireProcessTree: true); } catch { }
             TopLevelWindows.KillChildrenOf(host.Id);
+        }
+    }
+
+    [Fact]
+    public async Task Allowed_to_search_but_no_need_to_it_stays_automatic()
+    {
+        const string host = "Neo.App.Avalonia";
+        using var api = new StandInClaudeApi();
+        api.AnswerWithCode(WithContent(host, """Show("BUILT WITHOUT A SEARCH");"""));
+
+        using var process = Start(host, api, new { UseAvalonia = true, ClaudeModel = "stand-in", ClaudeEffort = "low", AcceptAutomatic = true, ClaudeWebSearch = true });
+
+        try
+        {
+            await SendPromptAsync(process, "Build it.");
+
+            await WaitForTextAsync(process, ChildProcessName(host), t => t == "BUILT WITHOUT A SEARCH", 60, "the tool, with no dialog in between", api);
+
+            JsonDocument.Parse(api.Requests.Single()).RootElement.GetProperty("tools")[0].GetProperty("name").GetString().Should().Be("web_search");
+        }
+        finally
+        {
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
+            TopLevelWindows.KillChildrenOf(process.Id);
         }
     }
 
@@ -258,6 +291,56 @@ public class WebSearchSmokeTests : IDisposable
         {
             try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
             TopLevelWindows.KillChildrenOf(process.Id);
+        }
+    }
+
+    [Theory]
+    [InlineData("Neo.App")]
+    [InlineData("Neo.App.Avalonia")]
+    public async Task The_settings_dialog_offers_the_model_and_switches_searching_while_building_on(string hostProject)
+    {
+        using var api = new StandInClaudeApi();
+        using var host = Start(hostProject, api, new { UseAvalonia = hostProject == "Neo.App.Avalonia", ClaudeModel = "stand-in", ClaudeEffort = "low", AcceptAutomatic = true });
+
+        try
+        {
+            var window = await WaitForAsync(() => TopLevelWindows.Find(w => w.Pid == host.Id && w.Title.StartsWith("N.E.O")), 60, "the N.E.O. window");
+            var codeButton = await WaitForAsync(() => window.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "BtnCodeEditor")), 30, "the toolbar");
+            await WaitForAsync(() => window.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "txtPrompt")) is { Current.IsEnabled: true } box ? box : null, 60, "the prompt box");
+            var gear = TreeWalker.ControlViewWalker.GetPreviousSibling(codeButton);
+
+            // A click on the Avalonia host right after its start sometimes does nothing, cause unknown
+            // (see ShareDialogSmokeTests). A person clicks again, and this test is about the dialog.
+            AutomationElement? dialog = null;
+            for (int attempt = 0; attempt < 3 && dialog == null; attempt++)
+            {
+                TopLevelWindows.Click(window, gear);
+                try { dialog = await WaitForAsync(() => TopLevelWindows.Find(w => w.Pid == host.Id && w.Title == "Settings"), 5, "the settings dialog"); }
+                catch (TimeoutException) when (attempt < 2) { }
+            }
+
+            // Avalonia's automation fails for a moment right after a window opens.
+            await WaitForAsync(() => TextsIn(dialog!).Contains("Web Search Model:") ? "seen" : null, 15, "the model of the web search");
+
+            var check = await WaitForAsync(() => dialog!.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "ClaudeWebSearchCheckBox")), 15, "the check box");
+            var toggle = (TogglePattern)check.GetCurrentPattern(TogglePattern.Pattern);
+            toggle.Current.ToggleState.Should().Be(ToggleState.Off, "off unless the user wants it");
+            toggle.Toggle();
+            await Task.Delay(300);
+
+            var ok = dialog.FindFirst(TreeScope.Descendants, new AndCondition(
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button),
+                new PropertyCondition(AutomationElement.NameProperty, "OK")));
+            ((InvokePattern)ok.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+            await WaitForAsync(() => TopLevelWindows.Find(w => w.Pid == host.Id && w.Title == "Settings") == null ? "closed" : null, 15, "the dialog to close");
+
+            using var saved = JsonDocument.Parse(File.ReadAllText(Path.Combine(_settings, "settings.json")));
+            saved.RootElement.GetProperty("ClaudeWebSearch").GetBoolean().Should().BeTrue();
+        }
+        finally
+        {
+            try { if (!host.HasExited) host.Kill(entireProcessTree: true); } catch { }
+            TopLevelWindows.KillChildrenOf(host.Id);
         }
     }
 

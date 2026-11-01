@@ -15,6 +15,7 @@
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
             <TextBlock Text="Review proposed changes" FontSize="22" FontWeight="Bold"/>
             <TextBlock x:Name="PackagesText" Margin="0,6,0,0" Foreground="#666" TextWrapping="Wrap"/>
+            <TextBlock x:Name="WebSearchText" Margin="0,6,0,0" Foreground="#8A4B00" TextWrapping="Wrap" IsVisible="False"/>
 
             <Expander x:Name="ExplanationExpander" Margin="0,6,0,0" Header="Explanation" IsExpanded="False">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="160">

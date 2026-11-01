@@ -1290,6 +1290,47 @@ public class AnthropicAgentTests
 
     public sealed record WithKeywordNames(string Properties, string Items);
 
+#nullable disable
+    // What generated code looks like: a class with setters, without nullable annotations. The
+    // exporter requires nothing here and would let every string be null.
+    public sealed class PlainRow
+    {
+        public string Name { get; set; }
+        public int Value { get; set; }
+        public int? Maybe { get; set; }
+        public List<string> Tags { get; set; }
+        public PlainInner Inner { get; set; }
+    }
+
+    public sealed record PlainInner(string Text);
+#nullable restore
+
+    [Fact]
+    public async Task AppSearch_Data_AClassWithSetters_HasEveryPropertyRequiredAndNotNull()
+    {
+        var api = new FakeApi
+        {
+            Model = SearchingModel(),
+            Message = Answer("end_turn", Plain("""{"result":[{"name":"A","value":1,"maybe":null,"tags":[],"inner":{"text":"x"}}],"usedPages":[]}""")),
+        };
+
+        var answer = await ClaudeWebSearch.AskAsync<List<PlainRow>>("key", NewModel(), "Which?", NoCancel, api);
+
+        answer.Data.Should().ContainSingle().Which.Inner.Text.Should().Be("x");
+        var result = api.LastBody.GetProperty("output_config").GetProperty("format").GetProperty("schema").GetProperty("properties").GetProperty("result");
+        result.GetProperty("type").GetString().Should().Be("array", "the list itself is never null either");
+        var row = result.GetProperty("items");
+        row.GetProperty("type").GetString().Should().Be("object");
+        row.GetProperty("required").EnumerateArray().Select(r => r.GetString()).Should().BeEquivalentTo("name", "value", "maybe", "tags", "inner");
+
+        var properties = row.GetProperty("properties");
+        properties.GetProperty("name").GetProperty("type").GetString().Should().Be("string");
+        properties.GetProperty("tags").GetProperty("type").GetString().Should().Be("array");
+        properties.GetProperty("inner").GetProperty("type").GetString().Should().Be("object");
+        properties.GetProperty("inner").GetProperty("properties").GetProperty("text").GetProperty("type").GetString().Should().Be("string");
+        properties.GetProperty("maybe").GetProperty("type").EnumerateArray().Select(t => t.GetString()).Should().BeEquivalentTo("integer", "null");
+    }
+
     // ── What N.E.O. knows about the search ────────────────────────────────
 
     [Fact]

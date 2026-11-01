@@ -920,11 +920,12 @@ namespace Neo.App
             IReadOnlyList<string>? nugetPackages,
             string? explanation,
             bool isPowerShellMode,
-            bool isConsoleAppMode)
+            bool isConsoleAppMode,
+            string? webSearchReport)
         {
             EnsureVisibleForDialog();
             var review = new PatchReviewWindow(patchOrCode, nugetPackages, explanation,
-                isPowerShellMode: isPowerShellMode, isConsoleAppMode: isConsoleAppMode);
+                isPowerShellMode: isPowerShellMode, isConsoleAppMode: isConsoleAppMode, webSearchReport: webSearchReport);
             await review.ShowDialog<bool?>(this);
             return review.Decision;
         }
