@@ -176,8 +176,8 @@ public static class AvaloniaPrompt
             "- The preview window will open automatically on the user's desktop\n\n" +
             "For subsequent changes, use `update_preview` to hot-reload in the same window.\n\n" +
             "IMPORTANT: Before modifying existing code, ALWAYS call `extract_code` first to get the " +
-            "current state of the app. The user may have modified the app via Smart Edit (Ctrl+K) " +
-            "or other tools — your chat history may be outdated. Never assume your last code is current.\n\n" +
+            "current source of the app. The user may have modified the app via Smart Edit (Ctrl+K) " +
+            "— your chat history may be outdated. Never assume your last code is current.\n\n" +
             "## Multi-Window Mode\n\n" +
             "You can create multiple windows by passing different `windowId` values to compile_and_preview. " +
             "Use this when the user's request naturally maps to multiple views:\n" +

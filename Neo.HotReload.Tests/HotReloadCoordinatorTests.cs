@@ -204,6 +204,25 @@ public class HotReloadCoordinatorTests
     }
 
     [Fact]
+    public async Task An_app_replaced_behind_the_sessions_back_says_so_instead_of_sending_an_update()
+    {
+        // Smart Edit loads its own build inside the window. An update against the old one would only be refused.
+        using var app = await HotReloadHarness.StartAsync(V1);
+        using var coordinator = new HotReloadCoordinator();
+        (await coordinator.StartAsync(app.DllPath, HotReloadRuntime.Capabilities)).Should().BeNull();
+
+        await coordinator.DisarmAsync("something else replaced it");
+
+        coordinator.HasRunningApp.Should().BeTrue("the host has to report the next attempt");
+        var attempt = await coordinator.TryAsync(app.DllPath, _ => throw new InvalidOperationException("must not be called"));
+        attempt.Applied.Should().BeFalse();
+        attempt.Message.Should().Be("Hot reload not possible — something else replaced it. Reloading the app.");
+
+        (await coordinator.StartAsync(app.DllPath, HotReloadRuntime.Capabilities)).Should().BeNull("the full reload arms it again");
+        coordinator.IsActive.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Whatever_goes_wrong_ends_in_a_full_reload_never_in_an_exception()
     {
         using var app = await HotReloadHarness.StartAsync(V1);

@@ -52,5 +52,11 @@
     <ProjectReference Include="..\Neo.App.Avalonia\Neo.App.Avalonia.csproj" ReferenceOutputAssembly="false" Private="false" />
     <ProjectReference Include="..\Neo.App\Neo.App.csproj" ReferenceOutputAssembly="false" Private="false" />
     <ProjectReference Include="..\Neo.App.Core\Neo.App.Core.csproj" />
+    <!-- The MCP server, for the Smart Edit test: a change in the window has to reach it. -->
+    <ProjectReference Include="..\Neo.McpServer\Neo.McpServer.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Neo.McpServer.Tests\StdioJsonRpcProcess.cs" Link="StdioJsonRpcProcess.cs" />
   </ItemGroup>
 </Project>

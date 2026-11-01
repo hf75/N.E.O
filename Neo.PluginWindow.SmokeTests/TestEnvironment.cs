@@ -29,6 +29,9 @@ internal static class TestEnvironment
         return Path.Combine(RepoRoot, hostProject, "bin", Configuration, tfm, hostProject + ".exe");
     }
 
+    /// <summary>The built MCP server, which starts the MCP heads as its preview windows.</summary>
+    public static string ServerDll => Path.Combine(RepoRoot, "Neo.McpServer", "bin", Configuration, PortableTfm, "Neo.McpServer.dll");
+
     private static readonly Lazy<string> AvaloniaPluginDll = new(() => Compile(
         "avalonia",
         """

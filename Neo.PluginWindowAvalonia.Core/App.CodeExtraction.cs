@@ -21,12 +21,20 @@ namespace Neo.PluginWindowAvalonia
 {
     public partial class App
     {
+        /// <summary>
+        /// Smart Edit changed the app inside the window: the host's copy of the source is out of date.
+        /// </summary>
+        public Task ReportSourceCodeAsync(string sourceCode)
+            => SafeSendAsync(new IpcEnvelope(IpcTypes.SourceCode, "", sourceCode));
+
         // =======================================================
         // Code Extraction (Reverse-Engineering)
         // =======================================================
         public string ExtractCodeFromVisualTree(Avalonia.Controls.Control root)
         {
             var sb = new StringBuilder();
+            sb.AppendLine("// Rebuilt from the live UI: layout and current property values, with NO event handlers, fields or methods.");
+            sb.AppendLine("// The app's logic is not here. Take values from this; do not compile it over an app that has behaviour.");
             sb.AppendLine("using Avalonia;");
             sb.AppendLine("using Avalonia.Controls;");
             sb.AppendLine("using Avalonia.Layout;");

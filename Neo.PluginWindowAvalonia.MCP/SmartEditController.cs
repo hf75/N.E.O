@@ -155,6 +155,9 @@ namespace Neo.PluginWindowAvalonia.MCP
                     EnsureChatOverlayAttached();
                 });
 
+                if (Application.Current is App runningApp)
+                    await runningApp.ReportSourceCodeAsync(_smartCompiler.LastCompiledCode!);
+
                 _chatOverlay.AddAssistantMessage($"Applied. ({compileResult.DllBytes!.Length:N0} bytes)");
             }
             catch (Exception ex)

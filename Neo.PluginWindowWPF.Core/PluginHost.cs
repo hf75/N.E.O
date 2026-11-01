@@ -25,8 +25,8 @@ namespace Neo.PluginWindowWPF
         public Action<MainWindow>? MainWindowCreated { get; init; }
 
         /// <summary>
-        /// Source for <c>extract_code</c>. WPF has no visual-tree code extraction, so a head that
-        /// works on code (Smart Edit) supplies the last source it built or received.
+        /// What the window answers when asked for its code. WPF has no visual-tree code extraction,
+        /// so a head that works on code (Smart Edit) supplies the last source it built or received.
         /// </summary>
         public Func<string?>? LastCompiledCodeProvider { get; init; }
 

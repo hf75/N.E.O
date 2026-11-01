@@ -21,8 +21,9 @@ internal sealed class StdioJsonRpcProcess : IDisposable
         _process.BeginErrorReadLine();
     }
 
-    public static StdioJsonRpcProcess Start(string fileName, string arguments)
-        => new(Process.Start(new ProcessStartInfo
+    public static StdioJsonRpcProcess Start(string fileName, string arguments, IReadOnlyDictionary<string, string>? environment = null)
+    {
+        var startInfo = new ProcessStartInfo
         {
             FileName = fileName,
             Arguments = arguments,
@@ -32,7 +33,14 @@ internal sealed class StdioJsonRpcProcess : IDisposable
             RedirectStandardError = true,
             StandardInputEncoding = new UTF8Encoding(false),
             StandardOutputEncoding = Encoding.UTF8,
-        }) ?? throw new InvalidOperationException($"Could not start {fileName}."));
+        };
+        foreach (var (key, value) in environment ?? new Dictionary<string, string>())
+            startInfo.Environment[key] = value;
+
+        return new(Process.Start(startInfo) ?? throw new InvalidOperationException($"Could not start {fileName}."));
+    }
+
+    public int ProcessId => _process.Id;
 
     public string StandardError { get { lock (_stderr) return _stderr.ToString(); } }
 

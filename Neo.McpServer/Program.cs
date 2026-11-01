@@ -260,6 +260,7 @@ AvaloniaPrompt.Skills = app.Services.GetRequiredService<SkillsRegistry>();
 var previewManager = app.Services.GetRequiredService<PreviewSessionManager>();
 var mcpServer = app.Services.GetRequiredService<McpServerInstance>();
 previewManager.SetChannelServer(mcpServer);
+previewManager.SourceChangedInWindow += app.Services.GetRequiredService<CompilationPipeline>().RememberSource;
 liveMcpResourceRegistry.SetServer(mcpServer);
 Console.Error.WriteLine("[Neo.McpServer] Channel capability registered — app events will push to Claude.");
 

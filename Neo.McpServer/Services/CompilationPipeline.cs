@@ -18,8 +18,11 @@ public sealed class CompilationPipeline
     private IReadOnlyList<string>? _wpfAdditionalDlls;
     private string? _nugetCacheDir;
 
-    /// <summary>Last successfully compiled source code files — used by patch_preview.</summary>
+    /// <summary>Last successfully compiled source code files — used by save_session, and by patch_preview when the window is gone.</summary>
     public IReadOnlyList<string>? LastSourceCode { get; private set; }
+
+    /// <summary>The source changed without passing through here: Smart Edit compiles inside the window.</summary>
+    public void RememberSource(string sourceCode) => LastSourceCode = new[] { sourceCode };
 
     /// <summary>Last successfully used NuGet packages — used by patch_preview.</summary>
     public IReadOnlyDictionary<string, string>? LastNuGetPackages { get; private set; }

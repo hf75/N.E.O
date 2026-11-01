@@ -195,9 +195,12 @@ Reads current data from controls. Auto-detects scope based on control type.
 
 ### `extract_code`
 
-Reverse-engineers the running app back to clean, compilable C# source code. Captures the current state — including all changes made via `set_property`, `inject_data`, and Smart Edit (Ctrl+K). Supports Grid, Border, StackPanel, WrapPanel, DockPanel, Canvas, ScrollViewer, and all common controls with their properties and attached properties.
+Returns the C# source of the running app: what was last compiled, including changes the user made with Smart Edit (Ctrl+K). `patch_preview` patches exactly this text. An app of several files comes back with a `// ===== File n of m =====` line before each file.
 
-No parameters.
+Changes made with `set_property` and `inject_data` only exist in the running app and are not in the source.
+
+**Parameters:**
+- `fromLiveUi` (bool, optional) — Avalonia: rebuild the UI from its current state instead, including `set_property` and `inject_data` changes. That is layout and property values with no event handlers, fields or methods, so copy the values you need into the source and never compile it over an app that has behaviour. WPF cannot do this and returns the source.
 
 ### `run_test`
 
@@ -352,11 +355,13 @@ Cross-compilation is supported: you can build a Linux or macOS app on Windows.
 
 ### Patch Preview
 
-The `patch_preview` tool applies a unified diff to the last compiled source code and hot-reloads. Claude sends 5-10 lines of diff instead of 100+ lines of full code. Uses the existing `UnifiedDiffPatcher` from Neo.AssemblyForge with fuzzy context matching. NuGet packages carry over from the previous compilation automatically.
+The `patch_preview` tool applies a unified diff to the window's current source and hot-reloads. Claude sends 5-10 lines of diff instead of 100+ lines of full code. Uses the existing `UnifiedDiffPatcher` from Neo.AssemblyForge with fuzzy context matching. NuGet packages carry over from the window's previous compilation automatically.
 
-### Code Extraction (Reverse-Engineering)
+### Code Extraction
 
-The `extract_code` tool traverses the live Avalonia visual tree and generates clean, compilable C# source code reflecting the current state — including all changes made via `set_property` and `inject_data`. Supports Grid (RowDefinitions, ColumnDefinitions, attached properties), Border, StackPanel, WrapPanel, DockPanel, Canvas, ScrollViewer, and all common controls.
+The `extract_code` tool returns the source the server keeps for each window: it records what every tool call sends, and the window reports what Smart Edit changes.
+
+With `fromLiveUi` it traverses the live Avalonia visual tree instead and generates C# code reflecting the current state — including all changes made via `set_property` and `inject_data`. Supports Grid (RowDefinitions, ColumnDefinitions, attached properties), Border, StackPanel, WrapPanel, DockPanel, Canvas, ScrollViewer, and all common controls. A visual tree holds no logic, so that code has no event handlers, fields or methods and says so in its first lines.
 
 ### UI Testing
 
@@ -484,7 +489,7 @@ Both MCP variants of the preview window (`Neo.PluginWindowAvalonia.MCP` and `Neo
    - Claude gets the app's source (the server sends it along with every build)
    - Claude generates a patch or new code
    - Embedded Roslyn compiles it in ~1 second
-   - The control hot-reloads — the change appears instantly
+   - The app is loaded again with the new build — the change appears instantly
 5. Press **Escape** to close the panel
 
 ### How It Works Internally
@@ -496,7 +501,8 @@ User types in ChatOverlay
   → Claude responds with patch or full code
   → UnifiedDiffPatcher.TryApply (or full replacement)
   → SmartCompiler.CompileAsync (embedded CSharpDllCompileAgent + Roslyn)
-  → HandleLoadUserControlFromBytes (hot-reload)
+  → HandleLoadUserControlFromBytes (a fresh load)
+  → App.ReportSourceCodeAsync (the server gets the new source)
   → App updates in real-time
 ```
 
@@ -507,7 +513,13 @@ User types in ChatOverlay
 
 ### Interaction with MCP Server
 
-Smart Edit and the MCP server can both modify the same app. Changes made via Ctrl+K are visible to the MCP server — `extract_code` and `inspect_visual_tree` always read the current live state. The MCP prompt instructs Claude to call `extract_code` before modifying existing code, so it picks up Smart Edit changes automatically.
+Smart Edit and the MCP server can both modify the same app. The window reports every Smart Edit change to the server, so `extract_code`, `patch_preview` and `save_session` start from it. The MCP prompt instructs Claude to call `extract_code` before modifying existing code, so it picks up Smart Edit changes automatically. The first `update_preview` or `patch_preview` after a Smart Edit reloads the app instead of patching it and says so, because hot reload only knows the builds the server made; after that it patches again.
+
+### Limits
+
+- Smart Edit compiles without the app's NuGet packages: an app that uses one fails with a compile error.
+- The app starts over after a Smart Edit. Only `update_preview` and `patch_preview` can keep its state.
+- An app of several files is joined into one for Smart Edit, which only compiles if the later files have no `using` lines.
 
 ## Channel back-reporting (bidirectional Claude ↔ app)
 

@@ -14,8 +14,12 @@ namespace Neo.Agents
 {
     public class AnthropicTextChatAgent : AgentBase
     {
-        private const string ApiUrl = "https://api.anthropic.com/v1/messages";
-        private const string ModelsUrl = "https://api.anthropic.com/v1/models";
+        // NEO_ANTHROPIC_BASE_URL: for tests that answer in place of the API from another process. Deliberately not
+        // the SDKs' ANTHROPIC_BASE_URL: a Claude session sets that for the programs it starts, and the user's
+        // key must not go wherever that points.
+        private static readonly string BaseUrl = Environment.GetEnvironmentVariable("NEO_ANTHROPIC_BASE_URL") ?? "https://api.anthropic.com";
+        private static readonly string ApiUrl = BaseUrl + "/v1/messages";
+        private static readonly string ModelsUrl = BaseUrl + "/v1/models";
         private const string ApiVersion = "2023-06-01";
         private const string FallbackRequestBeta = "server-side-fallback-2026-07-01";
         private const string FallbackListingBeta = "server-side-fallback-2026-06-01";

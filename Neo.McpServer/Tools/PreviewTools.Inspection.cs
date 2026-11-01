@@ -89,20 +89,27 @@ public sealed partial class PreviewTools
     }
 
     /// <summary>
-    /// Extracts the current visual state of the running app as compilable C# source code.
-    /// All set_property changes, inject_data modifications, and visual tweaks are captured.
+    /// The real source of the running app, including what Smart Edit changed inside the window. Only on
+    /// request the UI rebuilt from its current state, which has none of the app's logic in it.
     /// </summary>
     [McpServerTool(Name = "extract_code")]
-    [Description("Reverse-engineers the running app back into clean C# source code. " +
-        "Captures the CURRENT state — including all changes made via set_property, inject_data, " +
-        "and other live modifications. The generated code is a complete DynamicUserControl " +
-        "that can be compiled with compile_and_preview or exported with export_app. " +
-        "Use this after live-designing an app to get production-ready code.")]
+    [Description("Returns the C# source of the running app: what was last compiled, including changes the user made with Smart Edit (Ctrl+K). " +
+        "Start every code change from this; patch_preview patches exactly this text. " +
+        "An app of several files comes back with a '// ===== File n of m =====' line before each file; pass them to update_preview as separate entries. " +
+        "Changes made with set_property and inject_data only exist in the running app and are not in the source. " +
+        "To see those as code, set fromLiveUi.")]
     public static async Task<string> ExtractCode(
         PreviewSessionManager preview,
         [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
-            "Omit for single-window mode (uses default window).")] string? windowId = null)
+            "Omit for single-window mode (uses default window).")] string? windowId = null,
+        [Description("Avalonia: rebuild the UI from its current state instead, including set_property and inject_data changes. " +
+            "That is layout and property values with NO event handlers, fields or methods: copy the values you need into the source, " +
+            "never compile it over an app that has behaviour. WPF cannot do this and returns the source.")] bool fromLiveUi = false)
     {
+        if (!fromLiveUi && preview.GetSourceCode(windowId) is { Count: > 0 } source)
+            return source.Count == 1 ? source[0]
+                : string.Join("\n", source.Select((file, i) => $"// ===== File {i + 1} of {source.Count} =====\n{file}"));
+
         if (!preview.IsRunning(windowId))
             return "No preview is running. Call compile_and_preview first.";
 

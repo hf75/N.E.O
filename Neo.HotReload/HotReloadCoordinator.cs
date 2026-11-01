@@ -167,6 +167,22 @@ public sealed class HotReloadCoordinator : IDisposable
         finally { _gate.Release(); }
     }
 
+    /// <summary>
+    /// The app is still running, but it is no longer the build this session knows: something else
+    /// replaced it. <see cref="TryAsync"/> then gives <paramref name="reason"/> instead of sending the
+    /// window an update it would have to refuse.
+    /// </summary>
+    public async Task DisarmAsync(string reason)
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            ResetCore();
+            _armProblem = reason;
+        }
+        finally { _gate.Release(); }
+    }
+
     /// <inheritdoc cref="ResetAsync"/>
     public void Reset()
     {

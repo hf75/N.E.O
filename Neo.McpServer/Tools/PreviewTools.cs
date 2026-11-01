@@ -86,7 +86,7 @@ public sealed partial class PreviewTools
                 return $"Compilation succeeded but failed to send DLL to preview window.\n" +
                        $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
             }
-            await preview.SendSourceAsync(sourceCode, windowId);
+            await preview.SendSourceAsync(sourceCode, packages, windowId);
 
             return $"SUCCESS: App compiled and displayed in live preview window.\n" +
                    $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}" +
@@ -155,7 +155,7 @@ public sealed partial class PreviewTools
                 return $"Compilation succeeded but hot-reload failed.\n" +
                        $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
             }
-            await preview.SendSourceAsync(sourceCode, windowId);
+            await preview.SendSourceAsync(sourceCode, packages, windowId);
 
             return $"SUCCESS: Preview updated live.\n" +
                    $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}" +
@@ -227,7 +227,7 @@ public sealed partial class PreviewTools
     /// Applies a unified diff patch to the last compiled code and hot-reloads.
     /// </summary>
     [McpServerTool(Name = "patch_preview")]
-    [Description("Applies a unified diff patch to the LAST compiled source code and updates the running app like update_preview (hot reload: state survives when possible). " +
+    [Description("Applies a unified diff patch to the window's current source (what extract_code returns) and updates the running app like update_preview (hot reload: state survives when possible). " +
         "Much more efficient than update_preview — send only the changed lines instead of the full code. " +
         "Uses standard unified diff format (--- a/file, +++ b/file, @@ hunks). " +
         "Supports fuzzy matching for context lines. Requires a previous compile_and_preview call.")]
@@ -243,29 +243,32 @@ public sealed partial class PreviewTools
         [Description("Window ID for multi-window mode. Use different IDs to create multiple windows. " +
             "Omit for single-window mode (uses default window).")] string? windowId = null)
     {
-        if (compilation.LastSourceCode == null || compilation.LastSourceCode.Count == 0)
+        // This window's source, which may hold Smart Edit's changes; the last compiled one if the window is gone.
+        var source = preview.GetSourceCode(windowId) ?? compilation.LastSourceCode;
+        if (source == null || source.Count == 0)
             return "PATCH FAILED: No previous source code found. Call compile_and_preview first.";
 
         try
         {
-            // Apply patch to the last source code (typically single file)
-            var originalCode = string.Join("\n", compilation.LastSourceCode);
+            // Apply patch to the source code (typically single file)
+            var originalCode = string.Join("\n", source);
             var patchResult = Neo.AssemblyForge.UnifiedDiffPatcher.TryApply(
                 originalCode, patch, "./currentcode.cs", "DynamicUserControl");
 
             if (!patchResult.Success)
                 return $"PATCH FAILED: {patchResult.ErrorMessage}\n\n" +
                        "Make sure the patch context lines match the current code. " +
-                       "Use extract_code to see the current state.";
+                       "Call extract_code for the current source.";
 
             var patchedCode = patchResult.PatchedText!;
 
             // Determine NuGet packages and framework
-            var fw = compilation.LastFramework ?? "avalonia";
+            var fw = ResolveFramework(null, preview, compilation, windowId);
+            var lastPackages = preview.GetNuGetPackages(windowId) ?? compilation.LastNuGetPackages;
             var packages = nugetPackages != null
                 ? ParseNuGetPackages(nugetPackages)
-                : compilation.LastNuGetPackages != null
-                    ? new Dictionary<string, string>(compilation.LastNuGetPackages, StringComparer.OrdinalIgnoreCase)
+                : lastPackages != null
+                    ? new Dictionary<string, string>(lastPackages, StringComparer.OrdinalIgnoreCase)
                     : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (fw == "avalonia")
                 EnsureAvaloniaPackages(packages);
@@ -290,7 +293,7 @@ public sealed partial class PreviewTools
             if (!updated)
                 return $"PATCH applied and compiled, but hot-reload failed.\n" +
                        $"Logs: {string.Join("\n", preview.GetChildLogs(windowId))}";
-            await preview.SendSourceAsync(new[] { patchedCode }, windowId);
+            await preview.SendSourceAsync(new[] { patchedCode }, packages, windowId);
 
             return $"SUCCESS: Patch applied and preview updated.\n" +
                    $"DLL size: {result.DllBytes!.Length:N0} bytes, Dependencies: {deps.Count}" +

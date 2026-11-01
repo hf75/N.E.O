@@ -704,6 +704,12 @@ namespace Neo.PluginWindowWPF
         // =======================================================
         private int _serializedNodeCount;
 
+        /// <summary>
+        /// Smart Edit changed the app inside the window: the host's copy of the source is out of date.
+        /// </summary>
+        public Task ReportSourceCodeAsync(string sourceCode)
+            => SafeSendAsync(new IpcEnvelope(IpcTypes.SourceCode, "", sourceCode));
+
         // =======================================================
         // Extract Code from Visual Tree (best-effort)
         // =======================================================
@@ -715,7 +721,7 @@ namespace Neo.PluginWindowWPF
             if (lastCompiled != null)
                 return lastCompiled;
 
-            return "// Code extraction not available — use extract_code via MCP when SmartCompiler has compiled code.";
+            return "// Code extraction not available: WPF cannot rebuild code from its UI, and this window has received no source.";
         }
 
         // =======================================================

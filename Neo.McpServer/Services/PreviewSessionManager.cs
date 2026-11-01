@@ -130,6 +130,12 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         /// <summary>How the last build got into the window ("Hot reload …" or why it was a full reload).</summary>
         public string? LastLoadMessage { get; set; }
 
+        /// <summary>The source of what runs in this window: what the last tool call sent, or what Smart Edit made of it.</summary>
+        public IReadOnlyList<string>? SourceCode { get; set; }
+
+        /// <summary>The NuGet packages that source was compiled with.</summary>
+        public IReadOnlyDictionary<string, string>? NuGetPackages { get; set; }
+
         /// <summary>
         /// Dependencies this child process has received (it keeps them until it exits): a hot
         /// reload that brings a new NuGet package streams only what is new.
@@ -476,15 +482,29 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     }
 
     /// <summary>
-    /// Hands the window the source of the build it just received. The window only ever gets builds, but
-    /// Smart Edit (Ctrl+K) works on code, and what it could rebuild from the UI has no logic in it.
+    /// Records the source of the build the window just received and hands it over too. The window only
+    /// ever gets builds, but Smart Edit (Ctrl+K) works on code, and what it could rebuild from the UI
+    /// has no logic in it.
     /// </summary>
-    public Task SendSourceAsync(IEnumerable<string> sourceCode, string? windowId = null)
+    public Task SendSourceAsync(IReadOnlyList<string> sourceCode, IReadOnlyDictionary<string, string>? nugetPackages, string? windowId = null)
     {
         var s = GetRunningSession(windowId);
-        return s == null ? Task.CompletedTask : SafeSendControlAsync(s, new IpcEnvelope(
+        if (s == null) return Task.CompletedTask;
+
+        s.SourceCode = sourceCode.ToList();
+        s.NuGetPackages = nugetPackages;
+        return SafeSendControlAsync(s, new IpcEnvelope(
             IpcTypes.SourceCode, Guid.NewGuid().ToString("N"), string.Join("\n", sourceCode)));
     }
+
+    /// <summary>The source of what runs in the window, including Smart Edit's changes; null when it has none.</summary>
+    public IReadOnlyList<string>? GetSourceCode(string? windowId = null) => GetSession(windowId)?.SourceCode;
+
+    /// <summary>The NuGet packages <see cref="GetSourceCode"/> was compiled with.</summary>
+    public IReadOnlyDictionary<string, string>? GetNuGetPackages(string? windowId = null) => GetSession(windowId)?.NuGetPackages;
+
+    /// <summary>Smart Edit changed the source of an app inside its window.</summary>
+    public event Action<string>? SourceChangedInWindow;
 
     /// <summary>"Hot reload …" / "Hot reload not possible — …" for the last build sent to the window, if any.</summary>
     public string? GetLastLoadMessage(string? windowId = null)
@@ -889,6 +909,16 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                             if (!string.IsNullOrEmpty(env.CorrelationId) &&
                                 s.PendingRequests.TryRemove(env.CorrelationId, out var resultTcs))
                                 resultTcs.TrySetResult(env);
+                            break;
+
+                        case IpcTypes.SourceCode:
+                            // Smart Edit: this is the app's source now, and the build hot reload would patch is
+                            // no longer the one running. Not awaited: an update in flight holds the session
+                            // and waits for its answer on this very loop.
+                            s.SourceCode = new[] { env.PayloadJson };
+                            _ = s.HotReload.DisarmAsync("Smart Edit replaced the app inside the window");
+                            s.AddLog("Smart Edit changed the app.");
+                            SourceChangedInWindow?.Invoke(env.PayloadJson);
                             break;
 
                         case IpcTypes.AppEvent:

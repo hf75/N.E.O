@@ -22,7 +22,7 @@ namespace Neo.PluginWindowWPF.MCP
             _window = window;
         }
 
-        /// <summary>Last source Smart Edit compiled; backs <c>extract_code</c> for WPF.</summary>
+        /// <summary>Last source Smart Edit compiled or received; what the window answers when asked for its code.</summary>
         public string? LastCompiledCode => _smartCompiler.LastCompiledCode;
 
         /// <summary>The source of the build the server just sent: what the next request starts from.</summary>
@@ -143,6 +143,9 @@ namespace Neo.PluginWindowWPF.MCP
 
                     EnsureChatOverlayAttached();
                 });
+
+                if (Application.Current is App runningApp)
+                    await runningApp.ReportSourceCodeAsync(_smartCompiler.LastCompiledCode!);
 
                 _chatOverlay.AddAssistantMessage($"Applied. ({compileResult.DllBytes!.Length:N0} bytes)");
             }
