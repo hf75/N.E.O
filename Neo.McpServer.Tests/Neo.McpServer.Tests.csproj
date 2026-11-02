@@ -18,6 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Neo.PluginWindow.SmokeTests\ForegroundTurn.cs" Link="ForegroundTurn.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Neo.McpServer\Neo.McpServer.csproj" />
 
     <!-- Build-order only: the export pipeline takes its Avalonia reference assemblies from this

@@ -31,6 +31,7 @@ namespace Neo.PluginWindowAvalonia
         private bool _overLinkHalf;
         private DateTime _overSince;
         private volatile string? _takesMerges; // the app that answered: not every program on the network takes one
+        private System.Threading.Tasks.Task _lastHover = System.Threading.Tasks.Task.CompletedTask;
         private bool _moving;
         private PixelPoint _startedAt;
 
@@ -107,11 +108,16 @@ namespace Neo.PluginWindowAvalonia
 
             // Escape puts the window back where it was: the user changed their mind.
             if (target == null || _window.Position == _startedAt) return;
-            if (DateTime.UtcNow - _overSince < MinHover || _takesMerges != target.Id) return;
+            if (DateTime.UtcNow - _overSince < MinHover) return;
 
-            // The system is still in its loop here.
+            // The system is still in its loop here. And on a busy PC the other app may have shown the hint and its answer still be on the way.
             var cameFrom = _startedAt;
-            Dispatcher.UIThread.Post(() => _dropped(target, cameFrom, link));
+            var answer = _lastHover;
+            Dispatcher.UIThread.Post(async () =>
+            {
+                await answer;
+                if (_takesMerges == target.Id) _dropped(target, cameFrom, link);
+            });
         }
 
         // The first window a person sees below this one under the pointer; another window in between is no target.
@@ -144,7 +150,8 @@ namespace Neo.PluginWindowAvalonia
         {
             if (app == null) return;
             var payload = Json.ToJson(new FusionHoverMessage(on ? DisplayName() : null, linkHalf));
-            _ = SendHoverAsync(app, payload, on);
+            var sending = SendHoverAsync(app, payload, on);
+            if (on) _lastHover = sending;
         }
 
         private async System.Threading.Tasks.Task SendHoverAsync(AppDescriptor app, string payload, bool on)

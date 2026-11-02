@@ -181,4 +181,4 @@ public class ExportIntegrationTests : IDisposable
 }
 
 [CollectionDefinition("ExportedProcesses", DisableParallelization = true)]
-public class ExportedProcessesCollection { }
+public class ExportedProcessesCollection : ICollectionFixture<Neo.Tests.ForegroundTurn> { }

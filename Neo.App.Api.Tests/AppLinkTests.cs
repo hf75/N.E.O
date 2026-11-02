@@ -141,7 +141,9 @@ namespace Neo.App.Api.Tests
             var done = new List<string>();
             var gate = new TaskCompletionSource();
             var outbox = new LinkOutbox(_ => done.Add("failed"));
-            outbox.Post(null, async () => { await gate.Task; done.Add("first"); });
+            var started = new ManualResetEventSlim();
+            outbox.Post(null, async () => { started.Set(); await gate.Task; done.Add("first"); });
+            started.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue("the first thing is under way before the rest is asked for");
             return (outbox, done, gate);
         }
 

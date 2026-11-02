@@ -183,4 +183,4 @@ public class PluginWindowSmokeTests
 }
 
 [CollectionDefinition("PluginWindowProcesses", DisableParallelization = true)]
-public class PluginWindowProcessesCollection { }
+public class PluginWindowProcessesCollection : ICollectionFixture<Neo.Tests.ForegroundTurn> { }
