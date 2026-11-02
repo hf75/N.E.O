@@ -380,18 +380,19 @@ public class AnthropicAgentTests
     public async Task TimeLimit_AnAnswerMayTakeLongerThanTheLimit_AsLongAsDataKeepsComing()
     {
         // Three times the limit in total, never more than a third of it without a sign of life.
+        // A limit of 3 s: a machine running all the tests at once can stand still for more than a second.
         var api = new FakeApi { RawStream = null };
         var lines = ToStream(TextAnswer("OK")).Split("\n\n", StringSplitOptions.RemoveEmptyEntries).Select(e => e + "\n\n").ToList();
         var script = new List<(int, string)>();
         foreach (var line in lines) script.Add((0, line));
-        script.InsertRange(2, Enumerable.Range(0, 9).Select(_ => (330, Event(new JsonObject { ["type"] = "ping" }))));
+        script.InsertRange(2, Enumerable.Range(0, 9).Select(_ => (1000, Event(new JsonObject { ["type"] = "ping" }))));
         api.SlowStream = new SlowStream(script.ToArray());
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var result = await Run(api, NewModel(), "", timeoutSeconds: 1);
+        var result = await Run(api, NewModel(), "", timeoutSeconds: 3);
 
         result.Should().Be("OK");
-        watch.Elapsed.TotalSeconds.Should().BeGreaterThan(2);
+        watch.Elapsed.TotalSeconds.Should().BeGreaterThan(6);
     }
 
     [Fact]
