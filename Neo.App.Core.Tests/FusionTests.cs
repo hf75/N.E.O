@@ -22,6 +22,7 @@ public class FusionTests
         text.Should().Contain("side by side", "the window grows by the other one's width, and neither part may lie over the other");
         text.Should().Contain("ClipToBounds");
         text.Should().Contain("must not", "a picture in a ScrollViewer has no size: a merged fractal stayed black");
+        text.Should().Contain("reads them from the part it belongs to", "a merged fractal steered to a spot left of the click");
     }
 
     [Theory]
