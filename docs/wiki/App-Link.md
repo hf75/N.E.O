@@ -44,11 +44,13 @@ Between these sits a little C#: *parse the number out of "Total: 250 €"*, *mul
 
 Measured on small tools the model built itself, each knowing nothing of the others (Sonnet 5.5, effort low), 22 runs over five pairs: the answer took 3 to 16 s. A colour mixer drove the background of a poster, the total of an expense list filled the amount of a currency converter, the laps of a stopwatch became notes, and a wish in plain words added a second kind of note. One run failed, on a list of the toolkit that did not cross between the programs; that is fixed. For a palette and a fractal drawn in grey the model said that a link cannot do it, and suggested nothing.
 
+A flight game without instruments and the panel of an airplane without a plane, seven runs with answers in 5 to 16 s: each time the model suggested that the needles read the flight and that the stick and the lever on the panel fly the plane, and it turned radians into degrees by itself.
+
 ## Limits
 
 - A link can only use what is there. It cannot show what a program has no code for: then merge them, or ask for the change in a prompt.
 - Addresses count controls of a type in the order they appear. A control that moves because a prompt changed the program may then be another one. What cannot be found any more is said in the chat.
-- How good the suggestions are is up to the model. Read what it says before you connect.
+- How good the suggestions are is up to the model. Read what it says before you connect. In a block that keeps two values equal it sometimes starts a watch inside a callback, although it is told not to (2 of the last 5 runs of the flight game): every change then adds one more watch until the link ends.
 - Nothing asks again: the code you agreed to runs with your rights, like everything N.E.O. builds.
 - Each link lives in memory. After a restart of either program it is gone, and you make it again with a drop.
 - The N.E.O. of the program you drop on needs a model and a key. For an exported living app that is the key of the person using it.

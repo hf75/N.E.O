@@ -53,6 +53,18 @@ public class LinkGuidanceTests
             LinkGuidance.SystemMessage.Should().Contain("a." + method.Name, "the model only knows what it is told");
     }
 
+    [Theory]
+    [InlineData("never inside a callback")]
+    [InlineData("No watch with an empty callback")]
+    [InlineData("a.X only for what program a has")]
+    [InlineData("two plain watches, one each way, without any guard")]
+    public void The_model_is_told_what_it_wrote_when_it_was_not(string rule)
+    {
+        // Seen with the real model: a watch started again at every change, also to read a value once or to guard
+        // against an echo the link already stops, and a watch on the program that has no such field.
+        LinkGuidance.SystemMessage.Should().Contain(rule);
+    }
+
     [Fact]
     public void Each_block_becomes_a_method_of_its_own_so_the_person_can_choose()
     {
