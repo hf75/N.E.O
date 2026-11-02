@@ -40,6 +40,8 @@ public class ExoskeletonSmokeTests : IDisposable
                 press.Click += async (_, _) => _result.Text = "PRESSED " + await _target.ClickAsync("Say hello");
                 var write = new Button { Content = "Write" };
                 write.Click += async (_, _) => _result.Text = "WRITTEN " + await _target.SetTextAsync("written by the panel");
+                var letGo = new Button { Content = "Let go" };
+                letGo.Click += (_, _) => _target.Dispose();
                 var panel = new StackPanel();
                 panel.Children.Add(_words);
                 panel.Children.Add(_state);
@@ -47,6 +49,7 @@ public class ExoskeletonSmokeTests : IDisposable
                 panel.Children.Add(_lines);
                 panel.Children.Add(press);
                 panel.Children.Add(write);
+                panel.Children.Add(letGo);
                 Content = panel;
 
                 _target = ForeignApp.Attach("{{_title}}", size: 260);
@@ -208,6 +211,7 @@ public class ExoskeletonSmokeTests : IDisposable
             await WaitUntilDockedAsync(panelWindow, targetWindow, "the panel beside the restored program");
 
             // The next change is patched in: it stays where it is, still reading.
+            await Task.Delay(3000); // hot reload arms itself in the background
             await SendPromptAsync(host, "Call it a count.");
             await WaitForAsync(() => api.Requests.Count == 2 ? "asked" : null, 30, "the second request");
             await Task.Delay(4000);
@@ -225,6 +229,259 @@ public class ExoskeletonSmokeTests : IDisposable
             _target = new Target(_title, 300, 200);
             await WaitForTextAsync(host, ChildProcessName(Host), t => t == "STATE open", 5, "the tool finding the program again", api);
             await WaitUntilDockedAsync(panelWindow, _target.Handle, "the panel beside the new window");
+
+            // The tool lets go by itself.
+            TopLevelWindows.Click(panel, ButtonIn(panel, "Let go"));
+            await WaitForAsync(() => (GetWindowLongPtr(panelWindow, -16) & 0x00C00000) != 0 ? "normal" : null, 5, "the title bar after Dispose");
+        }
+        finally
+        {
+            Stop(host);
+        }
+    }
+
+    // A new interface cannot be patched in: the tool is replaced, in the same process, and nobody tells the one before.
+    private string ToolThatMustBeReplaced => Tool
+        .Replace("WORDS ", "COUNT ")
+        .Replace("public class DynamicUserControl : UserControl", "public class DynamicUserControl : UserControl, IDisposable")
+        .Replace("public DynamicUserControl()", "public void Dispose() { }\n\n    public DynamicUserControl()");
+
+    [Fact]
+    public async Task A_tool_replaced_while_docked_gets_its_title_bar_back_when_the_program_ends()
+    {
+        using var api = new StandInClaudeApi();
+        api.AnswerWithCode(Tool);
+        api.AnswerWithCode(ToolThatMustBeReplaced);
+        _target = new Target(_title, 300, 200);
+
+        using var host = Start(Host, api, _settings, new { UseAvalonia = true, ClaudeModel = "stand-in", ClaudeEffort = "low", AcceptAutomatic = true });
+        try
+        {
+            await SendPromptAsync(host, $"Give {_title} a word count.");
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t == "STATE open", 60, "the tool finding the program", api);
+            var panelWindow = Handle(await WaitForAsync(() => Panel(host), 10, "the panel"));
+            await WaitUntilDockedAsync(panelWindow, _target.Handle, "the panel beside the program");
+            var docked = WindowRect(panelWindow).Width;
+            await Task.Delay(3000); // hot reload arms itself in the background
+
+            await SendPromptAsync(host, "Call it a count.");
+            await WaitForTextAsync(host, "no such process", t => t.StartsWith("Hot reload not possible"), 60, "the note that the tool is replaced", api);
+            _target.Text = "one two";
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t == "COUNT 2", 30, "the new tool reading the program", api);
+            await WaitUntilDockedAsync(panelWindow, _target.Handle, "the new tool still docked");
+
+            _target.Dispose();
+            _target = null;
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t == "STATE closed", 5, "the new tool noticing that the program ended", api);
+            await Task.Delay(1000); // long enough for a follower left behind to do what it does
+            (GetWindowLongPtr(panelWindow, -16) & 0x00C00000).Should().NotBe(0, "it is a normal window again, not a window nobody can move");
+            WindowRect(panelWindow).Width.Should().BeGreaterThan(docked, "it has the size it had before it ever docked");
+
+            // The one before it has stopped: the new tool alone follows the program when it returns.
+            _target = new Target(_title, 340, 240);
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t == "STATE open", 5, "the new tool finding the program again", api);
+            await WaitUntilDockedAsync(panelWindow, _target.Handle, "the panel beside the new window");
+            (GetWindowLongPtr(panelWindow, -16) & 0x00C00000).Should().Be(0, "it looks like a part of the program again");
+        }
+        finally
+        {
+            Stop(host);
+        }
+    }
+
+    private static string ToolWithoutTheProgram(string attaching) => $$"""
+        using System;
+        using Avalonia.Controls;
+        using Neo.App;
+
+        public class DynamicUserControl : UserControl, IDisposable
+        {
+            public DynamicUserControl()
+            {
+                Content = new TextBlock { Text = "PLAIN TOOL" };
+                {{attaching}}
+            }
+            public void Dispose() { }
+        }
+        """;
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("ForeignApp.Attach(\"NoProgramOfThisName\", size: 260);")]
+    public async Task A_tool_replaced_by_one_that_does_not_dock_leaves_a_normal_window(string attaching)
+    {
+        using var api = new StandInClaudeApi();
+        api.AnswerWithCode(Tool);
+        api.AnswerWithCode(ToolWithoutTheProgram(attaching));
+        _target = new Target(_title, 300, 200);
+
+        using var host = Start(Host, api, _settings, new { UseAvalonia = true, ClaudeModel = "stand-in", ClaudeEffort = "low", AcceptAutomatic = true });
+        try
+        {
+            await SendPromptAsync(host, $"Give {_title} a word count.");
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t == "STATE open", 60, "the tool finding the program", api);
+            var panelWindow = Handle(await WaitForAsync(() => Panel(host), 10, "the panel"));
+            await WaitUntilDockedAsync(panelWindow, _target.Handle, "the panel beside the program");
+            var docked = WindowRect(panelWindow).Width;
+            await Task.Delay(3000); // hot reload arms itself in the background
+
+            await SendPromptAsync(host, "Make it something else.");
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t == "PLAIN TOOL", 60, "the other tool", api);
+            await WaitForAsync(() => (GetWindowLongPtr(panelWindow, -16) & 0x00C00000) != 0 ? "normal" : null, 5, "the title bar coming back");
+            WindowRect(panelWindow).Width.Should().BeGreaterThan(docked, "it has the size it had before it ever docked");
+
+            // Nothing follows the program any more.
+            _target.MoveTo(440, 300);
+            await Task.Delay(500);
+            var panel = WindowRect(panelWindow);
+            var target = VisibleFrame(_target.Handle);
+            (Math.Abs(panel.Left - target.Right) <= 1 && Math.Abs(panel.Top - target.Top) <= 1).Should().BeFalse("the tool that docked is gone");
+        }
+        finally
+        {
+            Stop(host);
+        }
+    }
+
+    // A part of a title finds a window, so nothing in common with the first program.
+    private static string TitleOfAnotherProgram() => "OtherProgram" + Guid.NewGuid().ToString("N")[..8];
+
+    /// <summary>Docks to the first program, and on a button to another one: the window is docked already when that one takes it.</summary>
+    private string ToolThatMovesOver(string other, string first) => $$"""
+        using Avalonia.Controls;
+        using Neo.App;
+
+        public class DynamicUserControl : UserControl
+        {
+            private readonly TextBlock _first = new TextBlock { Text = "FIRST none" };
+            private readonly TextBlock _state = new TextBlock { Text = "SECOND waiting" };
+            private readonly ForeignApp _one;
+            private ForeignApp _two;
+
+            public DynamicUserControl()
+            {
+                var moveOver = new Button { Content = "Move over" };
+                moveOver.Click += (_, _) =>
+                {
+                    {{first}}
+                    _two = ForeignApp.Attach("{{other}}", size: 260);
+                    _two.Opened += () => _state.Text = "SECOND open";
+                    _two.Closed += () => _state.Text = "SECOND closed";
+                };
+                var panel = new StackPanel();
+                panel.Children.Add(_first);
+                panel.Children.Add(_state);
+                panel.Children.Add(moveOver);
+                Content = panel;
+
+                _one = ForeignApp.Attach("{{_title}}", size: 260);
+                _one.TextChanged += text => _first.Text = "FIRST " + text;
+            }
+        }
+        """;
+
+    private System.Diagnostics.Process StartWith(StandInClaudeApi api, string tool)
+    {
+        api.AnswerWithCode(tool);
+        _target = new Target(_title, 200, 150);
+        return Start(Host, api, _settings, new { UseAvalonia = true, ClaudeModel = "stand-in", ClaudeEffort = "low", AcceptAutomatic = true });
+    }
+
+    /// <summary>The tool docked to the first program, and the button pressed.</summary>
+    private async Task<(IntPtr Window, int Docked)> MovedOverAsync(System.Diagnostics.Process host, StandInClaudeApi api)
+    {
+        await SendPromptAsync(host, "Build it.");
+        await WaitForTextAsync(host, ChildProcessName(Host), t => t == "FIRST ", 60, "the tool reading the first program", api);
+        var panel = await WaitForAsync(() => Panel(host), 10, "the panel");
+        var window = Handle(panel);
+        await WaitUntilDockedAsync(window, _target!.Handle, "the panel beside the first program");
+        (GetWindowLongPtr(window, -16) & 0x00C00000).Should().Be(0, "it is docked before the other one takes it");
+        var docked = WindowRect(window).Width;
+        TopLevelWindows.Click(panel, ButtonIn(panel, "Move over"));
+        return (window, docked);
+    }
+
+    private async Task WaitForTheNormalLookAsync(IntPtr window, int docked)
+    {
+        await WaitForAsync(() => (GetWindowLongPtr(window, -16) & 0x00C00000) != 0 ? "normal" : null, 5, "the title bar coming back");
+        WindowRect(window).Width.Should().BeGreaterThan(docked, "it has the size it had before it ever docked");
+    }
+
+    [Fact]
+    public async Task A_later_attach_takes_the_window_over_and_the_first_still_reads()
+    {
+        var second = TitleOfAnotherProgram();
+        using var api = new StandInClaudeApi();
+        using var other = new Target(second, 500, 300);
+        using var host = StartWith(api, ToolThatMovesOver(second, ""));
+        try
+        {
+            var (window, docked) = await MovedOverAsync(host, api);
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t == "SECOND open", 5, "the tool finding the second program", api);
+            await WaitUntilDockedAsync(window, other.Handle, "the panel beside the second program");
+
+            _target!.Text = "still read";
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t == "FIRST still read", 5, "the first program being read", api);
+
+            // The first one ending is no reason to let go of the second.
+            _target.Dispose();
+            _target = null;
+            await Task.Delay(1000);
+            (GetWindowLongPtr(window, -16) & 0x00C00000).Should().Be(0, "the panel is docked to the second program");
+            await WaitUntilDockedAsync(window, other.Handle, "the panel still beside the second program");
+
+            other.Dispose();
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t == "SECOND closed", 5, "the second program ending", api);
+            await WaitForTheNormalLookAsync(window, docked);
+        }
+        finally
+        {
+            Stop(host);
+        }
+    }
+
+    [Fact]
+    public async Task A_tool_can_let_go_of_one_program_and_dock_to_another_at_once()
+    {
+        var second = TitleOfAnotherProgram();
+        using var api = new StandInClaudeApi();
+        using var other = new Target(second, 500, 300);
+        using var host = StartWith(api, ToolThatMovesOver(second, "_one.Dispose();"));
+        try
+        {
+            var (window, docked) = await MovedOverAsync(host, api);
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t == "SECOND open", 5, "the tool finding the second program", api);
+            await WaitUntilDockedAsync(window, other.Handle, "the panel beside the second program");
+
+            // Long enough for the first one to end: it leaves the window to the second.
+            await Task.Delay(1000);
+            (GetWindowLongPtr(window, -16) & 0x00C00000).Should().Be(0, "the panel is docked to the second program");
+            await WaitUntilDockedAsync(window, other.Handle, "the panel still beside the second program");
+
+            other.Dispose();
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t == "SECOND closed", 5, "the second program ending", api);
+            await WaitForTheNormalLookAsync(window, docked);
+        }
+        finally
+        {
+            Stop(host);
+        }
+    }
+
+    [Fact]
+    public async Task A_later_attach_to_a_program_that_is_not_open_leaves_a_normal_window_until_it_is()
+    {
+        var second = TitleOfAnotherProgram();
+        using var api = new StandInClaudeApi();
+        using var host = StartWith(api, ToolThatMovesOver(second, ""));
+        try
+        {
+            var (window, docked) = await MovedOverAsync(host, api);
+            await WaitForTheNormalLookAsync(window, docked);
+
+            using var other = new Target(second, 500, 300);
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t == "SECOND open", 5, "the tool finding the second program", api);
+            await WaitUntilDockedAsync(window, other.Handle, "the panel beside the second program");
         }
         finally
         {

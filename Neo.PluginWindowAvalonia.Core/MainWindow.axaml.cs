@@ -421,6 +421,9 @@ namespace Neo.PluginWindowAvalonia
                 return;
             }
 
+            // What this version watches and docks to (ForeignApp, compiled into the app) ends with it.
+            AppDomain.CurrentDomain.SetData("Neo.ForeignApp.AppVersion", new object());
+
             try
             {
                 if (dynamicContent.Content is Avalonia.Controls.UserControl)

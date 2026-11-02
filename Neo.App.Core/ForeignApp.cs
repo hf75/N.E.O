@@ -27,17 +27,28 @@ namespace Neo.App
         // The window that runs the app must stop following N.E.O.: it reads this.
         private const string AttachedMark = "Neo.ForeignApp.Attached";
 
+        // Every version of a generated app has its own copy of this class, and nobody tells a version that it
+        // was replaced. So what the copies must agree on lies in the AppDomain: which version of the app runs
+        // (the window that runs it changes this when it unloads one), who docks the window, and what the
+        // window looked like before that: {style, left, top, width, height, handle}.
+        private const string AppVersionMark = "Neo.ForeignApp.AppVersion";
+        private const string FollowerMark = "Neo.ForeignApp.Follower";
+        private const string NormalLookMark = "Neo.ForeignApp.NormalLook";
+
+        // An interned string is the one object all copies reach. Changing the look waits for the UI thread,
+        // so the UI thread must never wait for this.
+        private static readonly object LookLock = string.Intern("Neo.ForeignApp.Look");
+
         private readonly string _program;
-        private readonly bool _dock;
+        private bool _dock;
         private readonly int _size;
         private readonly ForeignSide _side;
         private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
+        private readonly object? _appVersion = AppDomain.CurrentDomain.GetData(AppVersionMark);
         private volatile bool _stopped;
 
         private volatile IntPtrBox? _target;
         private IntPtr _own;
-        private long _ownStyle;
-        private Rect _ownRect;
         private bool _looksDocked;
         private bool _shown = true;
         private Rect _placed;
@@ -56,6 +67,7 @@ namespace Neo.App
             if (!OperatingSystem.IsWindows())
                 return;
 
+            if (dock) AppDomain.CurrentDomain.SetData(FollowerMark, this);
             new Thread(FollowLoop) { IsBackground = true, Name = "ForeignApp follow" }.Start();
             new Thread(ReadLoop) { IsBackground = true, Name = "ForeignApp read" }.Start();
         }
@@ -64,6 +76,7 @@ namespace Neo.App
         /// Docks this app's window to the window of another program. It follows that window, hides while
         /// the window is minimised, and goes back to being a normal window when the program ends; when
         /// the program starts again it docks again. Returns at once, whether the program is open or not.
+        /// A window docks to one program: after a later Attach, this one only reads and uses its program.
         /// </summary>
         /// <param name="program">Its process name ("notepad", "EXCEL"), or a part of its window title.</param>
         /// <param name="size">The width of the panel in device-independent pixels (its height when docked at the bottom).</param>
@@ -121,26 +134,31 @@ namespace Neo.App
             _target is { } target && Named(target.Handle, name) is { } element && SetValue(element, value)));
 
         /// <summary>Stops following the program; this app's window becomes a normal window again.</summary>
-        public void Dispose()
-        {
-            _stopped = true;
-            if (_looksDocked) LookNormal();
-        }
+        public void Dispose() => _stopped = true;
 
         // ── Following the window ──────────────────────────────────────────────
+
+        private bool Follows => ReferenceEquals(AppDomain.CurrentDomain.GetData(FollowerMark), this);
 
         private void FollowLoop()
         {
             var nextSearch = 0L;
-            while (!_stopped)
+            while (!_stopped && ReferenceEquals(AppDomain.CurrentDomain.GetData(AppVersionMark), _appVersion))
             {
                 try
                 {
+                    // A later Attach docks the window now, and it has taken the window over as it is.
+                    if (_dock && !Follows)
+                    {
+                        _dock = false;
+                        _looksDocked = false;
+                    }
+
                     var target = _target;
                     if (target != null && !IsWindow(target.Handle))
                     {
                         _target = target = null;
-                        if (_looksDocked) LookNormal();
+                        if (_looksDocked) lock (LookLock) LookNormal();
                         OnUi(() => Closed?.Invoke());
                     }
 
@@ -153,6 +171,9 @@ namespace Neo.App
                             if (_dock && IsIconic(found)) ShowWindow(found, SW_RESTORE);
                             OnUi(() => Opened?.Invoke());
                         }
+                        // The version of the app before this one docked to a program this one does not find.
+                        else if (_dock && !_looksDocked && AppDomain.CurrentDomain.GetData(NormalLookMark) != null && OwnWindowFound())
+                            lock (LookLock) LookNormal();
                     }
 
                     if (target != null && _dock)
@@ -164,20 +185,48 @@ namespace Neo.App
                 }
                 Thread.Sleep(30);
             }
+            _stopped = true;
+
+            // The window goes back to normal, unless a newer one has taken it over.
+            try
+            {
+                lock (LookLock)
+                {
+                    if (!Follows) return;
+                    if (_looksDocked) LookNormal();
+                    AppDomain.CurrentDomain.SetData(FollowerMark, null);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ForeignApp] " + ex.Message);
+            }
+        }
+
+        private bool OwnWindowFound()
+        {
+            if (_own != IntPtr.Zero) return true;
+
+            // Docked already, and maybe hidden with its program, which Windows then does not call a main window.
+            if (AppDomain.CurrentDomain.GetData(NormalLookMark) is long[] normal)
+            {
+                _own = (IntPtr)normal[5];
+                return true;
+            }
+
+            using var self = Process.GetCurrentProcess();
+            var main = self.MainWindowHandle;
+            // Inside the N.E.O. window (the WPF host) there is no window of its own to dock.
+            if (main == IntPtr.Zero || (GetWindowLongPtr(main, GWL_STYLE) & WS_CHILD) != 0) return false;
+            _own = main;
+            return true;
         }
 
         private void Follow(IntPtr target)
         {
-            if (_own == IntPtr.Zero)
-            {
-                using var self = Process.GetCurrentProcess();
-                var main = self.MainWindowHandle;
-                // Inside the N.E.O. window (the WPF host) there is no window of its own to dock.
-                if (main == IntPtr.Zero || (GetWindowLongPtr(main, GWL_STYLE) & WS_CHILD) != 0) return;
-                _own = main;
-            }
+            if (!OwnWindowFound()) return;
 
-            if (!_looksDocked) LookDocked();
+            if (!_looksDocked) lock (LookLock) LookDocked();
 
             if (IsIconic(target))
             {
@@ -212,20 +261,31 @@ namespace Neo.App
 
         private void LookDocked()
         {
-            GetWindowRect(_own, out _ownRect);
-            _ownStyle = GetWindowLongPtr(_own, GWL_STYLE);
+            // A version of the app before this one may have docked it: then the window itself no longer says what it looked like.
+            if (AppDomain.CurrentDomain.GetData(NormalLookMark) is not long[] normal)
+            {
+                GetWindowRect(_own, out var rect);
+                normal = [GetWindowLongPtr(_own, GWL_STYLE), rect.Left, rect.Top, rect.Width, rect.Height, (long)_own];
+                AppDomain.CurrentDomain.SetData(NormalLookMark, normal);
+            }
             AppDomain.CurrentDomain.SetData(AttachedMark, true);
-            SetWindowLongPtr(_own, GWL_STYLE, (_ownStyle & ~(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) | WS_POPUP);
+            SetWindowLongPtr(_own, GWL_STYLE, (normal[0] & ~(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) | WS_POPUP);
             SetWindowPos(_own, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            _shown = IsWindowVisible(_own);
             _looksDocked = true;
             _placed = default;
         }
 
         private void LookNormal()
         {
-            SetWindowLongPtr(_own, GWL_STYLE, _ownStyle);
-            SetWindowPos(_own, IntPtr.Zero, _ownRect.Left, _ownRect.Top, _ownRect.Width, _ownRect.Height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-            if (!_shown) { ShowWindow(_own, SW_SHOWNOACTIVATE); _shown = true; }
+            if (AppDomain.CurrentDomain.GetData(NormalLookMark) is long[] normal)
+            {
+                SetWindowLongPtr(_own, GWL_STYLE, normal[0]);
+                SetWindowPos(_own, IntPtr.Zero, (int)normal[1], (int)normal[2], (int)normal[3], (int)normal[4], SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                AppDomain.CurrentDomain.SetData(NormalLookMark, null);
+            }
+            if (!IsWindowVisible(_own)) ShowWindow(_own, SW_SHOWNOACTIVATE);
+            _shown = true;
             AppDomain.CurrentDomain.SetData(AttachedMark, false);
             _looksDocked = false;
         }
