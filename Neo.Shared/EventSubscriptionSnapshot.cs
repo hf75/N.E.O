@@ -249,7 +249,10 @@ namespace Neo.Shared
             catch (ReflectionTypeLoadException ex) { return ex.Types.Where(t => t != null)!; }
         }
 
-        private static bool IsReference(Type type) => !type.IsPrimitive && !type.IsPointer && type != typeof(string);
+        // Only references lead anywhere, the walk drops values anyway. Reading them is not harmless either: the compiler
+        // keeps the data of an array written in the code in a static struct, and through reflection that crashes the
+        // process (AccessViolationException) from the second read on when the array came with a patch.
+        private static bool IsReference(Type type) => !type.IsValueType && !type.IsPointer && type != typeof(string);
 
         /// <summary>The delegate fields behind the type's events (field-like events, or custom ones with a single field of the handler type).</summary>
         private static FieldInfo[] EventFields(Type type) => s_eventFields.GetOrAdd(type, static t =>

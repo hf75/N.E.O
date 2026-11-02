@@ -64,6 +64,79 @@ public class HotReloadSessionTests
         update.Request!.RebuildUi.Should().BeFalse("nothing that runs while the UI is built has changed");
     }
 
+    private const string LoopApp = """
+        using System;
+        using System.Collections.Generic;
+        using System.Threading.Tasks;
+
+        public class DynamicUserControl
+        {
+            private double _zoom = 1;
+            private int _clicks;
+            public Func<double> Read = () => 0;
+            public string Ui = "";
+            public event EventHandler? Sized;
+            public event EventHandler? Pressed;
+
+            public DynamicUserControl()
+            {
+                Task.Run(() => Work(_zoom));
+                InitializeComponents();
+            }
+
+            private void Work(double zoom) { }
+
+            public void InitializeComponents()
+            {
+                var root = new List<int> { 1 };
+                Sized += (s, e) => { _zoom = _zoom * 2; };
+                Pressed += (s, e) => { _clicks = _clicks + 1; };
+                Read = () => _zoom;
+                Ui = "parts " + root.Count;
+            }
+        }
+        """;
+
+    [Fact]
+    public async Task A_new_field_and_a_lambda_that_starts_capturing_a_local_can_come_in_one_change()
+    {
+        using var app = await HotReloadHarness.StartAsync(LoopApp);
+
+        // What a merge of two programs writes: Roslyn's delta writer alone throws on this ("same key has already been added").
+        var (update, _) = await app.UpdateAsync(LoopApp
+            .Replace("private int _clicks;", "private int _clicks;\n    private double[] _hues = new double[] { 270, 315 };\n    public int Width { get; set; } = 500;")
+            .Replace("Read = () => _zoom;", "Sized += (s, e) => { root.Add(root.Count); };\n        Read = () => _zoom + _hues[1] + Width + root.Count;"));
+
+        update.Status.Should().Be(HotReloadStatus.Ready, update.Reason);
+        app.Get<double[]>("_hues").Should().Equal(270, 315);
+        app.Get<int>("Width").Should().Be(500);
+        app.Get<Func<double>>("Read")().Should().Be(1 + 315 + 500 + 1);
+
+        // And it goes on from there, with the source as the model wrote it.
+        var (next, _) = await app.UpdateAsync(LoopApp
+            .Replace("private int _clicks;", "private int _clicks;\n    private double[] _hues = new double[] { 270, 315 };\n    public int Width { get; set; } = 500;")
+            .Replace("Read = () => _zoom;", "Sized += (s, e) => { root.Add(root.Count); };\n        Read = () => _zoom + _hues[1] + Width + root.Count + 1000;"));
+        next.Status.Should().Be(HotReloadStatus.Ready, next.Reason);
+        app.Get<Func<double>>("Read")().Should().Be(1 + 315 + 500 + 1 + 1000);
+    }
+
+    [Fact]
+    public async Task An_array_written_in_a_patch_does_not_bring_the_process_down()
+    {
+        using var app = await HotReloadHarness.StartAsync(LoopApp);
+
+        // The compiler keeps its data in a static struct, and the walk over the plugin's statics used to read that.
+        var (update, _) = await app.UpdateAsync(LoopApp
+            .Replace("private int _clicks;", "private int _clicks;\n    private double[] _hues = new double[] { 275, 315, 28, 46, 58, 12, 13, 14 };"));
+        update.Status.Should().Be(HotReloadStatus.Ready, update.Reason);
+
+        // Reflection goes to a fast path from the second read on: that is where it crashed, with no way to catch it.
+        for (int i = 0; i < 5; i++)
+            HotReloadRuntime.Rebuild(app.Root, "InitializeComponents");
+
+        app.Get<double[]>("_hues").Should().HaveCount(8);
+    }
+
     [Fact]
     public async Task Added_fields_are_initialised_on_objects_that_already_exist()
     {

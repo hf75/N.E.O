@@ -234,7 +234,19 @@ public sealed class HotReloadSession : IDisposable
                     return HotReloadUpdate.NotPossible("the state of the running app cannot be carried over (" + helperError + ")");
             }
 
-            var (deltas, diagnostics) = await _service.EmitSolutionUpdateAsync(updated, _projectId, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<HotReloadDelta> deltas;
+            IReadOnlyList<Diagnostic> diagnostics;
+            try
+            {
+                (deltas, diagnostics) = await _service.EmitSolutionUpdateAsync(updated, _projectId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ArgumentException)
+            {
+                // Roslyn's delta writer can trip over a change where new initializers alter the constructor while a
+                // lambda starts capturing a local elsewhere (the same method row added twice).
+                updated = await WithoutNewInitializersAsync(updated, oldCompilation, cancellationToken).ConfigureAwait(false);
+                (deltas, diagnostics) = await _service.EmitSolutionUpdateAsync(updated, _projectId, cancellationToken).ConfigureAwait(false);
+            }
 
             var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
             if (errors.Count > 0)
@@ -299,6 +311,48 @@ public sealed class HotReloadSession : IDisposable
                 (original, rewritten) => ((TypeDeclarationSyntax)rewritten).AddMembers(membersByType[(TypeDeclarationSyntax)original]));
 
             solution = solution.WithDocumentText(documentId, ToSourceText(newRoot.ToFullString()));
+        }
+        return solution;
+    }
+
+    // Initializers the running code does not need: the control's constructor does not run again in this process,
+    // and the plan sets new fields on the live object anyway. The next full load compiles the real source.
+    private async Task<Solution> WithoutNewInitializersAsync(Solution solution, Compilation oldCompilation, CancellationToken cancellationToken)
+    {
+        var compilation = (await solution.GetProject(_projectId)!.GetCompilationAsync(cancellationToken).ConfigureAwait(false))!;
+        var rootType = StateMigrationAnalyzer.SourceTypes(compilation).FirstOrDefault(t => t.Name == _options.RootTypeName && t.TypeKind == TypeKind.Class);
+        if (rootType == null || oldCompilation.GetTypeByMetadataName(StateMigrationAnalyzer.MetadataName(rootType)) is not { } oldType)
+            return solution;
+
+        bool Fresh(string name) => !oldType.GetMembers(name).Any(old => old.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() switch
+        {
+            VariableDeclaratorSyntax field => field.Initializer != null,
+            PropertyDeclarationSyntax property => property.Initializer != null,
+            _ => false,
+        });
+
+        foreach (var reference in rootType.DeclaringSyntaxReferences)
+        {
+            if (reference.GetSyntax(cancellationToken) is not TypeDeclarationSyntax declaration) continue;
+            var documentId = solution.GetDocumentId(declaration.SyntaxTree);
+            if (documentId == null) continue;
+
+            var fields = declaration.Members.OfType<FieldDeclarationSyntax>()
+                .Where(f => !f.Modifiers.Any(SyntaxKind.StaticKeyword))
+                .SelectMany(f => f.Declaration.Variables)
+                .Where(v => v.Initializer != null && Fresh(v.Identifier.ValueText));
+            var properties = declaration.Members.OfType<PropertyDeclarationSyntax>()
+                .Where(p => p.Initializer != null && !p.Modifiers.Any(SyntaxKind.StaticKeyword) && Fresh(p.Identifier.ValueText));
+
+            var root = await declaration.SyntaxTree.GetRootAsync(cancellationToken).ConfigureAwait(false);
+            var stripped = root.ReplaceNodes(fields.Cast<SyntaxNode>().Concat(properties), (_, rewritten) => rewritten switch
+            {
+                VariableDeclaratorSyntax field => field.WithInitializer(null),
+                // Its line end stays: a field that moves within its line counts as a changed constructor again.
+                PropertyDeclarationSyntax property => property.WithInitializer(null).WithSemicolonToken(default).WithTrailingTrivia(property.GetTrailingTrivia()),
+                _ => rewritten,
+            });
+            solution = solution.WithDocumentText(documentId, ToSourceText(stripped.ToFullString()));
         }
         return solution;
     }

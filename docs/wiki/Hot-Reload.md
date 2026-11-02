@@ -68,6 +68,7 @@ The system prompts of the desktop hosts and the MCP server teach these rules (`N
 
 ## Limits
 
+- A method that is running keeps its old code until it is called again, so a change never reaches the body of a loop that runs as long as the app does. Generated code keeps such a loop small and does the work in a method it calls for each round; that method gets the change at the next round. A round under way during the update can fail once when its lambda gained a captured variable, because the new body then runs on the old closure, so the loop catches that and goes on.
 - Things Roslyn cannot patch into a running app (new base class/interface, changed method signatures in some cases, generic type changes, …) fall back to a fresh start. The message says which edit it was.
 - A download or connection that is running while the code changes keeps running with the new code for everything it calls afterwards; code already on the stack finishes as the old version.
 - Plugins are loaded into a **non-collectible** load context in processes that can hot reload: the runtime crashes when an update adds a static field to an assembly in a collectible context. Most changes now patch the running app; each *full* reload keeps the replaced plugin assembly in memory until the preview window is restarted. Its dependencies (NuGet packages) are not duplicated: identical assemblies (same identity and MVID) are loaded once and shared by every later plugin context.
