@@ -19,16 +19,22 @@ public static class FusionGuidance
     }
 
     /// <summary>The instruction with the source of the other program, to go after the prompt.</summary>
-    public static string ForTheModel(string name, string prefix, string code, IEnumerable<string> packages)
+    /// <param name="ownWidth">How wide this program's window is; with <paramref name="otherWidth"/> that gives each part its share.</param>
+    public static string ForTheModel(string name, string prefix, string code, IEnumerable<string> packages, double? ownWidth = null, double otherWidth = 0)
     {
+        var columns = ownWidth is > 0 && otherWidth > 0
+            ? $"two star columns in the proportion {Math.Round(ownWidth.Value)}:{Math.Round(otherWidth)}"
+            : "two columns of equal width";
+
         var text = new StringBuilder();
         text.Append($"""
 
 
             The user dragged another program, "{name}", onto this one, to make one program of the two. Merge it in:
-            - This program keeps everything it does and shows, and its data.
-            - Add everything the other program does and shows, complete and working. Connect the two only where it is obvious.
-            - Lay them out side by side in a Grid with two columns of equal width, this program left and the other right, each looking the way it looks now: when this is done, the window grows by the width of the other program's window, so neither needs to be made smaller. Put each one into a ScrollViewer of its own that scrolls both ways when needed, so that neither can ever lie over the other.
+            - This program keeps everything it can do, and its data.
+            - Add everything the other program can do, complete and working.
+            - Then connect them: the user put exactly these two together for a reason. Where one holds or produces something the other can use, let the other use it, live, so that a change in one shows in the other at once, even if that changes how it looks. For example, an expense list and a currency converter: the amounts appear converted. Do not add new functions for this, and say in the explanation what you connected.
+            - Lay them out side by side in a Grid with {columns}, this program left and the other right, each laid out the way it is now: when this is done, the window grows by the width of the other program's window, so each keeps the room it has now and neither needs to be made smaller. Set ClipToBounds on what fills each column, so that neither can ever lie over the other. A part that is a form or a list may go into a ScrollViewer of its own; one that fills the space it gets (a picture, a canvas, a chart) must not, because it has no size there.
             - Keep every field of the other program under its exact name, because its running data moves over by name. Only where this program already has a field of that name, put "{prefix}_" in front of the whole name.
             - Keep what the other program's constructor does, and build its UI in the same method that builds this program's UI.
             - Keep its file paths as they are, and list its NuGet packages too.

@@ -43,6 +43,9 @@ namespace Neo.App
         /// <summary>Shows or hides the window of the app, or a banner over it.</summary>
         Task SetAppWindowAsync(AppWindowMessage message) => Task.CompletedTask;
 
+        /// <summary>How wide the app's own window is. Null: it has none, or it has not said yet.</summary>
+        double? AppWindowWidth => null;
+
         /// <summary>
         /// Captures a screenshot of the child window. Returns a platform-specific image object
         /// (e.g. BitmapSource on WPF) or null if unavailable.

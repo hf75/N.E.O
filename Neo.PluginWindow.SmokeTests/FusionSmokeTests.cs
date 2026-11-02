@@ -400,6 +400,7 @@ public class FusionSmokeTests : IDisposable
         try
         {
             var (a, b) = await TwoAppsSideBySideAsync(hostA, hostB, apiA, apiB);
+            apiA.HoldAnswers();
 
             var from = TitleBarOf(b);
             var to = MiddleOf(a);
@@ -408,9 +409,16 @@ public class FusionSmokeTests : IDisposable
                 await WaitForAsync(() => TextsIn(AppOf(hostA)).FirstOrDefault(t => t.StartsWith("Drop to merge")), 5, "the other app saying that a drop would merge");
             });
 
+            // What is done while the model writes must survive the replacing too.
+            await WaitForTextAsync(hostA, ChildProcessName(Host), t => t.StartsWith("Merging Currency"), 10, "the line over the app", apiA);
+            var inUse = AppOf(hostA);
+            TopLevelWindows.Click(inUse, ButtonIn(inUse, "Add expense"));
+            await WaitForTextAsync(hostA, ChildProcessName(Host), t => t == "EXPENSES 2", 10, "an expense added during the merge", apiA);
+            apiA.ReleaseAnswers();
+
             await WaitForTextAsync(hostA, "no such process", t => t.StartsWith("Hot reload not possible"), 60, "the note that the app is replaced", apiA);
             await WaitForTextAsync(hostA, ChildProcessName(Host), t => t == "RATE 25", 30, "the data of the dropped program", apiA);
-            await WaitForTextAsync(hostA, ChildProcessName(Host), t => t == "EXPENSES 1", 10, "what the app itself held", apiA);
+            await WaitForTextAsync(hostA, ChildProcessName(Host), t => t == "EXPENSES 2", 10, "what the app itself held", apiA);
             TextsIn(AppOf(hostA)).Should().Contain("SHARED OWN");
         }
         finally

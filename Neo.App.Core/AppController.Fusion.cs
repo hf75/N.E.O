@@ -31,6 +31,10 @@ namespace Neo.App
 
         private bool _mergedAway;
 
+        // While merging: what the app held the moment the change had to replace it instead of being patched in.
+        private bool _merging;
+        private AppStateCapturedMessage? _stateBeforeReplacing;
+
         private Task<string?> HandleAppMessageAsync(string kind, string? payload) => kind switch
         {
             FusionMessages.Drop => DroppedOnAnotherAppAsync(payload),
@@ -212,19 +216,22 @@ namespace Neo.App
         {
             await ChildProcessService.SetAppWindowAsync(new AppWindowMessage(Banner: $"Merging {package.Name} into this app. You can go on working.", BannerColor: BannerDark));
 
-            // Should the change have to replace the running app after all, what it holds must not get lost.
+            // Fields of its own that a value of the other program must not take the place of.
             var own = await ChildProcessService.CaptureAppStateAsync();
             var before = GetCurrentCode();
             var prefix = FusionGuidance.PrefixFor(package.Name);
 
-            _fusionForTheModel = FusionGuidance.ForTheModel(package.Name, prefix, package.Code, package.Packages.Select(p => $"{p.Key}|{p.Value}"));
+            _fusionForTheModel = FusionGuidance.ForTheModel(package.Name, prefix, package.Code, package.Packages.Select(p => $"{p.Key}|{p.Value}"), ChildProcessService.AppWindowWidth, package.Width);
             bool ran;
+            _merging = true;
+            _stateBeforeReplacing = null;
             try
             {
                 ran = await ExecutePromptAsync(FusionGuidance.ChatPrompt(package.Name));
             }
             finally
             {
+                _merging = false;
                 _fusionForTheModel = string.Empty;
             }
 
@@ -232,8 +239,8 @@ namespace Neo.App
             if (GetCurrentCode() == before) return new FusionResult(false, "the AI could not merge the two.");
 
             var rebuild = HotReloadCoordinator.UiMethodNames.ToList();
-            if (!_lastBuildPatchedIn && own?.Image != null)
-                await ChildProcessService.RestoreAppStateAsync(new RestoreAppStateRequest(own.Image, rebuild));
+            if (!_lastBuildPatchedIn && _stateBeforeReplacing?.Image != null)
+                await ChildProcessService.RestoreAppStateAsync(new RestoreAppStateRequest(_stateBeforeReplacing.Image, rebuild));
 
             if (package.StateImage != null)
             {

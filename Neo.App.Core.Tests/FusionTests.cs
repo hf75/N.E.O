@@ -14,12 +14,23 @@ public class FusionTests
 
         text.Should().Contain("class Other { private int _rate; }");
         text.Should().Contain("\"Currency\"");
-        text.Should().Contain("keeps everything it does and shows");
+        text.Should().Contain("keeps everything it can do");
+        text.Should().Contain("connect them", "the point of putting exactly these two together");
         text.Should().Contain("under its exact name", "the running data moves over by name");
         text.Should().Contain("\"currency_\"", "the same prefix the data looks for");
         text.Should().Contain("Humanizer|2.14.1");
         text.Should().Contain("side by side", "the window grows by the other one's width, and neither part may lie over the other");
-        text.Should().Contain("ScrollViewer");
+        text.Should().Contain("ClipToBounds");
+        text.Should().Contain("must not", "a picture in a ScrollViewer has no size: a merged fractal stayed black");
+    }
+
+    [Theory]
+    [InlineData(816.4, 300.0, "in the proportion 816:300")]
+    [InlineData(null, 300.0, "two columns of equal width")]
+    [InlineData(816.0, 0.0, "two columns of equal width")]
+    public void Each_part_keeps_the_room_it_has_when_the_widths_are_known(double? own, double other, string says)
+    {
+        FusionGuidance.ForTheModel("Palette", "palette", "code", [], own, other).Should().Contain(says);
     }
 
     [Fact]

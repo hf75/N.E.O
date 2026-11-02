@@ -189,6 +189,9 @@ namespace Neo.App
             if (couldHotReload)
                 Logger.LogMessage(attempt.Message, BubbleType.Info);
 
+            if (_merging)
+                _stateBeforeReplacing = await ChildProcessService.CaptureAppStateAsync();
+
             // Unload old control right before loading the new one
             await ChildProcessService.UnloadControlAsync();
 

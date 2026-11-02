@@ -628,6 +628,8 @@ namespace Neo.App
         public Task SetAppWindowAsync(AppWindowMessage message) =>
             SafeSendControlAsync(new IpcEnvelope(IpcTypes.AppWindow, "", Json.ToJson(message)));
 
+        public double? AppWindowWidth => ChildWindowBounds?.Width;
+
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<string>> _pendingAppState = new();
 
         public async Task<AppStateCapturedMessage?> CaptureAppStateAsync() =>
