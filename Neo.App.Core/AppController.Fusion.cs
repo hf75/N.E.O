@@ -40,6 +40,8 @@ namespace Neo.App
             FusionMessages.Drop => DroppedOnAnotherAppAsync(payload),
             FusionMessages.Offer => Task.FromResult(TakeOverOffered(payload)),
             FusionMessages.Result => ResultOfTheMergeAsync(payload),
+            LinkMessages.Offer => Task.FromResult(LinkOffered(payload)),
+            LinkMessages.Report => LinkReportAsync(payload),
             _ => Task.FromResult<string?>(null),
         };
 
@@ -49,6 +51,8 @@ namespace Neo.App
         {
             if (payload == null || Json.FromJson<FusionDropMessage>(payload) is not { } drop)
                 return null;
+            if (drop.Link)
+                return await DroppedToLinkAsync(drop);
 
             string? problem = null;
             var targetName = FusionName(drop.TargetName, "");

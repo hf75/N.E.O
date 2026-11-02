@@ -88,10 +88,50 @@ namespace Neo.PluginWindowAvalonia
         }
 
         /// <summary>Another program is dragged over this one (its name), or not any more (null).</summary>
-        public void ShowFusionTarget(string? name)
+        /// <param name="link">It is over the half of this window where a drop links the two; the other half merges them.</param>
+        public void ShowFusionTarget(string? name, bool link = false)
         {
             FusionText.Text = name == null ? "" : $"Drop to merge {name} into this app";
+            LinkText.Text = name == null ? "" : $"Drop to link {name} with this app";
+            ShowZone(MergeZone, MergePill, "#1565C0", on: !link);
+            ShowZone(LinkZone, LinkPill, "#00796B", on: link);
             FusionOverlay.IsVisible = name != null;
+        }
+
+        // What the drop would do stands out; the app shows through both, because it is what keeps running.
+        private static void ShowZone(Avalonia.Controls.Border zone, Avalonia.Controls.Border pill, string color, bool on)
+        {
+            zone.Background = global::Avalonia.Media.Brush.Parse(on ? "#50" + color[1..] : "#14" + color[1..]);
+            zone.BorderThickness = new global::Avalonia.Thickness(on ? 4 : 1);
+            pill.Opacity = on ? 1 : 0.55;
+        }
+
+        /// <summary>The chip of an app link: it says with whom, and its cross ends the link.</summary>
+        public void ShowLinkChip(string id, string text, Action end)
+        {
+            var cross = new Avalonia.Controls.Button
+            {
+                Content = "✕", Padding = new global::Avalonia.Thickness(6, 0), Margin = new global::Avalonia.Thickness(6, 0, 0, 0), FontSize = 11,
+                Foreground = global::Avalonia.Media.Brushes.White, Background = global::Avalonia.Media.Brushes.Transparent,
+                VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center,
+            };
+            cross.Click += (_, _) => end();
+
+            var row = new Avalonia.Controls.StackPanel { Orientation = global::Avalonia.Layout.Orientation.Horizontal };
+            row.Children.Add(new Avalonia.Controls.TextBlock { Text = text, Foreground = global::Avalonia.Media.Brushes.White, FontSize = 12, VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center });
+            row.Children.Add(cross);
+
+            LinkChips.Children.Add(new Avalonia.Controls.Border
+            {
+                Name = "link-" + id, Child = row, Padding = new global::Avalonia.Thickness(10, 3, 3, 3), CornerRadius = new global::Avalonia.CornerRadius(12),
+                Background = global::Avalonia.Media.Brush.Parse("#E000796B"), HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+            });
+        }
+
+        public void RemoveLinkChip(string id)
+        {
+            var chip = LinkChips.Children.FirstOrDefault(c => c.Name == "link-" + id);
+            if (chip != null) LinkChips.Children.Remove(chip);
         }
 
         /// <summary>What the host wants from this window.</summary>

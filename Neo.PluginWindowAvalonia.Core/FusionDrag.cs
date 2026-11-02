@@ -12,9 +12,9 @@ using Neo.IPC;
 namespace Neo.PluginWindowAvalonia
 {
     /// <summary>
-    /// Notices that this window is dragged over the window of another N.E.O. app: that app then shows that a
-    /// drop would merge the two. Letting go there is the merge. Windows only: there the system moves a window
-    /// in a loop of its own, and says when that starts and ends.
+    /// Notices that this window is dragged over the window of another N.E.O. app: that app then shows what a
+    /// drop would do. Letting go on its left half merges the two, on its right half links them. Windows only:
+    /// there the system moves a window in a loop of its own, and says when that starts and ends.
     /// </summary>
     internal sealed class FusionDrag
     {
@@ -23,18 +23,19 @@ namespace Neo.PluginWindowAvalonia
 
         private readonly MainWindow _window;
         private readonly Func<bool> _canMerge;
-        private readonly Action<AppDescriptor, PixelPoint> _dropped;
+        private readonly Action<AppDescriptor, PixelPoint, bool> _dropped;
 
         private DispatcherTimer? _timer;
         private IReadOnlyList<AppDescriptor> _apps = [];
         private AppDescriptor? _over;
+        private bool _overLinkHalf;
         private DateTime _overSince;
         private volatile string? _takesMerges; // the app that answered: not every program on the network takes one
         private bool _moving;
         private PixelPoint _startedAt;
 
-        /// <param name="dropped">The app it was dropped on, and where this window was before the drag.</param>
-        public FusionDrag(MainWindow window, Func<bool> canMerge, Action<AppDescriptor, PixelPoint> dropped)
+        /// <param name="dropped">The app it was dropped on, where this window was before the drag, and whether to link instead of merge.</param>
+        public FusionDrag(MainWindow window, Func<bool> canMerge, Action<AppDescriptor, PixelPoint, bool> dropped)
         {
             _window = window;
             _canMerge = canMerge;
@@ -76,12 +77,20 @@ namespace Neo.PluginWindowAvalonia
 
         private void Tick()
         {
-            var under = GetCursorPos(out var cursor) ? AppUnder(cursor) : null;
-            if (under?.Id == _over?.Id) return;
+            var linkHalf = false;
+            var under = GetCursorPos(out var cursor) ? AppUnder(cursor, out linkHalf) : null;
+            if (under == null) linkHalf = false;
+            if (under?.Id == _over?.Id)
+            {
+                if (under != null && linkHalf != _overLinkHalf) Hover(under, true, linkHalf);
+                _overLinkHalf = linkHalf;
+                return;
+            }
 
-            Hover(_over, false);
-            Hover(under, true);
+            Hover(_over, false, false);
+            Hover(under, true, linkHalf);
             _over = under;
+            _overLinkHalf = linkHalf;
             _overSince = DateTime.UtcNow;
         }
 
@@ -92,8 +101,9 @@ namespace Neo.PluginWindowAvalonia
             _timer = null;
 
             var target = _over;
+            var link = _overLinkHalf;
             _over = null;
-            Hover(target, false);
+            Hover(target, false, false);
 
             // Escape puts the window back where it was: the user changed their mind.
             if (target == null || _window.Position == _startedAt) return;
@@ -101,16 +111,17 @@ namespace Neo.PluginWindowAvalonia
 
             // The system is still in its loop here.
             var cameFrom = _startedAt;
-            Dispatcher.UIThread.Post(() => _dropped(target, cameFrom));
+            Dispatcher.UIThread.Post(() => _dropped(target, cameFrom, link));
         }
 
         // The first window a person sees below this one under the pointer; another window in between is no target.
         // What lies above this one, while it is being dragged, are overlays that stay on top of everything.
-        private AppDescriptor? AppUnder(Point cursor)
+        private AppDescriptor? AppUnder(Point cursor, out bool linkHalf)
         {
             var own = _window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
             var passedOwn = false;
             var found = IntPtr.Zero;
+            var middle = 0;
             EnumWindows((window, _) =>
             {
                 if (window == own) { passedOwn = true; return true; }
@@ -119,18 +130,20 @@ namespace Neo.PluginWindowAvalonia
                 if (DwmGetWindowAttribute(window, DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
                 if (!GetWindowRect(window, out var rect) || !rect.Contains(cursor)) return true;
                 found = window;
+                middle = (rect.Left + rect.Right) / 2;
                 return false;
             }, IntPtr.Zero);
 
+            linkHalf = cursor.X > middle;
             if (found == IntPtr.Zero) return null;
             GetWindowThreadProcessId(found, out var processId);
             return _apps.FirstOrDefault(a => a.ProcessId == (int)processId);
         }
 
-        private void Hover(AppDescriptor? app, bool on)
+        private void Hover(AppDescriptor? app, bool on, bool linkHalf)
         {
             if (app == null) return;
-            var payload = Json.ToJson(new FusionHoverMessage(on ? DisplayName() : null));
+            var payload = Json.ToJson(new FusionHoverMessage(on ? DisplayName() : null, linkHalf));
             _ = SendHoverAsync(app, payload, on);
         }
 

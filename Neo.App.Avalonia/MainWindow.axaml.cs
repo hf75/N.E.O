@@ -907,6 +907,16 @@ namespace Neo.App
             return await new Views.AskDialog(title, question, yes, no).ShowDialog<bool?>(this) == true;
         }
 
+        // No owner: in a living app N.E.O. stays hidden behind the app, and a link is no reason to show it.
+        public async Task<LinkChoice?> ChooseLinkAsync(string title, Func<string?, Neo.AssemblyForge.LinkProposal?, CancellationToken, Task<Neo.AssemblyForge.LinkProposal>> propose)
+        {
+            var dialog = new Views.LinkDialog(title, propose);
+            var closed = new TaskCompletionSource<LinkChoice?>();
+            dialog.Closed += (_, _) => closed.TrySetResult(dialog.Choice);
+            dialog.Show();
+            return await closed.Task;
+        }
+
         public void ShowEmptyContent() { /* No right panel in Avalonia — child is a separate window */ }
 
         // ─── IMainView Implementation ───────────────────────────────────

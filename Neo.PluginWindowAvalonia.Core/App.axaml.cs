@@ -581,6 +581,29 @@ namespace Neo.PluginWindowAvalonia
                         break;
                     }
 
+                case IpcTypes.LinkDescribe:
+                    {
+                        string map;
+                        try
+                        {
+                            var code = Json.FromJson<LinkDescribeRequest>(env.PayloadJson)?.Code ?? "";
+                            map = await Dispatcher.UIThread.InvokeAsync(() => MainWin.GetLoadedUserControl() is { } root ? LinkControls.Describe(root, code) : "");
+                        }
+                        catch (Exception ex)
+                        {
+                            map = "";
+                            await SendLogAsync(LogLevel.Warn, "App link: could not describe the app: " + ex.Message, "AppLink");
+                        }
+                        await SafeSendAsync(new IpcEnvelope(IpcTypes.LinkDescribed, env.CorrelationId, Json.ToJson(new LinkDescribedMessage(map))));
+                        break;
+                    }
+
+                case IpcTypes.LinkStart:
+                    {
+                        _ = StartLinkAsync(env.CorrelationId, Json.FromJson<LinkStartRequest>(env.PayloadJson)!);
+                        break;
+                    }
+
                 case IpcTypes.CaptureAppState:
                     {
                         AppStateCapturedMessage captured;
@@ -971,30 +994,59 @@ namespace Neo.PluginWindowAvalonia
 
         private void StartFusion()
         {
+            _links = new AppLinks(MainWin, AskHostAsync);
             Neo.App.AppNetwork.SystemHandler = HandleSystemMessageAsync;
             _fusionDrag = new FusionDrag(MainWin, () => !DockedToAnotherProgram && MainWin.GetLoadedUserControl() != null, DroppedOnAnotherApp);
         }
 
-        private void DroppedOnAnotherApp(Neo.App.AppDescriptor target, PixelPoint cameFrom)
+        private void DroppedOnAnotherApp(Neo.App.AppDescriptor target, PixelPoint cameFrom, bool link)
         {
-            // The window goes at once; if the merge does not happen, the host brings it back to where it was.
-            _keptAway = true;
-            MainWin.Hide();
+            // Linked, both stay; it goes back to where it was, or it would cover the other one.
+            // Merged, the window goes at once; if the merge does not happen, the host brings it back to where it was.
+            if (!link)
+            {
+                _keptAway = true;
+                MainWin.Hide();
+            }
             MainWin.Position = cameFrom;
             var self = Neo.App.AppNetwork.Published;
-            var drop = new FusionDropMessage(target.Id, target.Name, self?.Id ?? "", self?.Name ?? "", MainWin.ClientSize.Width, MainWin.ClientSize.Height);
+            var drop = new FusionDropMessage(target.Id, target.Name, self?.Id ?? "", self?.Name ?? "", MainWin.ClientSize.Width, MainWin.ClientSize.Height, link);
             _ = AskHostAsync(FusionMessages.Drop, Json.ToJson(drop));
         }
 
-
         private async Task<string?> HandleSystemMessageAsync(string kind, string? payload)
         {
-            if (kind != FusionMessages.Hover)
-                return await AskHostAsync(kind, payload);
+            if (kind == FusionMessages.Hover)
+            {
+                var hover = payload == null ? null : Json.FromJson<FusionHoverMessage>(payload);
+                Dispatcher.UIThread.Post(() => MainWin.ShowFusionTarget(hover?.Name, hover?.Link ?? false));
+                return "ok";
+            }
 
-            var hover = payload == null ? null : Json.FromJson<FusionHoverMessage>(payload);
-            Dispatcher.UIThread.Post(() => MainWin.ShowFusionTarget(hover?.Name));
-            return "ok";
+            // Between the windows of two linked programs: their N.E.O.s have no part in that.
+            if (_links != null && kind is LinkMessages.Start or LinkMessages.Watch or LinkMessages.Changed or LinkMessages.Do or LinkMessages.End)
+                return await _links.HandleAsync(kind, payload);
+
+            return await AskHostAsync(kind, payload);
+        }
+
+        private AppLinks? _links;
+
+        // The host waits for the answer; the frames from the host must go on arriving meanwhile.
+        private async Task StartLinkAsync(string correlationId, LinkStartRequest request)
+        {
+            LinkStartedMessage started;
+            try
+            {
+                started = _links == null
+                    ? new LinkStartedMessage(false, ["This window takes no links."])
+                    : await _links.StartAsync(request);
+            }
+            catch (Exception ex)
+            {
+                started = new LinkStartedMessage(false, [ex.Message]);
+            }
+            await SafeSendAsync(new IpcEnvelope(IpcTypes.LinkStarted, correlationId, Json.ToJson(started)));
         }
 
         private async Task<string?> AskHostAsync(string kind, string? payload)

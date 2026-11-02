@@ -6,7 +6,7 @@ Windows only, and only between app windows of the Avalonia host and its exports.
 
 ## What you see
 
-1. Drag a program by its title bar over another one. That one turns blue and says *Drop to merge Currency into this app*.
+1. Drag a program by its title bar over another one. That one shows two halves. Stay on the left, which turns blue and says *Drop to merge Currency into this app*; the right half is for an [[App Link]], where both stay as they are.
 2. Let go. The dragged window is gone at once.
 3. A line over the other app says *Merging Currency into this app. You can go on working.* The AI gets the source of the dropped program.
 4. The new part appears beside the old one, the window grows by the width of the dropped window (as far as the screen allows), and the data of the dropped program is in it: *Currency is a part of this app now.* Where one holds something the other can use, the two are connected.

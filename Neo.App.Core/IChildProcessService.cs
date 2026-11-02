@@ -46,6 +46,12 @@ namespace Neo.App
         /// <summary>How wide the app's own window is. Null: it has none, or it has not said yet.</summary>
         double? AppWindowWidth => null;
 
+        /// <summary>What the running app shows and holds, for the model that links it to another one, without what someone entered. Null: no answer.</summary>
+        Task<string?> DescribeForLinkAsync(string code) => Task.FromResult<string?>(null);
+
+        /// <summary>Runs the communicator of an app link in the window of the app. Null: no answer.</summary>
+        Task<LinkStartedMessage?> StartLinkAsync(LinkStartRequest request) => Task.FromResult<LinkStartedMessage?>(null);
+
         /// <summary>
         /// Captures a screenshot of the child window. Returns a platform-specific image object
         /// (e.g. BitmapSource on WPF) or null if unavailable.

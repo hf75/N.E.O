@@ -117,6 +117,14 @@ namespace Neo.IPC
         public const string AppMessageAnswer = "AppMessageAnswer";
         /// <summary>Host → child: show or hide the window, show a banner over the app.</summary>
         public const string AppWindow = "AppWindow";
+
+        // ── App link: two running programs connected without changing them ──
+        /// <summary>Host → child: what the running app shows and holds, for the model that connects it to another one.</summary>
+        public const string LinkDescribe = "LinkDescribe";
+        public const string LinkDescribed = "LinkDescribed";
+        /// <summary>Host → child: run this communicator here.</summary>
+        public const string LinkStart = "LinkStart";
+        public const string LinkStarted = "LinkStarted";
     }
 
     /// <summary>What a program does to another one when it is dragged onto it (see Fusion in the docs).</summary>
@@ -133,9 +141,65 @@ namespace Neo.IPC
     }
 
     /// <param name="Name">The name of the program dragged over this one; null: it left again.</param>
-    public record FusionHoverMessage(string? Name);
+    /// <param name="Link">It is over the half of this window where a drop links the two, not the one where it merges them.</param>
+    public record FusionHoverMessage(string? Name, bool Link = false);
 
-    public record FusionDropMessage(string TargetId, string TargetName, string SourceId, string SourceName, double Width = 0, double Height = 0);
+    /// <param name="Link">Linked, not merged: both stay as they are.</param>
+    public record FusionDropMessage(string TargetId, string TargetName, string SourceId, string SourceName, double Width = 0, double Height = 0, bool Link = false);
+
+    /// <summary>What two programs say to each other for an app link (see App Link in the docs).</summary>
+    public static class LinkMessages
+    {
+        /// <summary>To the N.E.O. behind the program dropped on: here is the other one, what can the two do together?</summary>
+        public const string Offer = "link-offer";
+        /// <summary>From the window that runs the communicator to the other one: a link with you begins.</summary>
+        public const string Start = "link-start";
+        /// <summary>The same way: tell me when this changes.</summary>
+        public const string Watch = "link-watch";
+        /// <summary>The other way: it changed.</summary>
+        public const string Changed = "link-changed";
+        /// <summary>From the window that runs the communicator: do this.</summary>
+        public const string Do = "link-do";
+        /// <summary>Either way: the link is over.</summary>
+        public const string End = "link-end";
+        /// <summary>From a window to its own N.E.O.: something to say in the chat.</summary>
+        public const string Report = "link-report";
+    }
+
+    public enum LinkWatchKind { Property, Field, Click }
+
+    public enum LinkOperation { Set, SetField, Press, Call }
+
+    /// <param name="Map">What the program shows and holds right now, as the model reads it.</param>
+    /// <param name="ProcessId">The process of its window: the app-network address changes when the app is replaced.</param>
+    public record LinkOfferMessage(string Name, string Code, string Map, int ProcessId, string TargetName);
+
+    /// <param name="Code">The source of the program: a text that is in there says nothing about what someone entered.</param>
+    public record LinkDescribeRequest(string Code);
+
+    public record LinkDescribedMessage(string Map);
+
+    /// <param name="Blocks">Which blocks of the communicator to run.</param>
+    /// <param name="PeerProcessId">The process of the window of the other program.</param>
+    public record LinkStartRequest(string LinkId, string Assembly, List<int> Blocks, string PeerName, int PeerProcessId, string OwnName);
+
+    /// <param name="Problems">What could not be connected.</param>
+    public record LinkStartedMessage(bool Success, List<string> Problems);
+
+    public record LinkStartMessage(string LinkId, string RunnerName, int RunnerProcessId);
+
+    public record LinkWatchMessage(string LinkId, int WatchId, LinkWatchKind Kind, string Address, string? Property);
+
+    /// <param name="Value">The new value as JSON; null when a button was pressed.</param>
+    public record LinkChangedMessage(string LinkId, int WatchId, string? Value);
+
+    /// <param name="Values">The value, or the arguments of a call, each as JSON.</param>
+    public record LinkDoMessage(string LinkId, LinkOperation Operation, string Address, string? Property, List<string> Values);
+
+    /// <param name="Reason">Why, for the person; null: the person ended it.</param>
+    public record LinkEndMessage(string LinkId, string? Reason);
+
+    public record LinkReportMessage(string Text);
 
     public record AppMessage(string Kind, string? Payload);
 

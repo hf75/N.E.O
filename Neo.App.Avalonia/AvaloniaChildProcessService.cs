@@ -285,6 +285,8 @@ namespace Neo.App
 
                             case IpcTypes.AppStateCaptured:
                             case IpcTypes.AppStateRestored:
+                            case IpcTypes.LinkDescribed:
+                            case IpcTypes.LinkStarted:
                                 if (_pendingAppState.TryRemove(env.CorrelationId, out var pendingAppState))
                                     pendingAppState.TrySetResult(env.PayloadJson);
                                 break;
@@ -637,6 +639,12 @@ namespace Neo.App
 
         public async Task<AppStateRestoredMessage?> RestoreAppStateAsync(RestoreAppStateRequest request) =>
             await AskForAppStateAsync(IpcTypes.RestoreAppState, Json.ToJson(request)) is { } json ? Json.FromJson<AppStateRestoredMessage>(json) : null;
+
+        public async Task<string?> DescribeForLinkAsync(string code) =>
+            await AskForAppStateAsync(IpcTypes.LinkDescribe, Json.ToJson(new LinkDescribeRequest(code))) is { } json ? Json.FromJson<LinkDescribedMessage>(json)?.Map : null;
+
+        public async Task<LinkStartedMessage?> StartLinkAsync(LinkStartRequest request) =>
+            await AskForAppStateAsync(IpcTypes.LinkStart, Json.ToJson(request)) is { } json ? Json.FromJson<LinkStartedMessage>(json) : null;
 
         private async Task<string?> AskForAppStateAsync(string type, string payload)
         {

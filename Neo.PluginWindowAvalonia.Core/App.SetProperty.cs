@@ -72,6 +72,19 @@ namespace Neo.PluginWindowAvalonia
             return props.FirstOrDefault(p => p.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase));
         }
 
+        /// <summary>A value from an app link for a property: as a number or text where it is one, else as written, like a colour.</summary>
+        internal static object? ToPropertyValue(string json, Type type)
+        {
+            var plain = Nullable.GetUnderlyingType(type) ?? type;
+            if (plain == typeof(string) || plain == typeof(object) || plain.IsPrimitive || plain == typeof(decimal) || plain.IsEnum)
+                return Neo.App.LinkValue.Convert(json, type);
+
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == System.Text.Json.JsonValueKind.String
+                ? ParsePropertyValue(plain, document.RootElement.GetString()!)
+                : Neo.App.LinkValue.Convert(json, type);
+        }
+
         private static object? ParsePropertyValue(Type targetType, string value)
         {
             // IBrush / Color

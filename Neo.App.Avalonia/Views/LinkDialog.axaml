@@ -1,0 +1,69 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Neo.App.Views.LinkDialog"
+        FontFamily="Inter, Segoe UI, sans-serif"
+        Width="600"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True">
+    <Window.Styles>
+        <Style Selector="TextBlock.heading">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="TextBlock.hint">
+            <Setter Property="Foreground" Value="#666666"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style Selector="Border.divider">
+            <Setter Property="Margin" Value="0,12,0,12"/>
+            <Setter Property="BorderBrush" Value="#DDD"/>
+            <Setter Property="BorderThickness" Value="0,1,0,0"/>
+        </Style>
+        <Style Selector="TextBox.code">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, monospace"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="AcceptsReturn" Value="True"/>
+            <Setter Property="IsReadOnly" Value="True"/>
+            <Setter Property="MaxHeight" Value="220"/>
+            <Setter Property="Padding" Value="8,6"/>
+        </Style>
+        <Style Selector="Button.wide">
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        </Style>
+    </Window.Styles>
+
+    <StackPanel Margin="16">
+        <TextBlock x:Name="Heading" Classes="heading" TextWrapping="Wrap"/>
+        <TextBlock Classes="hint" Text="Both programs stay as they are and keep running. Nothing is saved: the link ends when one of them ends. The AI reads their source and their controls, not what you entered."/>
+
+        <Border Classes="divider"/>
+
+        <StackPanel x:Name="Waiting" Spacing="6">
+            <TextBlock x:Name="WaitingText" Text="Reading both programs..."/>
+            <ProgressBar IsIndeterminate="True"/>
+        </StackPanel>
+
+        <TextBlock x:Name="NoteText" Classes="hint" IsVisible="False" Margin="0,0,0,8"/>
+        <StackPanel x:Name="BlocksPanel" Spacing="8"/>
+
+        <Border Classes="divider"/>
+
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBox x:Name="WishBox" Classes="rounded" Padding="4" PlaceholderText="Anything else it should do? In your own words." TextChanged="Wish_Changed"/>
+            <Button x:Name="BtnAskAgain" Classes="rounded" Grid.Column="1" Margin="6,0,0,0" Content="Ask again" IsEnabled="False" Click="AskAgain_Click"/>
+        </Grid>
+
+        <Expander x:Name="CodeExpander" Header="The code that would run" IsVisible="False" Margin="0,10,0,0" HorizontalAlignment="Stretch">
+            <TextBox x:Name="CodeBox" Classes="rounded code"/>
+        </Expander>
+
+        <Grid ColumnDefinitions="*,*" Margin="0,16,0,0">
+            <Button x:Name="BtnConnect" Classes="rounded wide" Margin="0,0,3,0" Content="Connect" IsEnabled="False" Click="Connect_Click"/>
+            <Button x:Name="BtnCancel" Classes="rounded wide" Grid.Column="1" Margin="3,0,0,0" Content="Cancel" Click="Cancel_Click"/>
+        </Grid>
+    </StackPanel>
+</Window>

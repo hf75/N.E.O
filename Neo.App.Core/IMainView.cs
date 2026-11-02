@@ -2,6 +2,11 @@ using Neo.IPC;
 
 namespace Neo.App
 {
+    /// <summary>What the person chose for an app link.</summary>
+    /// <param name="Blocks">The numbers of the chosen blocks of the proposal.</param>
+    /// <param name="Titles">What they do, in the words of the proposal.</param>
+    public sealed record LinkChoice(IReadOnlyList<int> Blocks, IReadOnlyList<string> Titles);
+
     /// <summary>
     /// Abstraction layer between AppController and the host window (WPF/Avalonia).
     /// Implemented by MainWindow in each UI framework.
@@ -45,6 +50,10 @@ namespace Neo.App
 
         /// <summary>A question only the person can answer; true for the first answer.</summary>
         Task<bool> AskAsync(string title, string question, string yes, string no) => Task.FromResult(false);
+
+        /// <summary>The person chooses what an app link connects. Null: no link.</summary>
+        /// <param name="propose">Asks the model: what the person wished for in their own words (null: nothing), and what was suggested before.</param>
+        Task<LinkChoice?> ChooseLinkAsync(string title, Func<string?, Neo.AssemblyForge.LinkProposal?, CancellationToken, Task<Neo.AssemblyForge.LinkProposal>> propose) => Task.FromResult<LinkChoice?>(null);
 
         Task<PatchReviewDecision> ShowPatchReviewDialogAsync(
             string patchOrCode,

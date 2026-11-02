@@ -153,6 +153,15 @@ namespace Neo.Agents.Core
             throw new KeyNotFoundException($"Option '{key}' not found.");
         }
 
+        /// <summary>Takes over how another agent of this kind is set up: its key, its model, and so on.</summary>
+        public void CopyOptionsFrom(AgentBase other)
+        {
+            foreach (var (key, value) in other._options)
+                if (_options.ContainsKey(key))
+                    _options[key] = value;
+            _isDirty = true;
+        }
+
         #endregion
 
         #region Inputs setzen und abfragen

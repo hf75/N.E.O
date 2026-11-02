@@ -5,7 +5,7 @@ namespace Neo.App
 {
     public interface ICompilationService
     {
-        Task<string?> CompileToDllAsync(List<string> codes, string dllOutputPath, List<string> nugetDllPaths, List<string> additionalDlls);
+        Task<string?> CompileToDllAsync(List<string> codes, string dllOutputPath, List<string> nugetDllPaths, List<string> additionalDlls, string assemblyName = "DynamicUserControl");
         Task<string?> CompileToExeAsync(List<string> codes, string outputDirectory, List<string> nugetDllPaths, string assemblyName, string mainTypeName);
     }
 
@@ -20,7 +20,7 @@ namespace Neo.App
             _desktopRefPath = desktopRefPath;
         }
 
-        public async Task<string?> CompileToDllAsync(List<string> codes, string dllOutputPath, List<string> nugetDllPaths, List<string> additionalDlls)
+        public async Task<string?> CompileToDllAsync(List<string> codes, string dllOutputPath, List<string> nugetDllPaths, List<string> additionalDlls, string assemblyName = "DynamicUserControl")
         {
             if (string.IsNullOrEmpty(_coreRefPath))
             {
@@ -38,7 +38,7 @@ namespace Neo.App
 
             agent.SetInput("Code", codes);
             agent.SetInput("DllOutputPath", dllOutputPath);
-            agent.SetInput("AssemblyName", "DynamicUserControl");
+            agent.SetInput("AssemblyName", assemblyName);
             agent.SetInput("NuGetDlls", nugetDllPaths ?? new List<string>());
             agent.SetInput("AdditionalDlls", additionalDlls ?? new List<string>());
 

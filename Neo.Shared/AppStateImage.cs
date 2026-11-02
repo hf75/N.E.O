@@ -146,6 +146,16 @@ namespace Neo.Shared
         }
 
         // The fields of the app's own classes: its base classes from outside (UserControl) are the toolkit's.
+        /// <summary>The fields of an app that are data, the ones that could leave its process.</summary>
+        public static IEnumerable<FieldInfo> DataFieldsOf(Type type)
+        {
+            var plugin = type.Assembly;
+            return FieldsOf(type).Where(f => !f.IsLiteral && !(f.IsStatic && f.IsInitOnly) && IsData(f.FieldType, plugin, []));
+        }
+
+        /// <summary>A field of an app by its name, whatever it holds.</summary>
+        public static FieldInfo? FieldOf(Type type, string name) => FieldsOf(type).FirstOrDefault(f => f.Name == name);
+
         private static IEnumerable<FieldInfo> FieldsOf(Type type)
         {
             var plugin = type.Assembly;
