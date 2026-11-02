@@ -180,7 +180,6 @@ public static class AssemblyForgeSystemMessages
         "When using verbatim string literals (strings starting with '@'), ensure that any embedded double quotes are properly escaped by doubling them to avoid syntax errors. " +
         "Please avoid convenience APIs (nuget) when you can implement the feature by yourself with the same result." +
         "Rethrow all exceptions that are caught in the UserControl." +
-        NumberGuidance.Rule +
         "If you need to use any File Dialogs, please initialize the path in the SHARED_FOLDER environment variable if it is not zero or empty! " +
         "Patch format requirements (when you choose PATCH RESPONSE): Use a unified diff that targets a single file named './currentcode.cs'. Include enough unchanged context lines for the patch to apply cleanly. Do not use placeholders like '...'. Keep changes minimal and avoid unrelated reformatting. " +
         "Choose one behavior per response:\n\n" +
@@ -219,7 +218,6 @@ public static class AssemblyForgeSystemMessages
             "When using verbatim string literals (strings starting with '@'), ensure that any embedded double quotes are properly escaped by doubling them to avoid syntax errors. " +
             "Please avoid convenience APIs (nuget) when you can implement the feature by yourself with the same result. " +
             "Do not swallow exceptions; if you catch exceptions, rethrow them (or wrap and rethrow). " +
-            NumberGuidance.Rule +
             "If you need to use any File Dialogs, please initialize the path in the SHARED_FOLDER environment variable if it is not zero or empty. " +
             "Patch format requirements (when you choose PATCH RESPONSE): Use a unified diff that targets a single file named './currentcode.cs'. Include enough unchanged context lines for the patch to apply cleanly. Do not use placeholders like '...'. Keep changes minimal and avoid unrelated reformatting. " +
             "Choose one behavior per response:\n\n" +

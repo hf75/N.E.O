@@ -42,8 +42,7 @@ public static class AvaloniaPrompt
             "   `Avalonia.Threading.DispatcherTimer` — never use an unqualified `Dispatcher`.\n" +
             "7. **Design**: Create a refined, minimalist aesthetic emphasizing elegance, clarity, and precision.\n" +
             "8. **Exception handling**: Rethrow all caught exceptions — the host app handles error recovery.\n" +
-            "9. **File access**: If using file dialogs, initialize the path from the `SHARED_FOLDER` environment variable.\n" +
-            "10. **Numbers**: " + NumberGuidance.Rule + "\n\n" +
+            "9. **File access**: If using file dialogs, initialize the path from the `SHARED_FOLDER` environment variable.\n\n" +
             $"## Avalonia {AvaloniaGuidance.MajorVersion} API\n\n" +
             "Most examples you know were written for Avalonia 11. These APIs changed - always use the new form:\n\n" +
             AvaloniaGuidance.AsMarkdownList(AvaloniaGuidance.ApiChanges) + "\n" +
@@ -118,8 +117,7 @@ public static class AvaloniaPrompt
             "   `System.Windows.Shapes`, etc. Do NOT use Avalonia namespaces.\n" +
             "7. **Design**: Create a refined, minimalist aesthetic emphasizing elegance, clarity, and precision.\n" +
             "8. **Exception handling**: Rethrow all caught exceptions — the host app handles error recovery.\n" +
-            "9. **File access**: If using file dialogs, initialize the path from the `SHARED_FOLDER` environment variable.\n" +
-            "10. **Numbers**: " + NumberGuidance.Rule + "\n\n" +
+            "9. **File access**: If using file dialogs, initialize the path from the `SHARED_FOLDER` environment variable.\n\n" +
             "## Key WPF Differences from Avalonia\n\n" +
             "- `Visibility.Collapsed` instead of `IsVisible = false`\n" +
             "- `new SolidColorBrush(Colors.Red)` or `Brushes.Red` (from `System.Windows.Media`)\n" +

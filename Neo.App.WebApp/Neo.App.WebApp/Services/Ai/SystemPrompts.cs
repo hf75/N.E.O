@@ -68,7 +68,6 @@ CODE RULES
   System.Reflection.Emit, P/Invoke, unsafe blocks, Thread.Start,
   anything under System.Windows or System.Net.Sockets.
 - There is no web view control in the browser (NativeWebView is desktop-only).
-- " + NumberGuidance.Rule + @"
 
 AVALONIA VERSION
 - The app runs on Avalonia " + AvaloniaGuidance.Version + @" — never list Avalonia itself in

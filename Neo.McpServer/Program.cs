@@ -245,9 +245,7 @@ builder.Services
             "\n=== APP NETWORK (apps that use each other) ===\n" +
             "Every running N.E.O. app on this machine (previews, living apps, other hosts) can offer methods and values\n" +
             "to the other apps and use theirs; `list_running_apps` shows who is there right now.\n" +
-            Neo.AssemblyForge.AvaloniaGuidance.AsMarkdownList(Neo.AssemblyForge.AppNetworkGuidance.Rules) +
-            "\n=== NUMBERS ===\n" +
-            Neo.AssemblyForge.NumberGuidance.Rule;
+            Neo.AssemblyForge.AvaloniaGuidance.AsMarkdownList(Neo.AssemblyForge.AppNetworkGuidance.Rules);
     })
     .WithStdioServerTransport()
     .WithToolsFromAssembly()
