@@ -51,6 +51,7 @@ public static class AvaloniaGuidance
         "ItemContainerGenerator.ContainerFromIndex and IndexFromContainer moved to the ItemsControl itself.",
         "The PlacementMode property of Popup and ContextMenu is now Placement; CubicBezierEasing is now SplineEasing; Color.ToUint32 is now ToUInt32; DrawingContext.PushPreTransform and PushPostTransform are now PushTransform; RenderOptions.TextRenderingMode is now TextOptions.TextRenderingMode.",
         "Create every DispatcherTimer on the UI thread: a timer belongs to the dispatcher of the thread that creates it.",
+        "An Image without a Source has no size: its Bounds stay 0 and its SizeChanged does not fire. Code that renders into a bitmap takes the size from the panel around the Image, or it waits forever and the picture stays black.",
         "SkiaSharp is version 3.",
         "Add-on packages must be built for Avalonia " + MajorVersion + " (for example Avalonia.Controls.DataGrid " + Version + "); a package built for Avalonia 11 fails at runtime.",
     ];

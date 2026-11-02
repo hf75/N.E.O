@@ -49,6 +49,7 @@ public class AvaloniaGuidanceTests
         message.Should().Contain("PlaceholderText");
         message.Should().Contain("StorageProvider");
         message.Should().Contain("NativeWebView");
+        message.Should().Contain("An Image without a Source has no size", "two of four rendered tools stayed black waiting for it");
     }
 
     [Fact]
