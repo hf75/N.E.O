@@ -92,7 +92,24 @@ namespace Neo.App
             _mainWindow = mainWindow;
         }
 
-        public async Task RestartAsync()
+        public Task RestartAsync()
+        {
+            _linksToResume = null; // a clear or a crash ends the app, and its links with it
+            return RestartCoreAsync(nextVersion: false);
+        }
+
+        // The links of the process before this one, until the next version of the app is loaded.
+        private List<LinkHandOverItem>? _linksToResume;
+
+        public async Task RestartForNextVersionAsync()
+        {
+            // The other ends of its links wait for the new process meanwhile.
+            var links = await HandOverLinksAsync();
+            await RestartCoreAsync(nextVersion: true);
+            _linksToResume = links.Count > 0 ? links : null;
+        }
+
+        private async Task RestartCoreAsync(bool nextVersion)
         {
             Debug.WriteLine("[ChildProcess] RestartAsync: acquiring lock...");
 
@@ -120,7 +137,7 @@ namespace Neo.App
                 Debug.WriteLine("[ChildProcess] RestartAsync: DisposeChildAsync...");
                 await DisposeChildAsync();
                 Debug.WriteLine("[ChildProcess] RestartAsync: StartChildProcessCoreAsync...");
-                await StartChildProcessCoreAsync();
+                await StartChildProcessCoreAsync(nextVersion);
                 Debug.WriteLine("[ChildProcess] RestartAsync: done");
             }
             finally
@@ -130,7 +147,8 @@ namespace Neo.App
             }
         }
 
-        private async Task StartChildProcessCoreAsync()
+        /// <param name="nextVersion">For the next version of the running app: where its window was, and no hint again.</param>
+        private async Task StartChildProcessCoreAsync(bool nextVersion)
         {
             _pipeCts = new CancellationTokenSource();
             _sessionCounter++;
@@ -163,10 +181,13 @@ namespace Neo.App
                 childArgs += $" --title \"{ChildWindowTitle.Replace("\"", "")}\"";
             if (!string.IsNullOrWhiteSpace(ChildWindowIcon) && File.Exists(ChildWindowIcon))
                 childArgs += $" --icon \"{ChildWindowIcon}\"";
-            if (!string.IsNullOrWhiteSpace(ChildWindowHint))
+            if (!string.IsNullOrWhiteSpace(ChildWindowHint) && !nextVersion)
                 childArgs += $" --hint \"{ChildWindowHint.Replace("\"", "")}\"";
+            // A place given by the one who starts it (player mode, Fission); otherwise the next version opens where the last one was.
             if (ChildWindowPlace is { } place)
                 childArgs += $" --place {place.ToArgument()}";
+            else if (nextVersion && ChildWindowBounds is { } bounds)
+                childArgs += FormattableString.Invariant($" --bounds {bounds.X:0},{bounds.Y:0},{bounds.Width:0.##},{bounds.Height:0.##}");
 
             var psi = new ProcessStartInfo
             {
@@ -292,6 +313,8 @@ namespace Neo.App
                             case IpcTypes.AppStateRestored:
                             case IpcTypes.LinkDescribed:
                             case IpcTypes.LinkStarted:
+                            case IpcTypes.LinksHandedOver:
+                            case IpcTypes.LinksResumed:
                                 if (_pendingAppState.TryRemove(env.CorrelationId, out var pendingAppState))
                                     pendingAppState.TrySetResult(env.PayloadJson);
                                 break;
@@ -308,7 +331,10 @@ namespace Neo.App
                                     if (DockChildToHost) UpdatePosition();
                                 });
                                 Debug.WriteLine("[ChildProcess] Hello received from child");
-                                await SafeSendControlAsync(new IpcEnvelope(
+                                // Not awaited: this loop has to go on reading. Right after a restart the app is
+                                // already on its way to the window, and the window reads on only while what it
+                                // says itself is read; waiting here for a turn to send held both up for good.
+                                _ = SafeSendControlAsync(new IpcEnvelope(
                                     IpcTypes.Ack, env.CorrelationId,
                                     Json.ToJson(new AckMessage("Hello acknowledged"))));
                                 break;
@@ -549,6 +575,11 @@ namespace Neo.App
                     Json.ToJson(req)));
 
                 _hasLoadedControl = true;
+
+                // The app the links of the process before this one are about is there now. The window
+                // takes one message after the other, so the links find the app loaded.
+                if (Interlocked.Exchange(ref _linksToResume, null) is { } links)
+                    _ = ResumeLinksAsync(links);
                 return true;
             }
             catch (Exception ex)
@@ -651,6 +682,18 @@ namespace Neo.App
 
         public async Task<LinkStartedMessage?> StartLinkAsync(LinkStartRequest request) =>
             await AskForAppStateAsync(IpcTypes.LinkStart, Json.ToJson(request)) is { } json ? Json.FromJson<LinkStartedMessage>(json) : null;
+
+        private async Task<List<LinkHandOverItem>> HandOverLinksAsync() =>
+            await AskForAppStateAsync(IpcTypes.LinkHandOver, "{}") is { } json ? Json.FromJson<LinksHandedOverMessage>(json)?.Links ?? [] : [];
+
+        // What does not work out the window says in the chat itself.
+        private async Task ResumeLinksAsync(List<LinkHandOverItem> links)
+        {
+            var resumed = await AskForAppStateAsync(IpcTypes.LinkResume, Json.ToJson(new LinkResumeRequest(links))) is { } json
+                ? Json.FromJson<LinkStartedMessage>(json) : null;
+            Debug.WriteLine($"[AppLink] {links.Count} link(s) taken up again: " +
+                (resumed == null ? "no answer" : resumed.Success ? "ok" : string.Join("; ", resumed.Problems)));
+        }
 
         private async Task<string?> AskForAppStateAsync(string type, string payload)
         {

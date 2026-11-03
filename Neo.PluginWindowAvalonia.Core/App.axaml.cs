@@ -107,9 +107,12 @@ namespace Neo.PluginWindowAvalonia
                 MainWin.WindowDecorations = WindowDecorations.Full;
                 MainWin.CanResize = true;
                 MainWin.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-                // Placed by the one who started it (Fission: where the part was let go).
+                // Placed by the one who started it (Fission: where the part was let go); the next version of an app
+                // in a process of its own opens where the last one was.
                 if (Place(GetArgValue(args, "--place")) is { } place)
                     MainWin.StartAt(place.X, place.Y, place.Width, place.Height);
+                else
+                    PlaceWhereTheLastVersionWas(GetArgValue(args, "--bounds"));
 
                 // Docked beside N.E.O.: the keyboard stays in its prompt box.
                 _stayInactive = args.Any(a => string.Equals(a, "--no-activate", StringComparison.OrdinalIgnoreCase));
@@ -619,6 +622,18 @@ namespace Neo.PluginWindowAvalonia
                         break;
                     }
 
+                case IpcTypes.LinkHandOver:
+                    {
+                        _ = HandOverLinksAsync(env.CorrelationId);
+                        break;
+                    }
+
+                case IpcTypes.LinkResume:
+                    {
+                        _ = ResumeLinksAsync(env.CorrelationId, Json.FromJson<LinkResumeRequest>(env.PayloadJson)!);
+                        break;
+                    }
+
                 case IpcTypes.CaptureAppState:
                     {
                         AppStateCapturedMessage captured;
@@ -1015,6 +1030,31 @@ namespace Neo.PluginWindowAvalonia
                 : null;
         }
 
+        /// <summary>
+        /// The next version of an app gets a process of its own (<c>--bounds x,y,width,height</c>, position in screen
+        /// pixels, size in DIPs, as this window reports them): it opens where the last one was, as large as it was.
+        /// </summary>
+        private void PlaceWhereTheLastVersionWas(string? bounds)
+        {
+            var parts = bounds?.Split(',');
+            if (parts is not { Length: 4 }) return;
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            var style = System.Globalization.NumberStyles.Float;
+            if (!int.TryParse(parts[0], ci, out var x) || !int.TryParse(parts[1], ci, out var y) ||
+                !double.TryParse(parts[2], style, ci, out var width) || !double.TryParse(parts[3], style, ci, out var height) ||
+                width < 50 || height < 50)
+                return;
+
+            // A minimised window reports a place far outside every screen.
+            var position = new PixelPoint(x, y);
+            if (MainWin.Screens.ScreenFromPoint(new PixelPoint(x + 20, y + 20)) == null) return;
+
+            MainWin.WindowStartupLocation = WindowStartupLocation.Manual;
+            MainWin.Position = position;
+            MainWin.Width = width;
+            MainWin.Height = height;
+        }
+
         // ── Fusion: this window is dragged onto another app, or another app onto this one ──
 
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<string?>> _pendingAppMessages = new();
@@ -1108,7 +1148,8 @@ namespace Neo.PluginWindowAvalonia
             }
 
             // Between the windows of two linked programs: their N.E.O.s have no part in that.
-            if (_links != null && kind is LinkMessages.Start or LinkMessages.Watch or LinkMessages.Changed or LinkMessages.Do or LinkMessages.End)
+            if (_links != null && kind is LinkMessages.Start or LinkMessages.Watch or LinkMessages.Changed or LinkMessages.Do or LinkMessages.End
+                    or LinkMessages.Moving or LinkMessages.Rejoin)
                 return await _links.HandleAsync(kind, payload);
 
             return await AskHostAsync(kind, payload);
@@ -1131,6 +1172,38 @@ namespace Neo.PluginWindowAvalonia
                 started = new LinkStartedMessage(false, [ex.Message]);
             }
             await SafeSendAsync(new IpcEnvelope(IpcTypes.LinkStarted, correlationId, Json.ToJson(started)));
+        }
+
+        // The app gets a fresh process: what the new one needs to take the links up, and their other ends wait for it.
+        private async Task HandOverLinksAsync(string correlationId)
+        {
+            List<LinkHandOverItem> links;
+            try
+            {
+                links = _links == null ? [] : await _links.HandOverAsync();
+            }
+            catch (Exception ex)
+            {
+                links = [];
+                await SendLogAsync(LogLevel.Warn, "App link: could not hand the links over: " + ex.Message, "AppLink");
+            }
+            await SafeSendAsync(new IpcEnvelope(IpcTypes.LinksHandedOver, correlationId, Json.ToJson(new LinksHandedOverMessage(links))));
+        }
+
+        private async Task ResumeLinksAsync(string correlationId, LinkResumeRequest request)
+        {
+            LinkStartedMessage resumed;
+            try
+            {
+                resumed = _links == null
+                    ? new LinkStartedMessage(false, ["This window takes no links."])
+                    : await _links.ResumeAsync(request.Links);
+            }
+            catch (Exception ex)
+            {
+                resumed = new LinkStartedMessage(false, [ex.Message]);
+            }
+            await SafeSendAsync(new IpcEnvelope(IpcTypes.LinksResumed, correlationId, Json.ToJson(resumed)));
         }
 
         private async Task<string?> AskHostAsync(string kind, string? payload)
@@ -1255,10 +1328,14 @@ namespace Neo.PluginWindowAvalonia
         // program: it neither follows N.E.O. any more nor shows N.E.O.'s state when N.E.O. is minimised.
         private static bool DockedToAnotherProgram => AppDomain.CurrentDomain.GetData("Neo.ForeignApp.Attached") is true;
 
-        /// <summary>Where the app window is on screen (standalone mode), for a host that docks next to it.</summary>
+        /// <summary>
+        /// Where the app window is on screen (standalone mode), for a host that docks next to it, and for the
+        /// window of the next version of the app. Docked to another program it is where that program is: its
+        /// own place is the one before, where it goes back to.
+        /// </summary>
         private Task SendWindowBoundsAsync()
         {
-            if (_client == null || !MainWin.IsVisible) return Task.CompletedTask;
+            if (_client == null || !MainWin.IsVisible || DockedToAnotherProgram) return Task.CompletedTask;
             // Same convention as the host's own bounds: position in screen pixels, size in DIPs.
             var bounds = new ParentWindowBoundsMessage(
                 MainWin.Position.X, MainWin.Position.Y, MainWin.Width, MainWin.Height, IsVisible: true);

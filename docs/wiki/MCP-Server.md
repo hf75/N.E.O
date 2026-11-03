@@ -114,7 +114,7 @@ Compiles C# UserControl code and shows it in a live preview window. Supports bot
 
 ### `update_preview`
 
-Updates the running app in the existing preview window. Same parameters as `compile_and_preview`. The new code is patched into the **running** app ([[Hot Reload]]): the instance, its data and the UI state (typed text, selection, scroll position) survive, and the result ends with `Hot reload (generation n): …`. When a change cannot be patched, the result says `Hot reload not possible — <reason>` and the app is reloaded fresh, as before. (`compile_and_preview` always starts the app fresh.)
+Updates the running app in the existing preview window. Same parameters as `compile_and_preview`. The new code is patched into the **running** app ([[Hot Reload]]): the instance, its data and the UI state (typed text, selection, scroll position) survive, and the result ends with `Hot reload (generation n): …`. When a change cannot be patched, the result says `Hot reload not possible — <reason>` and the app starts fresh, in a process of its own, where the window was. (`compile_and_preview` always starts the app fresh, in a process of its own when an app was running in the window.)
 
 ### `capture_screenshot`
 

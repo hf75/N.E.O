@@ -142,6 +142,15 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         /// </summary>
         public HashSet<string> SentDependencies { get; } = new(StringComparer.Ordinal);
 
+        /// <summary>An app was sent to this process: the next one gets a process of its own.</summary>
+        public bool HasLoadedApp { get; set; }
+
+        /// <summary>Where the window is, as it last said (position in pixels, size in DIPs); null before it did.</summary>
+        public ParentWindowBoundsMessage? WindowBounds { get; set; }
+
+        /// <summary>The web bridge this process serves, to serve it again from a fresh one; null: none.</summary>
+        public StartWebBridgeRequest? WebBridge { get; set; }
+
         public bool IsRunning => ChildProcess is { HasExited: false } && PipeStream is { IsConnected: true };
 
         public WindowSession(string windowId, string framework = "avalonia")
@@ -155,8 +164,14 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
         public async ValueTask DisposeAsync()
         {
-            IsShuttingDown = true;
             try { HotReload.Dispose(); } catch { }
+            await EndProcessAsync();
+        }
+
+        /// <summary>Ends the window's process; the session, its logs and its source stay.</summary>
+        public async Task EndProcessAsync()
+        {
+            IsShuttingDown = true;
             try { PipeCts.Cancel(); } catch { }
 
             if (ListenLoopTask != null)
@@ -173,16 +188,19 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                 Messenger = null;
             }
 
-            if (ChildProcess != null && !ChildProcess.HasExited)
+            if (ChildProcess != null)
             {
                 try
                 {
-                    try { ChildProcess.CloseMainWindow(); } catch { }
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                    try { await ChildProcess.WaitForExitAsync(cts.Token); }
-                    catch (OperationCanceledException) { }
                     if (!ChildProcess.HasExited)
-                        ChildProcess.Kill(entireProcessTree: true);
+                    {
+                        try { ChildProcess.CloseMainWindow(); } catch { }
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                        try { await ChildProcess.WaitForExitAsync(cts.Token); }
+                        catch (OperationCanceledException) { }
+                        if (!ChildProcess.HasExited)
+                            ChildProcess.Kill(entireProcessTree: true);
+                    }
                 }
                 catch { }
                 ChildProcess.Dispose();
@@ -259,8 +277,15 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
         var session = new WindowSession(windowId, framework);
         _sessions[windowId] = session;
+        return await StartProcessAsync(session, "");
+    }
 
+    /// <param name="moreArgs">More for the window's command line, starting with a space.</param>
+    private async Task<bool> StartProcessAsync(WindowSession session, string moreArgs)
+    {
         session.PipeCts = new CancellationTokenSource();
+        session.IsShuttingDown = false;
+        session.HelloReceived = false;
         var counter = Interlocked.Increment(ref _sessionCounter);
 
         var pipeName = $"neo_mcp_{Environment.ProcessId}_{counter}";
@@ -270,14 +295,14 @@ public sealed class PreviewSessionManager : IAsyncDisposable
             PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
         session.Messenger = new FramedPipeMessenger(session.PipeStream);
 
-        var childPath = FindChildExecutable(framework);
+        var childPath = FindChildExecutable(session.Framework);
         if (childPath == null)
         {
-            session.AddLog($"ERROR: Neo.PluginWindow executable not found for framework '{framework}'.");
+            session.AddLog($"ERROR: Neo.PluginWindow executable not found for framework '{session.Framework}'.");
             return false;
         }
 
-        var childArgs = $"--pipe {pipeName} --standalone";
+        var childArgs = $"--pipe {pipeName} --standalone" + moreArgs;
         var psi = new ProcessStartInfo
         {
             FileName = childPath.Value.useDotnet ? "dotnet" : childPath.Value.exePath,
@@ -316,7 +341,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
             while (!session.HelloReceived && DateTime.UtcNow < helloDeadline)
                 await Task.Delay(100, session.PipeCts.Token);
 
-            session.AddLog($"Preview window '{windowId}' started (PID: {session.ChildProcess.Id}).");
+            session.AddLog($"Preview window '{session.WindowId}' started (PID: {session.ChildProcess.Id}).");
             return true;
         }
         catch (Exception ex)
@@ -324,6 +349,31 @@ public sealed class PreviewSessionManager : IAsyncDisposable
             session.AddLog($"ERROR: {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// A running app gets replaced: the new one in a process of its own, where the window was. What the old
+    /// one started besides its window, more windows, timers, threads, hooks, ends with the old process.
+    /// </summary>
+    private async Task<bool> StartFreshProcessAsync(WindowSession s)
+    {
+        var place = s.Framework == "avalonia" ? s.WindowBounds : null;
+        await s.EndProcessAsync();
+        s.HasLoadedApp = false;
+        s.LiveMcpManifest = null;
+        lock (s.SentDependencies) s.SentDependencies.Clear();
+
+        var bounds = place == null ? "" : FormattableString.Invariant($" --bounds {place.X:0},{place.Y:0},{place.Width:0.##},{place.Height:0.##}");
+        if (!await StartProcessAsync(s, bounds)) return false;
+
+        // What the old process served besides the app, the new one serves again.
+        if (s.WebBridge is { } bridge)
+        {
+            var r = await SendRequestAsync(s.WindowId, IpcTypes.StartWebBridge, Json.ToJson(bridge), 10, CancellationToken.None);
+            var served = r?.Type == IpcTypes.StartWebBridgeResult && Json.FromJson<StartWebBridgeResult>(r.PayloadJson) is { Success: true };
+            s.AddLog(served ? "The web bridge is served again, by the new process." : "The web bridge could not be served again.");
+        }
+        return true;
     }
 
     public async Task StopAsync(string? windowId = null)
@@ -351,8 +401,8 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     // ========================================
 
     /// <summary>
-    /// Loads a build into the window as a fresh app — whatever ran there before is replaced
-    /// (compile_and_preview: "show this app"). For changes to the running app use <see cref="UpdateAsync"/>.
+    /// Loads a build into the window as a fresh app — whatever ran there before is replaced, together with
+    /// its process (compile_and_preview: "show this app"). For changes to the running app use <see cref="UpdateAsync"/>.
     /// </summary>
     /// <param name="dllPath">Where the build lies on disk; with it, hot reload is armed for the next change.</param>
     public async Task<bool> SendDllAsync(
@@ -374,6 +424,12 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     {
         try
         {
+            if (s.HasLoadedApp && !await StartFreshProcessAsync(s))
+            {
+                s.AddLog("ERROR: the window could not get a fresh process for the new app.");
+                return false;
+            }
+
             lock (s.LogLock) s.RuntimeErrors.Clear();
 
             if (dependencyDlls != null)
@@ -391,6 +447,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
             await SafeSendControlAsync(s, new IpcEnvelope(
                 IpcTypes.LoadControl, Guid.NewGuid().ToString("N"), Json.ToJson(req)));
+            s.HasLoadedApp = true;
 
             s.AddLog($"DLL loaded: {mainDllName} ({mainDllBytes.Length:N0} bytes).");
 
@@ -455,7 +512,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     /// <summary>
     /// Turns the app running in the window into the new build (update_preview, patch_preview): patched
     /// in place when possible, so the instance and everything the user did with it survive; otherwise
-    /// unloaded and loaded fresh as before. <see cref="GetLastLoadMessage"/> says which of the two happened.
+    /// loaded fresh, in a process of its own. <see cref="GetLastLoadMessage"/> says which of the two happened.
     /// </summary>
     public async Task<bool> UpdateAsync(
         byte[] mainDllBytes, string mainDllName,
@@ -474,10 +531,6 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         }
 
         await s.HotReload.ResetAsync();
-        await SafeSendControlAsync(s, new IpcEnvelope(
-            IpcTypes.UnloadControl, Guid.NewGuid().ToString("N"), "{}"));
-        await Task.Delay(100, ct);
-
         return await LoadFreshAsync(s, mainDllBytes, mainDllName, dependencyDlls, ct, windowId, dllPath);
     }
 
@@ -579,9 +632,14 @@ public sealed class PreviewSessionManager : IAsyncDisposable
 
         var r = await SendRequestAsync(windowId, IpcTypes.StartWebBridge, Json.ToJson(request), 10, ct);
         if (r == null) return new StartWebBridgeResult(false, null, null, "No response.");
-        return r.Type == IpcTypes.StartWebBridgeResult
+        var result = r.Type == IpcTypes.StartWebBridgeResult
             ? Json.FromJson<StartWebBridgeResult>(r.PayloadJson)
             : new StartWebBridgeResult(false, null, null, "Unexpected response.");
+
+        // Served again under the same address when the app gets a fresh process.
+        if (result is { Success: true })
+            s.WebBridge = request with { Port = Uri.TryCreate(result.Url, UriKind.Absolute, out var url) ? url.Port : request.Port };
+        return result;
     }
 
     public async Task<bool> SendToWebBridgeAsync(
@@ -598,6 +656,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     {
         var s = GetRunningSession(windowId);
         if (s == null) return;
+        s.WebBridge = null;
         await SafeSendControlAsync(s, new IpcEnvelope(
             IpcTypes.StopWebBridge, Guid.NewGuid().ToString("N"), "{}"));
     }
@@ -1039,6 +1098,12 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                             if (!string.IsNullOrEmpty(env.CorrelationId) &&
                                 s.PendingRequests.TryRemove(env.CorrelationId, out var liveMcpTcs))
                                 liveMcpTcs.TrySetResult(env);
+                            break;
+
+                        case IpcTypes.ChildWindowBounds:
+                            // Where a fresh process for the next app opens its window.
+                            if (Json.FromJson<ParentWindowBoundsMessage>(env.PayloadJson) is { } bounds)
+                                s.WindowBounds = bounds;
                             break;
 
                         case IpcTypes.Heartbeat:

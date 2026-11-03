@@ -192,8 +192,11 @@ namespace Neo.App
             if (_merging)
                 _stateBeforeReplacing = await ChildProcessService.CaptureAppStateAsync();
 
-            // Unload old control right before loading the new one
-            await ChildProcessService.UnloadControlAsync();
+            // A running app gets replaced: the new version in a process of its own. What the old one
+            // started besides its window, more windows, timers, threads, hooks, would live on in the
+            // old process, and nothing of the new version could stop it.
+            if (ChildProcessService.HasLoadedControl)
+                await ChildProcessService.RestartForNextVersionAsync();
 
             bool success = await ChildProcessService.DisplayControlAsync(
                 mainDllPath: compiledUserControlDllPath,

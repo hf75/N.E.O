@@ -6,7 +6,7 @@ This works in the desktop hosts (WPF and Avalonia, every way a new build reaches
 
 ## What you see
 
-- Desktop: an info line in the chat — `Hot reload (generation 3): the running app was patched in place, its state is preserved. …` — or, when a change cannot be patched, `Hot reload not possible — <reason>. Reloading the app.` followed by the old behaviour (a fresh start).
+- Desktop: an info line in the chat — `Hot reload (generation 3): the running app was patched in place, its state is preserved. …` — or, when a change cannot be patched, `Hot reload not possible — <reason>. Reloading the app.` followed by a fresh start, in a process of its own (see [When it cannot be patched](#when-it-cannot-be-patched)).
 - MCP: the same line at the end of the `update_preview` / `patch_preview` result, so Claude knows whether the state is still there.
 - A running app that could not be prepared for hot reload is never reloaded silently: the next change says `Hot reload not possible — <why it could not be prepared>` in the same place.
 - Avalonia host: while the AI writes a change for a running app, the app stays in view and in use. N.E.O. shows what it is doing beside its Cancel button. What you do in the app meanwhile is still there after the patch, and an error you run into meanwhile is repaired as soon as the change is in. The WPF host still covers the app, because it sits inside the N.E.O. window and the Cancel button lies in that overlay.
@@ -28,7 +28,7 @@ This works in the desktop hosts (WPF and Avalonia, every way a new build reaches
                                                                               call BuildUi() again
                                                                               put UI state back
                                             ◄── HotReloadResult ──  "UI rebuilt (5 of 6 values carried over)"
-   failure anywhere → unload + load fresh (the old way)
+   failure anywhere → a fresh process, the new build loaded there
 ```
 
 1. **Deltas come from Roslyn's own hot reload engine** — `WatchHotReloadService`, the analysis behind `dotnet watch` and Visual Studio's Hot Reload (`Neo.HotReload/RoslynHotReloadService.cs`). It decides what can be patched, maps lambdas of the old code onto the new code (so a timer tick or `CollectionChanged` handler that is already subscribed runs the new body), and says precisely why an edit cannot be applied ("rude edit", e.g. `ENC0014` for a changed base class). The type is internal to Roslyn, so it is reached through reflection and the package version is pinned — `HotReloadSessionTests` fail loudly when a Roslyn update changes that API. Where Roslyn's delta writer itself trips (an `ArgumentException` "same key", for one when lambdas leave one method while another method with a lambda changes too, as when a part is taken out of an app), the change goes in as several generations: the changed methods one by one, then the whole change.
@@ -43,6 +43,16 @@ This works in the desktop hosts (WPF and Avalonia, every way a new build reaches
 5. **New packages and new source files are patched in too.** The host streams the assemblies of a package the change added to the window before the update (it remembers what the window already has, `SentFileLedger` / `WindowSession.SentDependencies`); Roslyn compiles the update against them. A package whose *version* changed cannot be swapped in a running process — that is a full reload.
 6. **Anything that cannot be carried over safely ends in a full reload**, never in a half-updated app: rude edits, a constructor change that cannot be replayed, UI changes in an app without a re-runnable UI method, a removed source file, a changed package version, a failure while applying.
 7. **No waiting for it.** After a full load the build is copied synchronously (the next compile overwrites the path) and Roslyn's session is prepared in the background while the app is already shown; the hosts compose Roslyn's workspace services once at start-up. The next change waits for the session only if it comes faster than that.
+
+## When it cannot be patched
+
+A running app that gets replaced, because a change cannot be patched in or for any other reason, gets a **process of its own** for the new version. The old process ends, and with it everything the old version started besides its window: more windows, timers, threads, keyboard and mouse hooks, hotkeys, open ports. Replaced inside the old process, all of that lived on: the old code cannot even be unloaded there (see Limits), and nothing of the new version knows of it. A tool that darkened the whole screen kept its dark window after such a change, and no switch of the new version turned it off.
+
+- **The window stays where it was:** the new one opens at the place and in the size of the old one (`--bounds`, as the window last reported them). A tool docked to another program ([[Exoskeleton]]) opens where it was before it docked, and docks again if the new version attaches. A living app ([[Living Apps]]) does not show its hint again.
+- **App links go over** ([[App Link]]): the old window tells the other end of each link to wait, hands the links to N.E.O., and the new process takes them up.
+- **What it held starts empty**, as before. A merge ([[Fusion]]) captures the state before the old process ends and puts it back.
+- **The cost:** a fresh plugin window process is ready after about 0.5 to 0.65 s on the development PC (the first, cold start of the day 2.1 s); ending the old one takes about 40 ms.
+- The MCP server does the same for its preview windows (`update_preview`, `patch_preview`, and `compile_and_preview` into a window that runs an app), and starts a web bridge the old process served again under the same address.
 
 ## Heal in place
 
@@ -84,7 +94,7 @@ The system prompts of the desktop hosts and the MCP server teach these rules (`N
 - A method that is running keeps its old code until it is called again, so a change never reaches the body of a loop that runs as long as the app does. Generated code keeps such a loop small and does the work in a method it calls for each round; that method gets the change at the next round. A round under way during the update can fail once when its lambda gained a captured variable, because the new body then runs on the old closure, so the loop catches that and goes on.
 - Things Roslyn cannot patch into a running app (new base class/interface, changed method signatures in some cases, generic type changes, …) fall back to a fresh start. The message says which edit it was.
 - A download or connection that is running while the code changes keeps running with the new code for everything it calls afterwards; code already on the stack finishes as the old version.
-- Plugins are loaded into a **non-collectible** load context in processes that can hot reload: the runtime crashes when an update adds a static field to an assembly in a collectible context. Most changes now patch the running app; each *full* reload keeps the replaced plugin assembly in memory until the preview window is restarted. Its dependencies (NuGet packages) are not duplicated: identical assemblies (same identity and MVID) are loaded once and shared by every later plugin context.
+- Plugins are loaded into a **non-collectible** load context in processes that can hot reload: the runtime crashes when an update adds a static field to an assembly in a collectible context. A replaced plugin therefore cannot be unloaded, which is one reason why a replaced app gets a process of its own. Where a plugin is still replaced inside its process (Smart Edit in an MCP preview window), the old assembly stays in memory until the window's process ends; its dependencies (NuGet packages) are not duplicated: identical assemblies (same identity and MVID) are loaded once and shared by every later plugin context.
 - Generated code is compiled without optimizations (edit-and-continue needs it). For UI apps the difference is not measurable.
 - `capture_screenshot` shows the state after the update as usual; a native web view appears empty there (see [[MCP Server]]).
 
@@ -101,8 +111,9 @@ The system prompts of the desktop hosts and the MCP server teach these rules (`N
 | New dependencies before an update | `Neo.App.Core/SentFileLedger.cs` (desktop), `PreviewSessionManager.TryHotReloadAsync` (MCP); the child resolves them lazily from its live assembly dictionaries |
 | IPC | `HotReload` / `HotReloadResult`, `HelloMessage.HotReloadCapabilities` in `Neo.IPC/IPC.cs` |
 | Desktop wiring | `AppController.DisplayCompiledDllAsync` |
+| A process of its own for a replaced app | `IChildProcessService.RestartForNextVersionAsync`; `AvaloniaChildProcessService` (place of the window, links handed over and taken up), `App.PlaceWhereTheLastVersionWas` and `AppLinks.HandOverAsync / ResumeAsync` in `Neo.PluginWindowAvalonia.Core`; MCP: `PreviewSessionManager.StartFreshProcessAsync` |
 | Heal in place | `AppController.CrashRecovery.cs` (`_inPlaceRepair`), `App.*.cs` in both `PluginWindow*.Core` (recoverable errors, banners), `MainWindow.TrackUserActions / FailedActionAddress / ReplayAction` |
 | Errors that would vanish | `Neo.ErrorSurfacing/` (`LostExceptions.Instrument`, `SurfacingRewriter`, the runtime class `Runtime/NeoRuntime.LostExceptions.cs`); called in `CSharpDllCompileAgent`, `CSharpCompileAgent`, `HotReloadSession`, `WasmCompiler`. Tests: `Neo.ErrorSurfacing.Tests`, `Neo.HotReload.Tests/LostExceptionsHotReloadTests`, `Neo.McpServer.Tests/LostExceptionProcessTests` (each pattern through a real window) |
 | Error window of exported apps | `Neo.ErrorSurfacing/ExportErrors.cs`, `Runtime/NeoErrorWindow.Avalonia.cs` / `.Wpf.cs`, put into the export programs by `ExportWindowBaseCode` (desktop hosts) and `CompilationPipeline.GetAvaloniaExportWrapper` (MCP). Tests: `Neo.ErrorSurfacing.Tests/ExportErrorsTests`, `Neo.App.Core.Tests/DesktopExportErrorWindowTests`, `Neo.McpServer.Tests/ExportedErrorWindowTests` (real exported programs) |
 | MCP wiring | `PreviewSessionManager.UpdateAsync` |
-| Tests | `Neo.HotReload.Tests` (engine: packages, new files, subscriptions), `Neo.PluginWindow.SmokeTests/DesktopHotReloadSmokeTests` (both desktop heads: state, routed-event handlers, new package, selection and tree state, a crash healed in place with the click done again), `Neo.McpServer.Tests/HotReloadProcessTests` (server end to end) |
+| Tests | `Neo.HotReload.Tests` (engine: packages, new files, subscriptions), `Neo.PluginWindow.SmokeTests/DesktopHotReloadSmokeTests` (both desktop heads: state, routed-event handlers, new package, selection and tree state, a crash healed in place with the click done again), `FreshProcessSmokeTests` (a replaced app's own window and timer end with its process, the new window opens where the old one was), `AppLinkSmokeTests` (links outlive either program getting a fresh process), `Neo.McpServer.Tests/HotReloadProcessTests` (server end to end) |

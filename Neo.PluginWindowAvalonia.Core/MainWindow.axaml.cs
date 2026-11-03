@@ -234,6 +234,8 @@ namespace Neo.PluginWindowAvalonia
         /// <summary>The chip of an app link: it says with whom, and its cross ends the link.</summary>
         public void ShowLinkChip(string id, string text, Action end)
         {
+            RemoveLinkChip(id); // the same link, begun anew: a program came back in a fresh process
+
             var cross = new Avalonia.Controls.Button
             {
                 Content = "✕", Padding = new global::Avalonia.Thickness(6, 0), Margin = new global::Avalonia.Thickness(6, 0, 0, 0), FontSize = 11,

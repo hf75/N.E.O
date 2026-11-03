@@ -520,7 +520,7 @@ public class AppLinkSmokeTests : IDisposable
         apiA.AnswerWithCode(Meter);
         apiB.AnswerWithCode(Board);
         apiB.AnswerWithText(Proposal());
-        // A new interface cannot be patched in: the program is replaced, in the same process, under a new address.
+        // A new interface cannot be patched in: the program is replaced, in a process of its own.
         apiA.AnswerWithCode(Meter
             .Replace("public class DynamicUserControl : UserControl", "public class DynamicUserControl : UserControl, System.IDisposable")
             .Replace("private void Show()", "public void Dispose() { }\n\n    private void Show()"));
@@ -536,9 +536,11 @@ public class AppLinkSmokeTests : IDisposable
 
             SetSlider(AppOf(hostA), 33);
             await WaitForTextAsync(hostB, ChildProcessName(Host), t => t == "AMOUNT 33", 5, "the value before", apiB);
+            var processBefore = AppOf(hostA).Current.ProcessId;
 
             await SendPromptAsync(hostA, "Change it.");
             await WaitForTextAsync(hostA, "no such process", t => t.StartsWith("Hot reload not possible"), 60, "the note that the program is replaced", apiA);
+            await WaitForAsync(() => HasEnded(processBefore) ? "ended" : null, 15, "the end of the old process");
             await WaitForTextAsync(hostA, ChildProcessName(Host), t => t.StartsWith("METER 0"), 30, "the new program", apiA);
             await WaitForTextAsync(hostA, ChildProcessName(Host), t => t == "Linked to Board", 5, "the link still there", apiA);
 
@@ -555,6 +557,68 @@ public class AppLinkSmokeTests : IDisposable
         {
             Stop(hostA);
             Stop(hostB);
+        }
+    }
+
+    [Fact]
+    public async Task A_link_outlives_the_program_that_runs_it_being_replaced()
+    {
+        using var apiA = new StandInClaudeApi();
+        using var apiB = new StandInClaudeApi();
+        apiA.AnswerWithCode(Meter);
+        apiB.AnswerWithCode(Board);
+        apiB.AnswerWithText(Proposal());
+        // The communicator runs in the window of Board. Board gets a new interface, in a process of its own.
+        apiB.AnswerWithCode(Board
+            .Replace("public class DynamicUserControl : UserControl", "public class DynamicUserControl : UserControl, System.IDisposable")
+            .Replace("private void Show()", "public void Dispose() { }\n\n    private void Show()"));
+
+        using var hostA = Start(Host, apiA, _settingsA, Settings);
+        using var hostB = Start(Host, apiB, _settingsB, Settings);
+        try
+        {
+            var (a, b) = await TwoProgramsAsync(hostA, hostB, apiA, apiB);
+            await DropOnLinkHalfAsync(a, b, hostB);
+            await ConnectAsync(hostB, UnchosenTitle);
+            await WaitForTextAsync(hostB, ChildProcessName(Host), t => t == "AMOUNT 10", 10, "the first value", apiB);
+            SetSlider(AppOf(hostA), 33);
+            await WaitForTextAsync(hostB, ChildProcessName(Host), t => t == "AMOUNT 33", 5, "the value before", apiB);
+            var processBefore = AppOf(hostB).Current.ProcessId;
+
+            await SendPromptAsync(hostB, "Change it.");
+            await WaitForTextAsync(hostB, "no such process", t => t.StartsWith("Hot reload not possible"), 60, "the note that the program is replaced", apiB);
+            await WaitForAsync(() => HasEnded(processBefore) ? "ended" : null, 15, "the end of the old process");
+
+            // The communicator ran again in the new process: the value is there at once, and both say they are linked.
+            await WaitForTextAsync(hostB, ChildProcessName(Host), t => t == "AMOUNT 33", 30, "the value in the new program", apiB);
+            await WaitForTextAsync(hostB, ChildProcessName(Host), t => t == "Linked to Meter", 5, "the link in the new program", apiB);
+            await WaitForTextAsync(hostA, ChildProcessName(Host), t => t == "Linked to Board", 5, "the link still there on the other side", apiA);
+            TextsIn(AppOf(hostA)).Count(t => t == "Linked to Board").Should().Be(1, "the same link, begun anew, not a second one");
+
+            SetSlider(AppOf(hostA), 66);
+            await WaitForTextAsync(hostB, ChildProcessName(Host), t => t == "AMOUNT 66", 10, "the value in the new program", apiB);
+            var inA = AppOf(hostA);
+            TopLevelWindows.Click(inA, ButtonIn(inA, "Bump"));
+            await WaitForTextAsync(hostB, ChildProcessName(Host), t => t == "ROWS 1 LAST 66", 10, "the press in the new program", apiB);
+            await WaitForTextAsync(hostA, ChildProcessName(Host), t => t == "METER 1 HEARD 1", 10, "the answer from the new program", apiA);
+        }
+        finally
+        {
+            Stop(hostA);
+            Stop(hostB);
+        }
+    }
+
+    private static bool HasEnded(int processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            return process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return true;
         }
     }
 

@@ -125,6 +125,12 @@ namespace Neo.IPC
         /// <summary>Host → child: run this communicator here.</summary>
         public const string LinkStart = "LinkStart";
         public const string LinkStarted = "LinkStarted";
+        /// <summary>Host → child: the next version of the app gets a process of its own; hand the links over, their other ends wait for it.</summary>
+        public const string LinkHandOver = "LinkHandOver";
+        public const string LinksHandedOver = "LinksHandedOver";
+        /// <summary>Host → child: take up the links of the process before this one.</summary>
+        public const string LinkResume = "LinkResume";
+        public const string LinksResumed = "LinksResumed";
     }
 
     /// <summary>What a program does to another one when it is dragged onto it (see Fusion in the docs).</summary>
@@ -164,6 +170,10 @@ namespace Neo.IPC
         public const string Do = "link-do";
         /// <summary>Either way: the link is over.</summary>
         public const string End = "link-end";
+        /// <summary>Either way: my program gets a fresh process; wait for it instead of ending the link when this one goes.</summary>
+        public const string Moving = "link-moving";
+        /// <summary>From the fresh process of the window that does not run the communicator: here I am again.</summary>
+        public const string Rejoin = "link-rejoin";
         /// <summary>From a window to its own N.E.O.: something to say in the chat.</summary>
         public const string Report = "link-report";
     }
@@ -223,6 +233,20 @@ namespace Neo.IPC
 
     /// <param name="Reason">Why, for the person; null: the person ended it.</param>
     public record LinkEndMessage(string LinkId, string? Reason);
+
+    public record LinkMovingMessage(string LinkId);
+
+    public record LinkRejoinMessage(string LinkId, int ProcessId);
+
+    /// <summary>A link of a window whose app gets a fresh process, for the new process to take up.</summary>
+    /// <param name="PeerProcessId">The process of the window of the other program.</param>
+    /// <param name="Start">How to run the communicator again when it ran in this window; null: the other window runs it.</param>
+    public record LinkHandOverItem(string LinkId, string PeerName, int PeerProcessId, LinkStartRequest? Start);
+
+    public record LinksHandedOverMessage(List<LinkHandOverItem> Links);
+
+    /// <summary>Answered with a <see cref="LinkStartedMessage"/>.</summary>
+    public record LinkResumeRequest(List<LinkHandOverItem> Links);
 
     public record LinkReportMessage(string Text);
 

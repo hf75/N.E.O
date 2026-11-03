@@ -93,6 +93,34 @@ public class PluginWindowSmokeTests
         child.Errors.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(260, 180, true)]
+    [InlineData(-32000, -32000, false)] // where Windows puts a minimised window: not a place to open at
+    public async Task Standalone_head_opens_where_the_last_version_of_the_app_was(int x, int y, bool there)
+    {
+        // The next version of an app gets a process of its own, and its window takes the place of the old one.
+        await using var child = await ChildSession.StartAsync(
+            TestEnvironment.HeadExe("Neo.PluginWindowAvalonia"), $"--standalone --bounds {x},{y},620,430.5");
+        await child.LoadAsync(TestEnvironment.PluginFor("Neo.PluginWindowAvalonia"));
+        (await child.WaitForLoadsAsync(1)).Should().BeTrue(Describe(child, "load"));
+        await Task.Delay(1500);
+
+        var reported = Json.FromJson<ParentWindowBoundsMessage>(child.LastPayload(IpcTypes.ChildWindowBounds)!)!;
+        if (there)
+        {
+            reported.X.Should().Be(x);
+            reported.Y.Should().Be(y);
+            reported.Width.Should().BeApproximately(620, 1, "a size in DIPs lands on whole pixels");
+            reported.Height.Should().BeApproximately(430.5, 1);
+        }
+        else
+        {
+            reported.X.Should().BeGreaterThan(-10000, "it opens on a screen instead");
+            reported.Y.Should().BeGreaterThan(-10000);
+        }
+        child.Errors.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task A_child_that_exits_closes_the_pipe_cleanly()
     {

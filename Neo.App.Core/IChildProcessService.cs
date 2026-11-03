@@ -8,6 +8,14 @@ namespace Neo.App
     public interface IChildProcessService : IAsyncDisposable
     {
         Task RestartAsync();
+
+        /// <summary>
+        /// A process of its own for the next version of the running app. The old process ends, and with it
+        /// everything the old version started besides its window: more windows, timers, threads, hooks,
+        /// hotkeys. The new window takes the place of the old one, and so do its app links.
+        /// </summary>
+        Task RestartForNextVersionAsync() => RestartAsync();
+
         void UpdatePosition(bool useTopMostTrick = false);
         Task<bool> DisplayControlAsync(string mainDllPath, IEnumerable<string> nugetDlls, IEnumerable<string> additionalDlls);
         bool IsFocusInsideChild();

@@ -40,7 +40,7 @@ Between these sits a little C#: *parse the number out of "Total: 250 €"*, *mul
 - **Between the windows:** the app network ([[App Network]]), past the N.E.O.s. The window of the other program watches and does what the communicator asks of it.
 - **Order and speed:** what is asked for happens in that order, so a value set and a button pressed after it arrive in that order. A slider moved faster than the other side takes it sends its latest value; a press is never left out.
 - **No going round in circles:** a change made by the link does not go back through that same link for the same control. Two sliders that mirror each other stop by themselves.
-- **When a program changes:** the app may build its UI anew: the link finds the control again by its address, and reports a value only if it differs. If a program is replaced it gets a new address on the app network, so the link goes by its process.
+- **When a program changes:** the app may build its UI anew: the link finds the control again by its address, and reports a value only if it differs. A change that cannot be patched in gives the program a process of its own ([[Hot Reload]]). Before the old process ends, its window tells the other one to wait and hands its links to N.E.O.; the new process takes them up. Where the communicator ran, it runs again; otherwise the window that runs it hears where the program is now and asks for what it watched once more. Both keep their chip.
 
 Measured on small tools the model built itself, each knowing nothing of the others (Sonnet 5.5, effort low), 22 runs over five pairs: the answer took 3 to 16 s. A colour mixer drove the background of a poster, the total of an expense list filled the amount of a currency converter, the laps of a stopwatch became notes, and a wish in plain words added a second kind of note. One run failed, on a list of the toolkit that did not cross between the programs; that is fixed. For a palette and a fractal drawn in grey the model said that a link cannot do it, and suggested nothing.
 
@@ -52,6 +52,6 @@ A flight game without instruments and the panel of an airplane without a plane, 
 - Addresses count controls of a type in the order they appear. A control that moves because a prompt changed the program may then be another one. What cannot be found any more is said in the chat.
 - How good the suggestions are is up to the model. Read what it says before you connect. In a block that keeps two values equal it sometimes starts a watch inside a callback, although it is told not to (2 of the last 5 runs of the flight game): every change then adds one more watch until the link ends.
 - Nothing asks again: the code you agreed to runs with your rights, like everything N.E.O. builds.
-- Each link lives in memory. After a restart of either program it is gone, and you make it again with a drop.
+- Each link lives in memory. After a restart of either program it is gone, and you make it again with a drop. A new process for a changed program is not such a restart; only if the program is not back within 30 seconds is the link over.
 - The N.E.O. of the program you drop on needs a model and a key. For an exported living app that is the key of the person using it.
 - This has run on a single display at 100 %. Scaled displays are covered by the arithmetic only.

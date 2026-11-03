@@ -165,7 +165,7 @@ public class HotReloadProcessTests
     }
 
     [Fact]
-    public async Task A_change_that_cannot_be_patched_falls_back_to_a_full_reload_and_says_why()
+    public async Task A_change_that_cannot_be_patched_starts_the_app_in_a_fresh_process_and_says_why()
     {
         if (!OperatingSystem.IsWindows()) return;
 
@@ -176,6 +176,7 @@ public class HotReloadProcessTests
         {
             (await server.CallToolAsync("compile_and_preview", new { sourceCode = new[] { V1 }, framework = "avalonia" }, TimeSpan.FromMinutes(3)))
                 .Should().StartWith("SUCCESS");
+            var before = WindowProcess(await server.CallToolAsync("get_preview_status", new { }));
             await server.CallToolAsync("invoke_method", new { method = "LoadRow", argsJson = "[\"row 1\"]" });
 
             // A new base interface is a "rude edit": the runtime cannot change a type's shape like that.
@@ -186,14 +187,42 @@ public class HotReloadProcessTests
             updated.Should().StartWith("SUCCESS", "the new version still has to be shown");
             updated.Should().Contain("Hot reload not possible").And.Contain("ENC");
 
+            // What the old version started besides its window has to end with it: the new one runs in a process of its own.
+            var after = WindowProcess(await server.CallToolAsync("get_preview_status", new { }));
+            after.Should().NotBe(before, "the new version gets a process of its own");
+            HasEnded(before).Should().BeTrue("the old process ends, and with it everything the old version had started");
+
             var tree = await server.CallToolAsync("inspect_visual_tree", new { }, TimeSpan.FromSeconds(60));
             tree.Should().Contain("Workbook viewer v1");
             (await server.CallToolAsync("read_observable", new { observable = "RowCount" }, TimeSpan.FromSeconds(60)))
-                .Should().Contain("0", "a full reload starts from scratch — that is the old behaviour");
+                .Should().Contain("0", "a new process starts from scratch");
+            (await server.CallToolAsync("invoke_method", new { method = "LoadRow", argsJson = "[\"row 2\"]" }, TimeSpan.FromSeconds(60)))
+                .Should().Contain("1", "the tools of the app reach the new process");
         }
         finally
         {
             try { await server.CallToolAsync("close_preview", new { }, TimeSpan.FromSeconds(20)); } catch { }
+        }
+    }
+
+    // The window's process as the status names it last: "Preview window 'default' started (PID: 1234)."
+    private static int WindowProcess(string status)
+    {
+        var started = System.Text.RegularExpressions.Regex.Matches(status, @"started \(PID: (\d+)\)");
+        started.Should().NotBeEmpty("the status names the window's process:\n" + status);
+        return int.Parse(started[^1].Groups[1].Value);
+    }
+
+    private static bool HasEnded(int processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            return process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return true;
         }
     }
 }

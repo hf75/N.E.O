@@ -23,7 +23,8 @@ namespace Neo.PluginWindowAvalonia
     /// The app links of this window. An app link connects two running programs without changing either: a
     /// small communicator, compiled for this link and kept in memory only, runs in the window of the program
     /// that was dropped on. It watches and uses both programs; the window of the other one answers it over
-    /// the app network. Over when either program ends, or when someone says so. See App Link in the docs.
+    /// the app network. Over when either program ends, or when someone says so. A new version of a program
+    /// gets a process of its own: the links go over to it. See App Link in the docs.
     /// </summary>
     internal sealed class AppLinks(MainWindow window, Func<string, string?, Task<string?>> askHost)
     {
@@ -39,15 +40,59 @@ namespace Neo.PluginWindowAvalonia
             catch (Exception ex) { Debug.WriteLine("[AppLink] " + ex.Message); }
         }
 
-        internal void Forget(AppLink link) => _links.TryRemove(link.Id, out _);
+        // This one only: the same link may already go on in the one that took its place.
+        internal void Forget(AppLink link) => _links.TryRemove(new KeyValuePair<string, AppLink>(link.Id, link));
 
         /// <summary>The host says: run this communicator here.</summary>
         public async Task<LinkStartedMessage> StartAsync(LinkStartRequest request)
         {
-            var link = new AppLink(this, request.LinkId, request.PeerName, request.PeerProcessId);
+            var link = new AppLink(this, request.LinkId, request.PeerName, request.PeerProcessId, request);
             _links[link.Id] = link;
             await link.ShowAsync();
             return await link.RunCommunicatorAsync(Convert.FromBase64String(request.Assembly), request.Blocks, request.OwnName);
+        }
+
+        /// <summary>
+        /// The app of this window gets a fresh process. The other end of each link waits for it, and here the
+        /// links go quiet. What comes back is what the new process needs to take them up.
+        /// </summary>
+        public async Task<List<LinkHandOverItem>> HandOverAsync()
+        {
+            var handedOver = new List<LinkHandOverItem>();
+            foreach (var link in _links.Values.ToList())
+            {
+                if (await link.HandOverAsync() is { } item)
+                    handedOver.Add(item);
+            }
+            return handedOver;
+        }
+
+        /// <summary>The links of the process before this one, for the app that is loaded now.</summary>
+        public async Task<LinkStartedMessage> ResumeAsync(IReadOnlyList<LinkHandOverItem> links)
+        {
+            bool success = true;
+            var problems = new List<string>();
+            foreach (var item in links)
+            {
+                // The communicator ran here: it runs again, and the other window takes that for the same link.
+                if (item.Start != null)
+                {
+                    var started = await StartAsync(item.Start with { PeerProcessId = item.PeerProcessId });
+                    success &= started.Success;
+                    problems.AddRange(started.Problems);
+                    continue;
+                }
+
+                var link = new AppLink(this, item.LinkId, item.PeerName, item.PeerProcessId, start: null);
+                _links[link.Id] = link;
+                await link.ShowAsync();
+                if (await link.RejoinAsync() is { } problem)
+                {
+                    success = false;
+                    problems.Add(problem);
+                }
+            }
+            return new LinkStartedMessage(success, problems);
         }
 
         /// <summary>What the window of the other program says.</summary>
@@ -60,9 +105,26 @@ namespace Neo.PluginWindowAvalonia
                 case LinkMessages.Start:
                 {
                     var start = Json.FromJson<LinkStartMessage>(payload)!;
-                    var link = new AppLink(this, start.LinkId, start.RunnerName, start.RunnerProcessId);
+                    // The program that runs the communicator came back in a fresh process: the link begins anew there.
+                    if (_links.TryRemove(start.LinkId, out var before))
+                        before.GiveWay();
+                    var link = new AppLink(this, start.LinkId, start.RunnerName, start.RunnerProcessId, start: null);
                     _links[link.Id] = link;
                     await link.ShowAsync();
+                    return "ok";
+                }
+                case LinkMessages.Moving:
+                {
+                    var moving = Json.FromJson<LinkMovingMessage>(payload)!;
+                    if (!_links.TryGetValue(moving.LinkId, out var link)) return "The link is over.";
+                    link.PeerMoving();
+                    return "ok";
+                }
+                case LinkMessages.Rejoin:
+                {
+                    var rejoin = Json.FromJson<LinkRejoinMessage>(payload)!;
+                    if (!_links.TryGetValue(rejoin.LinkId, out var link)) return "The link is over.";
+                    link.PeerRejoined(rejoin.ProcessId);
                     return "ok";
                 }
                 case LinkMessages.Watch:
@@ -100,10 +162,20 @@ namespace Neo.PluginWindowAvalonia
         private const int MaxProblems = 8;
         private static readonly TimeSpan AnswerWithin = TimeSpan.FromSeconds(15);
 
+        // How long the other program may take to come back in a fresh process.
+        private static readonly TimeSpan BackWithin = TimeSpan.FromSeconds(30);
+
         private readonly AppLinks _owner;
         private readonly string _peerName;
-        private readonly int _peerProcess;
+        private readonly LinkStartRequest? _start; // how the communicator began here; null: it runs in the other window
+        private volatile int _peerProcess;
         private readonly CancellationTokenSource _over = new();
+
+        // While the other program moves to a fresh process; done with that process.
+        private TaskCompletionSource<int>? _peerMoving;
+
+        // What the communicator asked the other window to watch: a fresh process there has to hear it again.
+        private readonly Dictionary<int, LinkWatchMessage> _watchedThere = [];
 
         // One after the other each: what the other side must do, what this side must do, what the communicator wants to hear.
         private readonly LinkOutbox _toTheOther;
@@ -122,12 +194,13 @@ namespace Neo.PluginWindowAvalonia
         private int _nextWatch;
         private int _ended;
 
-        public AppLink(AppLinks owner, string id, string peerName, int peerProcess)
+        public AppLink(AppLinks owner, string id, string peerName, int peerProcess, LinkStartRequest? start)
         {
             _owner = owner;
             Id = id;
             _peerName = peerName;
             _peerProcess = peerProcess;
+            _start = start;
             _toTheOther = new LinkOutbox(ex => Problem(ex.Message));
             _here = new LinkOutbox(ex => Problem(ex.Message));
             _callbacks = new LinkOutbox(ex => Problem(ex.Message));
@@ -152,14 +225,100 @@ namespace Neo.PluginWindowAvalonia
 
         private async Task EndWithThePeerAsync()
         {
+            while (true)
+            {
+                var watched = _peerProcess;
+                try
+                {
+                    using var process = Process.GetProcessById(watched);
+                    await process.WaitForExitAsync(_over.Token);
+                }
+                catch (OperationCanceledException) { return; }
+                catch (ArgumentException) { /* it is gone already */ }
+
+                // A program that said it gets a fresh process comes back in that one.
+                if (_peerProcess != watched) continue;
+                if (Volatile.Read(ref _peerMoving) is not { } moving) break;
+                try
+                {
+                    await moving.Task.WaitAsync(BackWithin, _over.Token);
+                }
+                catch (OperationCanceledException) { return; }
+                catch (TimeoutException) { break; }
+            }
+            End($"{_peerName} was closed. The link is gone.", tellTheOther: false);
+        }
+
+        // ── A program that gets a fresh process ──────────────────────────
+
+        /// <summary>
+        /// The app of this window gets a fresh process. The other end waits for it instead of ending the link
+        /// when this process goes, and here the link goes quiet. Null: the other end did not hear it, and the
+        /// link ends with this process.
+        /// </summary>
+        public async Task<LinkHandOverItem?> HandOverAsync()
+        {
+            // The other one is on its way too: neither would find the other again.
+            if (Volatile.Read(ref _ended) == 1 || Volatile.Read(ref _peerMoving) != null) return null;
             try
             {
-                using var process = Process.GetProcessById(_peerProcess);
-                await process.WaitForExitAsync(_over.Token);
+                if (await SendAsync(LinkMessages.Moving, Json.ToJson(new LinkMovingMessage(Id))) != "ok") return null;
             }
-            catch (OperationCanceledException) { return; }
-            catch (ArgumentException) { /* it is gone already */ }
-            End($"{_peerName} was closed. The link is gone.", tellTheOther: false);
+            catch (InvalidOperationException ex)
+            {
+                Debug.WriteLine("[AppLink] " + ex.Message);
+                return null;
+            }
+
+            GiveWay();
+            return new LinkHandOverItem(Id, _peerName, _peerProcess, _start);
+        }
+
+        /// <summary>The other program gets a fresh process: the link waits for it instead of ending with the old one.</summary>
+        public void PeerMoving() =>
+            Interlocked.CompareExchange(ref _peerMoving, new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously), null);
+
+        /// <summary>
+        /// The other window is back in a fresh process, without the communicator, which runs here: what the
+        /// communicator wants to hear from there, it has to be told again.
+        /// </summary>
+        public void PeerRejoined(int processId)
+        {
+            _peerProcess = processId;
+            _peer = null;
+
+            // Before anything waiting goes out: what goes out from now on reaches the new process anyway.
+            List<LinkWatchMessage> again;
+            lock (_watchedThere) again = [.. _watchedThere.Values];
+            Interlocked.Exchange(ref _peerMoving, null)?.TrySetResult(processId);
+
+            foreach (var watch in again)
+                _toTheOther.Post(null, async () =>
+                {
+                    var answer = await SendAsync(LinkMessages.Watch, Json.ToJson(watch));
+                    if (answer != "ok") Problem($"{_peerName}: {answer}");
+                });
+        }
+
+        /// <summary>
+        /// This window is back in a fresh process, without the communicator: the other window, which runs it,
+        /// hears so. Null when it did; else why the link is over.
+        /// </summary>
+        public async Task<string?> RejoinAsync()
+        {
+            string answer;
+            try
+            {
+                answer = await SendAsync(LinkMessages.Rejoin, Json.ToJson(new LinkRejoinMessage(Id, Environment.ProcessId)));
+            }
+            catch (InvalidOperationException ex)
+            {
+                answer = ex.Message;
+            }
+            if (answer == "ok") return null;
+
+            End($"The link to {_peerName} is gone: {answer}", tellTheOther: false);
+            return answer;
         }
 
         // ── The communicator ─────────────────────────────────────────────
@@ -275,9 +434,12 @@ namespace Neo.PluginWindowAvalonia
         {
             var id = Interlocked.Increment(ref _nextWatch);
             _waitingFor[id] = (kind == LinkWatchKind.Click, then);
+            var watch = new LinkWatchMessage(Id, id, kind, address, property);
             _toTheOther.Post(null, async () =>
             {
-                var answer = await SendAsync(LinkMessages.Watch, Json.ToJson(new LinkWatchMessage(Id, id, kind, address, property)));
+                var answer = await SendAsync(LinkMessages.Watch, Json.ToJson(watch));
+                // Also when it failed there: the next version of that program may have what was missing.
+                lock (_watchedThere) _watchedThere[id] = watch;
                 if (answer != "ok") Problem($"{_peerName}: {answer}");
             });
         }
@@ -451,12 +613,20 @@ namespace Neo.PluginWindowAvalonia
 
         // ── Talking to the other window ──────────────────────────────────
 
-        // Its address changes when its app gets replaced; its process does not. Meanwhile it just takes a moment.
+        // Its address changes when its app gets replaced. So does its process, but then it says so first, and what
+        // goes to it waits for the new one. Meanwhile it just takes a moment.
         private async Task<string> SendAsync(string kind, string payload)
         {
             Exception? last = null;
             for (int attempt = 0; attempt < 12 && !_over.IsCancellationRequested; attempt++)
             {
+                if (Volatile.Read(ref _peerMoving) is { } moving)
+                {
+                    try { await moving.Task.WaitAsync(BackWithin, _over.Token); }
+                    catch (Exception ex) when (ex is TimeoutException or OperationCanceledException) { break; }
+                    _peer = null;
+                }
+
                 var peer = _peer ??= Apps.Running().FirstOrDefault(a => a.ProcessId == _peerProcess);
                 if (peer != null)
                 {
@@ -479,6 +649,8 @@ namespace Neo.PluginWindowAvalonia
 
         private void Problem(string text)
         {
+            if (Volatile.Read(ref _ended) == 1) return; // what was on its way when the link went is no news
+
             lock (_problems)
             {
                 if (_problems.Contains(text) || _problems.Count >= MaxProblems) return;
@@ -490,9 +662,19 @@ namespace Neo.PluginWindowAvalonia
         /// <param name="reason">Why, for the person; null: the person ended it.</param>
         public void End(string? reason, bool tellTheOther)
         {
-            if (Interlocked.Exchange(ref _ended, 1) == 1) return;
-
+            var text = reason ?? $"The link to {_peerName} is gone.";
+            if (!Stop(text)) return;
             if (tellTheOther) _ = TellTheOtherItIsOverAsync(reason);
+        }
+
+        /// <summary>Over here without a word, and the chip stays: the same link goes on in a fresh process.</summary>
+        public void GiveWay() => Stop(text: null);
+
+        // Text: what the person reads; null: nothing, the link goes on elsewhere. False: it was over already.
+        private bool Stop(string? text)
+        {
+            if (Interlocked.Exchange(ref _ended, 1) == 1) return false;
+
             _over.Cancel();
             _toTheOther.Close();
             _here.Close();
@@ -500,19 +682,20 @@ namespace Neo.PluginWindowAvalonia
             _owner.Forget(this);
             _waitingFor.Clear();
 
-            var text = reason ?? $"The link to {_peerName} is gone.";
-            _owner.Tell(text);
+            if (text != null) _owner.Tell(text);
             Dispatcher.UIThread.Post(() =>
             {
                 _timer?.Stop();
                 foreach (var watcher in _watchers) watcher.Stop();
                 _watchers.Clear();
+                if (text == null) return;
                 Window.RemoveLinkChip(Id);
                 Window.ShowBanner(text, "#D0202020", 5);
             });
 
             _communicator?.Unload();
             _communicator = null;
+            return true;
         }
 
         private async Task TellTheOtherItIsOverAsync(string? reason)

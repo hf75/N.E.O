@@ -117,6 +117,10 @@ public class ExoskeletonSmokeTests : IDisposable
 
     private static IntPtr Handle(AutomationElement window) => (IntPtr)window.Current.NativeWindowHandle;
 
+    /// <summary>The tool after a change that could not be patched in: its window in the process that took the old one's place.</summary>
+    private static Task<AutomationElement> NewPanelAsync(System.Diagnostics.Process host, IntPtr before) =>
+        WaitForAsync(() => !IsWindow(before) && Panel(host) is { } panel && Handle(panel) != before ? panel : null, 30, "the tool in a process of its own");
+
     private static Rect WindowRect(IntPtr window)
     {
         GetWindowRect(window, out var rect);
@@ -210,11 +214,13 @@ public class ExoskeletonSmokeTests : IDisposable
             await WaitForAsync(() => IsWindowVisible(panelWindow) ? "shown" : null, 5, "the panel coming back");
             await WaitUntilDockedAsync(panelWindow, targetWindow, "the panel beside the restored program");
 
-            // The next change is patched in: it stays where it is, still reading.
+            // The next change: the tool builds its UI in the constructor, so the change cannot be patched in. The tool
+            // comes back in a process of its own, docks again and reads on.
             await Task.Delay(3000); // hot reload arms itself in the background
             await SendPromptAsync(host, "Call it a count.");
             await WaitForAsync(() => api.Requests.Count == 2 ? "asked" : null, 30, "the second request");
-            await Task.Delay(4000);
+            panel = await NewPanelAsync(host, panelWindow);
+            panelWindow = Handle(panel);
             _target.Text = "one two";
             await WaitForTextAsync(host, ChildProcessName(Host), t => t == "COUNT 2", 30, "the change, in the docked tool", api);
             await WaitUntilDockedAsync(panelWindow, targetWindow, "the panel still docked after the change");
@@ -240,7 +246,7 @@ public class ExoskeletonSmokeTests : IDisposable
         }
     }
 
-    // A new interface cannot be patched in: the tool is replaced, in the same process, and nobody tells the one before.
+    // A new interface cannot be patched in: the tool is replaced, in a process of its own.
     private string ToolThatMustBeReplaced => Tool
         .Replace("WORDS ", "COUNT ")
         .Replace("public class DynamicUserControl : UserControl", "public class DynamicUserControl : UserControl, IDisposable")
@@ -266,6 +272,7 @@ public class ExoskeletonSmokeTests : IDisposable
 
             await SendPromptAsync(host, "Call it a count.");
             await WaitForTextAsync(host, "no such process", t => t.StartsWith("Hot reload not possible"), 60, "the note that the tool is replaced", api);
+            panelWindow = Handle(await NewPanelAsync(host, panelWindow));
             _target.Text = "one two";
             await WaitForTextAsync(host, ChildProcessName(Host), t => t == "COUNT 2", 30, "the new tool reading the program", api);
             await WaitUntilDockedAsync(panelWindow, _target.Handle, "the new tool still docked");
@@ -326,6 +333,7 @@ public class ExoskeletonSmokeTests : IDisposable
             await Task.Delay(3000); // hot reload arms itself in the background
 
             await SendPromptAsync(host, "Make it something else.");
+            panelWindow = Handle(await NewPanelAsync(host, panelWindow));
             await WaitForTextAsync(host, ChildProcessName(Host), t => t == "PLAIN TOOL", 60, "the other tool", api);
             await WaitForAsync(() => (GetWindowLongPtr(panelWindow, -16) & 0x00C00000) != 0 ? "normal" : null, 5, "the title bar coming back");
             WindowRect(panelWindow).Width.Should().BeGreaterThan(docked, "it has the size it had before it ever docked");
@@ -505,6 +513,7 @@ public class ExoskeletonSmokeTests : IDisposable
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window, out Rect rect);
     [DllImport("user32.dll")] private static extern bool MoveWindow(IntPtr window, int x, int y, int width, int height, bool repaint);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr window);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern long GetWindowLongPtr(IntPtr window, int index);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out Rect value, int size);
 }
