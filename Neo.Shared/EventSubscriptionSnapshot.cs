@@ -111,15 +111,26 @@ namespace Neo.Shared
             var result = new List<Delegate>();
             if (before.Length == 0) return result;
 
-            var added = after.Where(d => !before.Contains(d, ReferenceEqualityComparer.Instance) && IsOwn(d)).ToList();
+            // What is attached now beyond what was before — counted, not just compared: the same
+            // delegate can be attached twice (one kept in a field, or the wrapper N.E.O.'s runtime
+            // hands out again for the same handler).
+            var unmatched = before.ToList();
+            var added = new List<Delegate>();
+            foreach (var current in after)
+            {
+                var index = unmatched.FindIndex(d => ReferenceEquals(d, current));
+                if (index >= 0) unmatched.RemoveAt(index);
+                else if (IsOwn(current)) added.Add(current);
+            }
             if (added.Count == 0) return result;
 
             var survivors = before.Where(d => after.Contains(d, ReferenceEqualityComparer.Instance) && IsOwn(d)).ToList();
             foreach (var fresh in added)
             {
-                var old = survivors.FirstOrDefault(d => d.Method == fresh.Method)
-                    ?? (LambdaOwner(fresh.Method) is { } owner
-                        ? survivors.FirstOrDefault(d => LambdaOwner(d.Method) == owner && OuterType(d.Method) == OuterType(fresh.Method))
+                var method = Written(fresh).Method;
+                var old = survivors.FirstOrDefault(d => Written(d).Method == method)
+                    ?? (LambdaOwner(method) is { } owner
+                        ? survivors.FirstOrDefault(d => LambdaOwner(Written(d).Method) == owner && OuterType(Written(d).Method) == OuterType(method))
                         : null);
                 if (old == null) continue;
                 survivors.Remove(old);
@@ -128,7 +139,18 @@ namespace Neo.Shared
             return result;
         }
 
-        private bool IsOwn(Delegate handler) => handler.Method.DeclaringType?.Assembly == _plugin;
+        private bool IsOwn(Delegate handler) => Written(handler).Method.DeclaringType?.Assembly == _plugin;
+
+        /// <summary>
+        /// The handler as the app wrote it. N.E.O. compiles some handlers into a wrapper (timer
+        /// handlers whose exceptions would vanish, Neo.ErrorSurfacing): a delegate whose target is
+        /// the handler, and which stands for it.
+        /// </summary>
+        private static Delegate Written(Delegate handler)
+        {
+            while (handler.Target is Delegate inner) handler = inner;
+            return handler;
+        }
 
         // The class a lambda was written in (its closure classes are nested in it).
         private static Type? OuterType(MethodInfo method)

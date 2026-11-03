@@ -232,6 +232,11 @@ namespace Neo.Agents
                     allowUnsafe: true)
             );
 
+            // No exception of the app vanishes (dropped tasks, timer handlers). Hot reload rewrites
+            // every generation the same way, from the sources in the baseline file: those stay as written.
+            compilation = Neo.ErrorSurfacing.LostExceptions.Instrument(compilation,
+                hotReload ? HotReloadBaselineFile.RuntimeSourcePath : null);
+
             // Hot reload mode embeds the PDB. Roslyn's hot reload engine reads the debug information of
             // the running build from the DLL itself then (embedded is the first place it looks); with a
             // separate file it opens the PDB path recorded in the DLL — this very path, which the next

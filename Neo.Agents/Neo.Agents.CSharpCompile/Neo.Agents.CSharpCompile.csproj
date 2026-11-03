@@ -14,6 +14,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Neo.Agents.Core\Neo.Agents.Core.csproj" />
+    <!-- Every app it compiles gets LostExceptions.Instrument: no exception of the app vanishes. -->
+    <ProjectReference Include="..\..\Neo.ErrorSurfacing\Neo.ErrorSurfacing.csproj" />
   </ItemGroup>
 
 </Project>

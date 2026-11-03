@@ -26,6 +26,10 @@ namespace Neo.Agents
         public static string SourcePathFor(int index)
             => Path.Combine(Path.GetTempPath(), "NeoHotReload", $"Source{index}.cs");
 
+        /// <summary>Document name of the runtime class every app is compiled with (Neo.ErrorSurfacing); not one of the sources.</summary>
+        public static string RuntimeSourcePath
+            => Path.Combine(Path.GetTempPath(), "NeoHotReload", Neo.ErrorSurfacing.LostExceptions.RuntimeFileName);
+
         public static string PathFor(string dllPath) => dllPath + Extension;
 
         public void Write(string dllPath)

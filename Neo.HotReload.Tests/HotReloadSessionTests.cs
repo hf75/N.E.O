@@ -351,6 +351,52 @@ public class HotReloadSessionTests
     }
 
     [Fact]
+    public async Task A_handler_kept_in_a_field_and_subscribed_again_fires_once_after_the_rebuild()
+    {
+        // The rebuild attaches the very same delegate a second time: subscriptions are counted, so
+        // the extra one goes, as with a new delegate for the same method.
+        const string v1 = """
+            using System;
+
+            public class Ticker
+            {
+                public event EventHandler? Tick;
+                public void Fire() => Tick?.Invoke(this, EventArgs.Empty);
+            }
+
+            public class DynamicUserControl
+            {
+                private readonly Ticker _ticker = new();
+                private readonly EventHandler _onTick;
+                public int Ticks;
+                public string Title = "";
+
+                public DynamicUserControl()
+                {
+                    _onTick = (s, e) => Ticks++;
+                    BuildUi();
+                }
+
+                private void BuildUi()
+                {
+                    Title = "v1";
+                    _ticker.Tick += _onTick;
+                }
+
+                public void Fire() => _ticker.Fire();
+            }
+            """;
+        using var app = await HotReloadHarness.StartAsync(v1);
+
+        var (update, _) = await app.UpdateAsync(v1.Replace("Title = \"v1\";", "Title = \"v2\";"));
+
+        update.Status.Should().Be(HotReloadStatus.Ready, update.Reason);
+        app.LastRebuild!.RemovedSubscriptions.Should().Be(1);
+        app.Call("Fire");
+        app.Get<int>("Ticks").Should().Be(1);
+    }
+
+    [Fact]
     public async Task Handlers_subscribed_outside_the_ui_method_are_left_alone()
     {
         // The constructor subscribes once, the UI method once more; after the rebuild both are

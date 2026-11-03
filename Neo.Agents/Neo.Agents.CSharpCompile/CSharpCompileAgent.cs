@@ -431,6 +431,9 @@ namespace Neo.Agents
                options: compilationOptions
             );
 
+            // No exception of the app vanishes (dropped tasks, timer handlers): as in the preview.
+            compilation = Neo.ErrorSurfacing.LostExceptions.Instrument(compilation);
+
             // Emit in die .dll-Datei (obwohl OutputKind WindowsApplication ist)
             EmitResult result = compilation.Emit(outputDllPath);
 

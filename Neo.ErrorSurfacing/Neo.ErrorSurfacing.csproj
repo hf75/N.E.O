@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(NeoTargetFramework)</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Neo.ErrorSurfacing</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    Compile-time half of "no exception of an app vanishes": every place that compiles generated
+    code (the compile agents, hot reload, the web app) runs the app's syntax trees through
+    LostExceptions.Instrument. The other half, Runtime/NeoRuntime.LostExceptions.cs, is compiled
+    into every app, not into this library.
+
+    Roslyn: the lowest version of the projects that compile apps (Neo.Agents.CSharpCompile has
+    4.13.0); the others bring their newer one along.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Runtime\**" />
+    <EmbeddedResource Include="Runtime\NeoRuntime.LostExceptions.cs" LogicalName="NeoRuntime.LostExceptions.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neo.ErrorSurfacing.Tests" />
+  </ItemGroup>
+
+</Project>

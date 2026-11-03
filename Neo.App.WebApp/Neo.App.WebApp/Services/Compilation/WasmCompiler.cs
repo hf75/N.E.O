@@ -210,6 +210,9 @@ public sealed class WasmCompiler
                 optimizationLevel: OptimizationLevel.Release,
                 concurrentBuild: false));
 
+        // No exception of the app vanishes (dropped tasks, timer handlers), as on the desktop.
+        compilation = Neo.ErrorSurfacing.LostExceptions.Instrument(compilation);
+
         using var dllStream = new MemoryStream();
         EmitResult emit = compilation.Emit(dllStream);
         sw.Stop();

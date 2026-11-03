@@ -25,6 +25,7 @@
        transitive dep. -->
   <ItemGroup>
     <ProjectReference Include="..\..\Neo.AssemblyForge.Core\Neo.AssemblyForge.Core.csproj" />
+    <ProjectReference Include="..\..\Neo.ErrorSurfacing\Neo.ErrorSurfacing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

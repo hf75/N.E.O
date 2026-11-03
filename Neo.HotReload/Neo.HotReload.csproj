@@ -27,6 +27,8 @@
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
     <!-- HotReloadBaselineFile: what the compile agent leaves next to a hot-reloadable DLL. -->
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.CSharpDllCompile\Neo.Agents.CSharpDllCompile.csproj" />
+    <!-- Every generation is rewritten as the compile agent rewrote the baseline. -->
+    <ProjectReference Include="..\Neo.ErrorSurfacing\Neo.ErrorSurfacing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

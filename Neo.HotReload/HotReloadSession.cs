@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.Text;
+using Neo.ErrorSurfacing;
 using Neo.IPC;
 
 namespace Neo.HotReload;
@@ -146,6 +147,13 @@ public sealed class HotReloadSession : IDisposable
             foreach (var source in baseline.Sources)
                 solution = AddDocument(solution, projectId, source, documents);
 
+            // What the compile agent built: the app's files rewritten and the runtime class added
+            // (Neo.ErrorSurfacing). The session compares and patches that code; the runtime file is
+            // not one of the app's sources.
+            solution = AddDocument(solution, projectId,
+                new HotReloadSource(Neo.Agents.HotReloadBaselineFile.RuntimeSourcePath, LostExceptions.RuntimeSource), []);
+            solution = await InstrumentAsync(solution, projectId, documents.Values, cancellationToken).ConfigureAwait(false);
+
             var capabilities = runtimeCapabilities.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToImmutableArray();
             var service = new RoslynHotReloadService(workspace.Services, capabilities);
             await service.StartSessionAsync(solution, cancellationToken).ConfigureAwait(false);
@@ -218,9 +226,14 @@ public sealed class HotReloadSession : IDisposable
             }
 
             var oldCompilation = (await _committed.GetProject(_projectId)!.GetCompilationAsync(cancellationToken).ConfigureAwait(false))!;
-            var newCompilation = (await pristine.GetProject(_projectId)!.GetCompilationAsync(cancellationToken).ConfigureAwait(false))!;
-            if (FirstError(newCompilation) is { } compileError)
+            var written = (await pristine.GetProject(_projectId)!.GetCompilationAsync(cancellationToken).ConfigureAwait(false))!;
+            if (FirstError(written) is { } compileError)
                 return HotReloadUpdate.NotPossible("the new code does not compile: " + compileError);
+
+            // Rewritten as the compile agent would build it, so that no exception of the app vanishes.
+            // This comes first: the running code is rewritten too, so the fields compared below are alike on both sides.
+            pristine = await InstrumentAsync(pristine, _projectId, _documents.Values.Concat(addedDocuments.Values), cancellationToken).ConfigureAwait(false);
+            var newCompilation = (await pristine.GetProject(_projectId)!.GetCompilationAsync(cancellationToken).ConfigureAwait(false))!;
 
             var (keeping, kept) = await KeepDroppedFieldsAsync(pristine, oldCompilation, newCompilation, cancellationToken).ConfigureAwait(false);
             if (kept.Count > 0)
@@ -413,6 +426,26 @@ public sealed class HotReloadSession : IDisposable
         => a.Count == b.Count && a.Zip(b).All(p =>
             string.Equals(p.First.Path, p.Second.Path, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(p.First.Text, p.Second.Text, StringComparison.Ordinal));
+
+    /// <summary>
+    /// The app's documents rewritten by <see cref="LostExceptions"/>, all against the same
+    /// compilation of the code as written — deterministic, like the compile agent.
+    /// </summary>
+    private static async Task<Solution> InstrumentAsync(Solution solution, ProjectId projectId, IEnumerable<DocumentId> documents,
+        CancellationToken cancellationToken)
+    {
+        var compilation = (await solution.GetProject(projectId)!.GetCompilationAsync(cancellationToken).ConfigureAwait(false))!;
+        var rewritten = new List<(DocumentId Id, string Text)>();
+        foreach (var id in documents)
+        {
+            var tree = await solution.GetDocument(id)!.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false);
+            if (tree != null && LostExceptions.Rewrite(compilation.GetSemanticModel(tree)) is { } text)
+                rewritten.Add((id, text));
+        }
+        foreach (var (id, text) in rewritten)
+            solution = solution.WithDocumentText(id, ToSourceText(text));
+        return solution;
+    }
 
     private static Solution AddDocument(Solution solution, ProjectId projectId, HotReloadSource source, Dictionary<string, DocumentId> ids)
     {
