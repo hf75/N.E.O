@@ -19,6 +19,9 @@ TaskScheduler.UnobservedTaskException += (_, e) =>
 
 Console.Error.WriteLine("[Neo.McpServer] Starting...");
 
+// Calls into the app network come from Claude: an app that asks the person before a change names it so.
+Neo.App.Apps.CallerName = "Claude Code";
+
 var builder = Host.CreateApplicationBuilder(args);
 
 // MCP STDIO uses stdout for JSON-RPC — route logging to stderr so it appears in Cowork logs
@@ -254,7 +257,9 @@ builder.Services
             "\n=== APP NETWORK (apps that use each other) ===\n" +
             "Every running N.E.O. app on this machine (previews, living apps, other hosts) can offer methods and values\n" +
             "to the other apps and use theirs; `list_running_apps` shows who is there right now.\n" +
-            Neo.AssemblyForge.AvaloniaGuidance.AsMarkdownList(Neo.AssemblyForge.AppNetworkGuidance.Rules);
+            Neo.AssemblyForge.AvaloniaGuidance.AsMarkdownList(Neo.AssemblyForge.AppNetworkGuidance.Rules) +
+            "\n=== OTHER PROGRAMS (exoskeleton) AND THEIR INTERFACES ===\n" +
+            ForeignProgramTools.Guidance;
     })
     .WithStdioServerTransport()
     .WithToolsFromAssembly()

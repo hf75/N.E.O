@@ -20,6 +20,14 @@ public sealed class AppInfoAttribute : Attribute
     /// <summary>What the app is for — shown to the AI when another app is asked to use this one.</summary>
     public string Description { get; }
 
+    /// <summary>
+    /// The other program this app is the interface of: its process name, or a part of its window title, as
+    /// <c>ForeignApp.Attach</c> takes it. Other apps and Claude then use that program through this app's methods,
+    /// a drop on that program's window links with this app, and a call that finds the program changed waits while
+    /// N.E.O. repairs the interface.
+    /// </summary>
+    public string? Program { get; init; }
+
     public AppInfoAttribute(string name, string description = "")
     {
         Name = name;

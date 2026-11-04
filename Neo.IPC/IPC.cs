@@ -142,7 +142,9 @@ namespace Neo.IPC
 
     /// <param name="Name">The name of the program dragged over this one; null: it left again.</param>
     /// <param name="Link">It is over the half of this window where a drop links the two, not the one where it merges them.</param>
-    public record FusionHoverMessage(string? Name, bool Link = false);
+    /// <param name="ProgramWindow">It is over the window of the other program this app is the interface of (its handle), not over this app's own window; 0: over its own.</param>
+    /// <param name="LinkOnly">The dragged window is another program's, which cannot be merged into anything: both halves link.</param>
+    public record FusionHoverMessage(string? Name, bool Link = false, long ProgramWindow = 0, bool LinkOnly = false);
 
     /// <param name="Link">Linked, not merged: both stay as they are.</param>
     public record FusionDropMessage(string TargetId, string TargetName, string SourceId, string SourceName, double Width = 0, double Height = 0, bool Link = false);
@@ -292,6 +294,7 @@ namespace Neo.IPC
     /// </param>
     /// <param name="FailedAction">The user action that ran into the error, when known — a control address such as "save" or "Button:2"; the host asks for it to be replayed after the repair.</param>
     /// <param name="FailedMethod">The app's method the error was thrown in, for the message to the user.</param>
+    /// <param name="ForTheModel">What the model needs for the repair besides the error, not for the chat: how the other program looks now, when an interface ran into a change of it.</param>
     public record ErrorMessage(
         string Message,
         string? ExceptionType = null,
@@ -300,7 +303,8 @@ namespace Neo.IPC
         LogLevel Level = LogLevel.Error,
         bool Recoverable = false,
         string? FailedAction = null,
-        string? FailedMethod = null
+        string? FailedMethod = null,
+        string? ForTheModel = null
     );
 
     // Allgemeine Log-Nachricht
@@ -336,7 +340,8 @@ namespace Neo.IPC
         List<McpParamEntry> Parameters,    // Positional params
         string ReturnTypeName,             // .NET FullName, "void" if no return
         bool OffUiThread = false,          // Mirrors attribute option
-        int TimeoutSeconds = 30
+        int TimeoutSeconds = 30,
+        bool Changes = false               // It changes something: the person is asked in the app's window first
     );
 
     public record McpParamEntry(

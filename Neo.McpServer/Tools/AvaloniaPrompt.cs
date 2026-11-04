@@ -54,6 +54,8 @@ public static class AvaloniaPrompt
             "## App network (apps that use each other)\n\n" +
             "Every running N.E.O. app on this machine can offer methods and values to the others and use theirs. `list_running_apps` shows who is there right now.\n\n" +
             AvaloniaGuidance.AsMarkdownList(AppNetworkGuidance.Rules) + "\n" +
+            "## Other programs and their interfaces\n\n" +
+            ForeignProgramTools.Guidance + "\n" +
             "## Code Structure Template\n\n" +
             "```csharp\n" +
             "using Avalonia;\n" +

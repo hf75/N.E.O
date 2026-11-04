@@ -59,6 +59,15 @@ internal sealed class LiveMcpDispatcher
         try { args = DeserializeArgs(method.GetParameters(), frame.ArgsJson); }
         catch (Exception ex) { return Fail("invocation_failed", $"Argument deserialization failed: {ex.Message}"); }
 
+        // A method that changes something waits for the person's yes in the window, as when another app calls it.
+        if (entry.Changes)
+        {
+            var app = Neo.App.AppNetwork.Published?.Name ?? control.GetType().Name;
+            var arguments = (frame.ArgsJson ?? "[]").Trim().TrimStart('[').TrimEnd(']');
+            if (Neo.App.AppNetwork.ChangeGate is not { } gate || !await gate(new Neo.App.ChangeRequest(app, method.Name, arguments, "Claude Code")))
+                return Fail("not_allowed", $"'{method.Name}' changes something, and the person did not allow it in the app's window.");
+        }
+
         // Stamp loop-protection hops into AsyncLocal so any Ai.Trigger
         // emission from inside the method picks it up.
         LiveMcpCallContext.Set(frame.Hops);

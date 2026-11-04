@@ -25,6 +25,12 @@ public static class Apps
     /// <summary>How long a call waits for the other app to pick up.</summary>
     public static TimeSpan ConnectTimeout { get; set; } = TimeSpan.FromSeconds(3);
 
+    /// <summary>
+    /// Who calls, for a process without an app of its own on the network: the MCP server says "Claude Code". The
+    /// person sees it when a call wants to change something. An app that is on the network calls by its own name.
+    /// </summary>
+    public static string? CallerName { get; set; }
+
     /// <summary>Every published app whose process is alive, this one included unless <paramref name="includeSelf"/> is false.</summary>
     public static IReadOnlyList<AppDescriptor> Running(bool includeSelf = false)
     {
@@ -105,18 +111,48 @@ public static class Apps
 
     // ── Transport ────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Calls a method of another app with its arguments written as a JSON array (<c>["4711", 3]</c>) and returns the
+    /// result as JSON, "null" without one. For callers that have no types for it, like the MCP server.
+    /// </summary>
+    public static async Task<string> CallJsonAsync(string app, string method, string argsJson)
+    {
+        using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(argsJson) ? "[]" : argsJson);
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+            throw new AppCallException("The arguments must be a JSON array, in the order of the parameters.");
+        var args = document.RootElement.EnumerateArray().Select(a => a.Clone()).ToArray();
+        var target = Find(app) ?? throw new AppNotFoundException(app);
+        var result = await SendToAsync(target, "call", method, args, CallTimeout(target, method)).ConfigureAwait(false);
+        return result?.GetRawText() ?? "null";
+    }
+
+    /// <summary>Reads a value of another app as JSON.</summary>
+    public static async Task<string> ReadJsonAsync(string app, string value)
+    {
+        var result = await SendAsync(app, "read", value, null).ConfigureAwait(false);
+        return result?.GetRawText() ?? "null";
+    }
+
     private static async Task<JsonElement?> SendAsync(string app, string op, string name, object?[]? args)
     {
         var target = Find(app) ?? throw new AppNotFoundException(app);
-        var timeout = op == "call"
-            ? TimeSpan.FromSeconds((target.Methods.FirstOrDefault(m => m.Name == name)?.TimeoutSeconds ?? 30) + 5)
-            : TimeSpan.FromSeconds(15);
+        var timeout = op == "call" ? CallTimeout(target, name) : TimeSpan.FromSeconds(15);
         return await SendToAsync(target, op, name, args?.Select(a => JsonSerializer.SerializeToElement(a, AppNetwork.WireJson)).ToArray(), timeout).ConfigureAwait(false);
+    }
+
+    // Its own time, and for an interface a second go after a repair; a change waits for the person's answer too.
+    private static TimeSpan CallTimeout(AppDescriptor target, string method)
+    {
+        var entry = target.Methods.FirstOrDefault(m => m.Name == method);
+        var seconds = entry?.TimeoutSeconds ?? 30;
+        if (target.RepairSeconds > 0) seconds = 2 * seconds + target.RepairSeconds;
+        if (entry?.Changes == true) seconds += (int)AppNetwork.ConsentWait.TotalSeconds;
+        return TimeSpan.FromSeconds(seconds + 5);
     }
 
     internal static async Task<JsonElement?> SendToAsync(AppDescriptor target, string op, string name, JsonElement[]? args, TimeSpan timeout)
     {
-        var request = new AppNetwork.Request(op, name, args, AppNetwork.CurrentHops);
+        var request = new AppNetwork.Request(op, name, args, AppNetwork.CurrentHops, AppNetwork.Published?.Name ?? CallerName);
 
         using var pipe = new NamedPipeClientStream(".", target.Pipe, PipeDirection.InOut, PipeOptions.Asynchronous);
         try

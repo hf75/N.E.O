@@ -87,14 +87,77 @@ namespace Neo.PluginWindowAvalonia
             HintBanner.IsVisible = false;
         }
 
+        // ── Before another app or Claude changes something through this app, the person is asked ──
+
+        private readonly System.Threading.SemaphoreSlim _oneQuestion = new(1, 1);
+        private readonly HashSet<string> _alwaysAllowed = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Asks whether a caller may run a method that changes something: "Allow" lets this call run, "Always for …" every
+        /// call of that caller while this window is open, "No" or no answer within <paramref name="wait"/> refuses it.
+        /// One question at a time; callable from any thread.
+        /// </summary>
+        public async Task<bool> AskToAllowAsync(string? from, string app, string method, string arguments, TimeSpan wait)
+        {
+            var caller = string.IsNullOrWhiteSpace(from) ? "Another app" : from.Trim();
+            lock (_alwaysAllowed)
+                if (_alwaysAllowed.Contains(caller)) return true;
+
+            await _oneQuestion.WaitAsync();
+            try
+            {
+                lock (_alwaysAllowed)
+                    if (_alwaysAllowed.Contains(caller)) return true;
+
+                var answer = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                void Allow(object? s, global::Avalonia.Interactivity.RoutedEventArgs e) => answer.TrySetResult("allow");
+                void Always(object? s, global::Avalonia.Interactivity.RoutedEventArgs e) => answer.TrySetResult("always");
+                void Deny(object? s, global::Avalonia.Interactivity.RoutedEventArgs e) => answer.TrySetResult("no");
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    ConsentText.Text = $"{caller} wants {app} to do: {method}({arguments})";
+                    ConsentAlways.Content = $"Always for {caller}";
+                    ConsentAllow.Click += Allow;
+                    ConsentAlways.Click += Always;
+                    ConsentDeny.Click += Deny;
+                    ConsentStrip.IsVisible = true;
+                    // In front, without taking the keyboard from whatever the person is typing in.
+                    if (IsVisible) { Topmost = true; Topmost = false; }
+                });
+
+                var said = await Task.WhenAny(answer.Task, Task.Delay(wait)) == answer.Task ? await answer.Task : "no";
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    ConsentAllow.Click -= Allow;
+                    ConsentAlways.Click -= Always;
+                    ConsentDeny.Click -= Deny;
+                    ConsentStrip.IsVisible = false;
+                });
+
+                if (said == "always")
+                    lock (_alwaysAllowed) _alwaysAllowed.Add(caller);
+                return said is "allow" or "always";
+            }
+            finally
+            {
+                _oneQuestion.Release();
+            }
+        }
+
         /// <summary>Another program is dragged over this one (its name), or not any more (null).</summary>
         /// <param name="link">It is over the half of this window where a drop links the two; the other half merges them.</param>
-        public void ShowFusionTarget(string? name, bool link = false)
+        /// <param name="linkOnly">The dragged one is the window of a program nobody here has the code of: it can only be linked.</param>
+        public void ShowFusionTarget(string? name, bool link = false, bool linkOnly = false)
         {
             FusionText.Text = name == null ? "" : $"Drop to merge {name} into this app";
             LinkText.Text = name == null ? "" : $"Drop to link {name} with this app";
-            ShowZone(MergeZone, MergePill, "#1565C0", on: !link);
-            ShowZone(LinkZone, LinkPill, "#00796B", on: link);
+            MergeZone.IsVisible = !linkOnly;
+            Avalonia.Controls.Grid.SetColumn(LinkZone, linkOnly ? 0 : 1);
+            Avalonia.Controls.Grid.SetColumnSpan(LinkZone, linkOnly ? 2 : 1);
+            ShowZone(MergeZone, MergePill, "#1565C0", on: !link && !linkOnly);
+            ShowZone(LinkZone, LinkPill, "#00796B", on: link || linkOnly);
             FusionOverlay.IsVisible = name != null;
         }
 

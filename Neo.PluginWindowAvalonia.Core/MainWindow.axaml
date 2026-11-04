@@ -40,8 +40,21 @@
 
         <!-- One-line hint over the app, e.g. how to call N.E.O. up in a living app; goes away by itself or on click -->
         <Border x:Name="HintBanner" IsVisible="False" HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                Margin="0,0,0,18" Padding="14,8" CornerRadius="16" Background="#D0202020" ZIndex="100">
-            <TextBlock x:Name="HintText" Foreground="White" FontSize="13"/>
+                Margin="8,0,8,18" Padding="14,8" CornerRadius="16" Background="#D0202020" ZIndex="100">
+            <TextBlock x:Name="HintText" Foreground="White" FontSize="13" TextWrapping="Wrap"/>
+        </Border>
+
+        <!-- Another app or Claude wants this app to change something: the person says whether it may -->
+        <Border x:Name="ConsentStrip" IsVisible="False" VerticalAlignment="Bottom" Margin="8" Padding="12,10"
+                CornerRadius="10" Background="#F2263238" ZIndex="300">
+            <StackPanel Spacing="8">
+                <TextBlock x:Name="ConsentText" Foreground="White" FontSize="13" TextWrapping="Wrap"/>
+                <WrapPanel>
+                    <Button x:Name="ConsentAllow" Content="Allow" Margin="0,0,6,4"/>
+                    <Button x:Name="ConsentAlways" Margin="0,0,6,4"/>
+                    <Button x:Name="ConsentDeny" Content="No" Margin="0,0,6,4"/>
+                </WrapPanel>
+            </StackPanel>
         </Border>
 
 </Grid>

@@ -15,6 +15,34 @@ namespace Neo.App
     /// <summary>A control of another program, as that program reports it to the accessibility interface.</summary>
     public sealed record ForeignElement(string Type, string Name, string Id, bool IsEnabled);
 
+    /// <summary>A dialog another program shows, a message box for one: its title, what it says, and its buttons.</summary>
+    public sealed record ForeignDialog(string Title, string Text, IReadOnlyList<string> Buttons);
+
+    /// <summary>
+    /// A control is not in the other program's window: the program may have changed. When a call of another app or of
+    /// Claude runs into this, N.E.O. repairs the interface with the program's new look and the call goes on. Never catch it.
+    /// </summary>
+    public sealed class ForeignControlMissingException : Exception
+    {
+        public ForeignControlMissingException(string program, string control, string? detail = null)
+            : base($"{program} has no control \"{control}\"{(detail != null ? " " + detail : "")}. The program may have changed.")
+        {
+            Program = program;
+            Control = control;
+        }
+
+        public string Program { get; }
+        public string Control { get; }
+    }
+
+    /// <summary>The other program is not open.</summary>
+    public sealed class ForeignProgramClosedException : Exception
+    {
+        public ForeignProgramClosedException(string program) : base($"{program} is not open.") => Program = program;
+
+        public string Program { get; }
+    }
+
     /// <summary>
     /// Another program running on this PC, whose source nobody here has. A generated app can read it, press
     /// its buttons, and dock its own window to it: the tool then looks like a part of that program. Compiled
@@ -147,6 +175,80 @@ namespace Neo.App
         /// <summary>Sets the value of a named field of the program. False when there is none or it does not allow that.</summary>
         public Task<bool> SetValueAsync(string name, string value) => Task.Run(() => Guarded(() =>
             _target is { } target && Named(target.Handle, name) is { } element && SetValue(element, value)));
+
+        // ── For interfaces: other apps and Claude use the program through these ──
+        // A control goes by its name, its id, or an address from N.E.O.'s description of the window: "Menge:>Edit" is the
+        // first field after the label "Menge:", "Edit:2" the second field. They throw instead of returning false: a control
+        // that is not there throws ForeignControlMissingException, and N.E.O. repairs the interface; a program that is not
+        // open throws ForeignProgramClosedException; a control that does not allow it, InvalidOperationException.
+
+        /// <summary>Sets the text of a field, or picks the item with this text in a combo box.</summary>
+        public Task SetAsync(string control, string value) => Strict(control, Need.Set, element =>
+        {
+            if (!SetValue(element, value) && !SelectIn(element, value))
+                throw NotAllowed(control, "takes no text");
+            return true;
+        });
+
+        /// <summary>Presses a button, a menu item, a link, a tab or a list item, the way a click does.</summary>
+        public Task PressAsync(string control) => Strict(control, Need.Press, element =>
+        {
+            if (!Press(element, _program)) throw NotAllowed(control, "cannot be pressed");
+            return true;
+        });
+
+        /// <summary>What a control shows: the text of a field or a label, the selected item of a list, "on" or "off" for a check box.</summary>
+        public Task<string> GetAsync(string control) => Strict(control, Need.Read, element =>
+            IsPassword(element) ? throw NotAllowed(control, "is a password field, and its text is not read") : Shown(element));
+
+        /// <summary>Ticks (true) or clears (false) a check box or a toggle.</summary>
+        public Task CheckAsync(string control, bool on) => Strict(control, Need.Check, element =>
+        {
+            if (element.GetCurrentPattern(TogglePatternId) is not ITogglePattern toggle) throw NotAllowed(control, "is no check box");
+            for (int i = 0; i < 3 && (toggle.CurrentToggleState == 1) != on; i++) toggle.Toggle();
+            return true;
+        });
+
+        /// <summary>Selects the item with this text in a list, a combo box, a tab or a tree.</summary>
+        public Task SelectAsync(string control, string item) => Strict(control, Need.Select, element =>
+        {
+            if (!SelectIn(element, item)) throw NotAllowed(control, $"has no item \"{item}\"");
+            return true;
+        });
+
+        /// <summary>The rows of a list or a table, each as the texts of its cells, as far as the program has them (a long list may only have the visible ones).</summary>
+        public Task<IReadOnlyList<string[]>> RowsAsync(string control) => Strict<IReadOnlyList<string[]>>(control, Need.Read, Rows);
+
+        /// <summary>Waits until the control is there and can be used: after a press that opens or changes something.</summary>
+        public Task WaitForAsync(string control, int seconds = 10) => Task.Run(async () =>
+        {
+            var until = Environment.TickCount64 + seconds * 1000L;
+            while (true)
+            {
+                var window = TargetOrFind();
+                if (window != IntPtr.Zero) Restore(window);
+                if (window != IntPtr.Zero && Guarded(() => Resolve(window, control, Need.Read) is { CurrentIsEnabled: not 0 }))
+                    return;
+                if (Environment.TickCount64 >= until)
+                    throw window == IntPtr.Zero ? new ForeignProgramClosedException(_program) : new ForeignControlMissingException(_program, control, $"within {seconds} s");
+                await Task.Delay(150).ConfigureAwait(false);
+            }
+        });
+
+        /// <summary>A dialog of the program that is open now, or opens within the seconds given: a message box, a question. Null when there is none.</summary>
+        public Task<ForeignDialog?> DialogAsync(int seconds = 0) => Task.Run(async () =>
+        {
+            var until = Environment.TickCount64 + seconds * 1000L;
+            while (true)
+            {
+                var window = TargetOrFind();
+                if (window == IntPtr.Zero) throw new ForeignProgramClosedException(_program);
+                if (Guarded(() => OtherWindows(window).Select(Dialog).FirstOrDefault(d => d != null)) is { } dialog)
+                    return dialog;
+                if (Environment.TickCount64 >= until) return null;
+                await Task.Delay(150).ConfigureAwait(false);
+            }
+        });
 
         /// <summary>Stops following the program; this app's window becomes a normal window again.</summary>
         public void Dispose() => _stopped = true;
@@ -534,24 +636,310 @@ namespace Neo.App
                 Visit(walker, child, depth + 1, result, limit);
         }
 
-        /// <summary>
-        /// The structure of a window for the model, one control per line, indented. Names only where they
-        /// name a control: what a text or a list item says is the user's content and stays here.
-        /// </summary>
-        internal static string DescribeStructure(IntPtr window, int maxLines)
+        // ── The calls of an interface ─────────────────────────────────────────
+
+        // N.E.O.'s description of a window counts "Edit:3" over the same walk (Neo.Shared.ForeignWindows).
+        private const int MaxWalk = 600;
+        private const int MaxRows = 2000;
+        private static readonly TimeSpan PressWait = TimeSpan.FromSeconds(2);
+
+        private enum Need { Read, Set, Press, Check, Select }
+
+        private Task<T> Strict<T>(string control, Need need, Func<IElement, T> act) => Task.Run(() =>
         {
-            var lines = new StringBuilder();
-            foreach (var e in Walk(window, maxLines))
+            var window = TargetOrFind();
+            if (window == IntPtr.Zero) throw new ForeignProgramClosedException(_program);
+            Restore(window);
+            try
             {
-                var name = e.Described.Type is "Text" or "ListItem" or "DataItem" or "TreeItem" or "Hyperlink" or "Image" or "Document" or "Edit"
-                    ? "" : e.Described.Name;
-                if (name.Length > 40) name = name[..40];
-                lines.Append(' ', e.Depth).Append(e.Described.Type);
-                if (name.Length > 0) lines.Append(" \"").Append(name).Append('"');
-                if (e.Described.Id.Length > 0) lines.Append(" id=").Append(e.Described.Id);
-                lines.Append('\n');
+                // A program between two states is no changed program: one more look before it counts as one.
+                var element = Resolve(window, control, need);
+                if (element == null)
+                {
+                    Thread.Sleep(300);
+                    element = Resolve(window, control, need) ?? throw new ForeignControlMissingException(_program, control);
+                }
+                if (need != Need.Read && element.CurrentIsEnabled == 0) throw NotAllowed(control, "is disabled right now");
+                return act(element);
             }
-            return lines.ToString();
+            catch (COMException ex)
+            {
+                if (!IsWindow(window)) throw new ForeignProgramClosedException(_program);
+                throw new InvalidOperationException($"{_program} did not answer for \"{control}\": {ex.Message}", ex);
+            }
+        });
+
+        private Task Strict(string control, Need need, Func<IElement, bool> act) => Strict<bool>(control, need, act);
+
+        // Right after Attach or Watch the follow loop may not have looked yet.
+        private IntPtr TargetOrFind() => _target?.Handle ?? FindWindow(_program) ?? IntPtr.Zero;
+
+        // A minimised program shows only its title bar, and a person cannot use it either: it comes back, without taking the keyboard.
+        private static void Restore(IntPtr window)
+        {
+            if (!IsIconic(window)) return;
+            ShowWindow(window, SW_SHOWNOACTIVATE);
+            for (int i = 0; i < 20 && IsIconic(window); i++) Thread.Sleep(50);
+            Thread.Sleep(250);
+        }
+
+        private InvalidOperationException NotAllowed(string control, string what) => new($"In {_program}, \"{control}\" {what}.");
+
+        private sealed record Address(string? Label, string Type, int Index);
+
+        /// <summary>"Menge:>Edit" (the first field after that label) or "Edit:2" (the second field); null for a name or an id.</summary>
+        internal static (string? Label, string Type, int Index)? ParseAddress(string control)
+        {
+            var arrow = control.LastIndexOf('>');
+            if (arrow > 0 && arrow < control.Length - 1 && IsTypeName(control[(arrow + 1)..].Trim()))
+                return (control[..arrow].Trim(), control[(arrow + 1)..].Trim(), 0);
+
+            var colon = control.LastIndexOf(':');
+            if (colon > 0 && int.TryParse(control[(colon + 1)..], out var index) && index > 0 && IsTypeName(control[..colon]))
+                return (null, control[..colon], index);
+            return null;
+        }
+
+        private static bool IsTypeName(string text) => Enumerable.Range(50000, 39).Any(t => string.Equals(TypeName(t), text, StringComparison.OrdinalIgnoreCase));
+
+        private static IElement? Resolve(IntPtr window, string control, Need need)
+        {
+            var automation = Automation;
+            if (ParseAddress(control) is { } address)
+                return AtAddress(automation, window, new Address(address.Label, address.Type, address.Index));
+
+            // A dialog is what a person can use while it is open: the program's other windows first.
+            foreach (var root in OtherWindows(window).Append(window))
+            {
+                if (ByName(automation, automation.ElementFromHandle(root), control, need) is { } found)
+                    return found;
+            }
+            return null;
+        }
+
+        // Over the walk N.E.O. describes the window with: depth first, in the order the program reports its controls.
+        // "X>Type" is the first control of that type after the first one called X or with the id X, or after "Type:n".
+        private static IElement? AtAddress(IAutomation automation, IntPtr window, Address address)
+        {
+            var walker = automation.ControlViewWalker;
+            var anchor = address.Label is { } label ? ParseAddress(label) : null;
+            int walked = 0, seen = 0, anchorSeen = 0;
+            var afterAnchor = address.Label == null;
+            IElement? found = null;
+
+            bool IsAnchor(IElement element, string type)
+            {
+                if (anchor is { } numbered)
+                    return string.Equals(type, numbered.Type, StringComparison.OrdinalIgnoreCase) && ++anchorSeen == numbered.Index;
+                return string.Equals((element.CurrentName ?? "").Trim(), address.Label, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(element.CurrentAutomationId ?? "", address.Label, StringComparison.OrdinalIgnoreCase);
+            }
+
+            void Visit(IElement element, int depth)
+            {
+                if (found != null || walked >= MaxWalk) return;
+                walked++;
+                var type = TypeName(element.CurrentControlType);
+                // The system's title bar is the same in every program: its buttons do not count as the program's.
+                if (type == "TitleBar") return;
+                if (!afterAnchor)
+                    afterAnchor = IsAnchor(element, type);
+                else if (string.Equals(type, address.Type, StringComparison.OrdinalIgnoreCase) && (address.Label != null || ++seen == address.Index))
+                {
+                    found = element;
+                    return;
+                }
+                if (depth >= MaxDepth) return;
+                for (var child = walker.GetFirstChildElement(element); child != null && found == null && walked < MaxWalk; child = walker.GetNextSiblingElement(child))
+                    Visit(child, depth + 1);
+            }
+
+            Visit(automation.ElementFromHandle(window), 0);
+            return found;
+        }
+
+        // By its name, then its id, then a part of its name. Of controls with the same name, the one that does what is
+        // needed: a field and its label are often called alike.
+        private static IElement? ByName(IAutomation automation, IElement root, string name, Need need)
+        {
+            foreach (var (property, flags) in new[] { (NamePropertyId, IgnoreCase), (AutomationIdPropertyId, IgnoreCase), (NamePropertyId, IgnoreCase | MatchSubstring) })
+            {
+                var found = root.FindAll(TreeScopeDescendants, automation.CreatePropertyConditionEx(property, name, flags));
+                IElement? first = null;
+                for (int i = 0; i < found.Length; i++)
+                {
+                    var element = found.GetElement(i);
+                    first ??= element;
+                    if (Fits(element, need)) return element;
+                }
+                if (first != null) return first;
+            }
+            return null;
+        }
+
+        private static bool Fits(IElement element, Need need) => need switch
+        {
+            Need.Read => TypeName(element.CurrentControlType) != "Text" || element.GetCurrentPattern(ValuePatternId) != null,
+            Need.Set => element.GetCurrentPattern(ValuePatternId) is IValuePattern { CurrentIsReadOnly: 0 } || IsContainer(element),
+            Need.Press => element.CurrentIsEnabled != 0 && (element.GetCurrentPattern(InvokePatternId) != null || element.GetCurrentPattern(TogglePatternId) != null
+                || element.GetCurrentPattern(SelectionItemPatternId) != null || element.GetCurrentPattern(ExpandCollapsePatternId) != null),
+            Need.Check => element.GetCurrentPattern(TogglePatternId) != null,
+            Need.Select => IsContainer(element) || element.GetCurrentPattern(SelectionItemPatternId) != null,
+            _ => true,
+        };
+
+        private static bool IsContainer(IElement element) =>
+            TypeName(element.CurrentControlType) is "ComboBox" or "List" or "Tab" or "Tree" or "DataGrid" or "Table" or "Menu" or "MenuBar";
+
+        /// <summary>The program's other windows a person sees, a dialog for one, topmost first.</summary>
+        private static List<IntPtr> OtherWindows(IntPtr window)
+        {
+            var others = new List<IntPtr>();
+            // The frame of a store app belongs to the system, which frames other store apps in the same process.
+            if (ClassName(window) == "ApplicationFrameWindow") return others;
+
+            GetWindowThreadProcessId(window, out var processId);
+            EnumWindows((handle, _) =>
+            {
+                if (handle != window && IsWindowVisible(handle)
+                    && !(DwmGetWindowAttribute(handle, DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0 && cloaked != 0))
+                {
+                    GetWindowThreadProcessId(handle, out var id);
+                    if (id == processId) others.Add(handle);
+                }
+                return true;
+            }, IntPtr.Zero);
+            return others;
+        }
+
+        private static string ClassName(IntPtr window)
+        {
+            var name = new StringBuilder(256);
+            return GetClassName(window, name, name.Capacity) > 0 ? name.ToString() : "";
+        }
+
+        private static bool Press(IElement element, string program)
+        {
+            if (element.GetCurrentPattern(InvokePatternId) is IInvokePattern invoke)
+            {
+                // A button that opens a dialog may not come back until the dialog is closed.
+                Exception? failed = null;
+                var press = new Thread(() => { try { invoke.Invoke(); } catch (Exception ex) { failed = ex; } }) { IsBackground = true, Name = "ForeignApp press" };
+                press.Start();
+                if (press.Join(PressWait) && failed is COMException com)
+                    throw new InvalidOperationException($"{program} did not take the press: {com.Message}", com);
+                Settle(element);
+                return true;
+            }
+            if (element.GetCurrentPattern(TogglePatternId) is ITogglePattern toggle) { toggle.Toggle(); Settle(element); return true; }
+            if (element.GetCurrentPattern(SelectionItemPatternId) is ISelectionItemPattern item) { item.Select(); Settle(element); return true; }
+            if (element.GetCurrentPattern(ExpandCollapsePatternId) is IExpandCollapsePattern menu) { menu.Expand(); Settle(element); return true; }
+            if (element.GetCurrentPattern(LegacyIAccessiblePatternId) is ILegacyIAccessiblePattern legacy) { legacy.DoDefaultAction(); Settle(element); return true; }
+            return false;
+        }
+
+        // What a press started shows a moment later; a program busy with it answers once it is done.
+        private static void Settle(IElement element)
+        {
+            Thread.Sleep(150);
+            if (element.GetCurrentPropertyValue(NativeWindowHandlePropertyId) is int handle && handle != 0)
+                SendMessageTimeout((IntPtr)handle, 0, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 3000, out _);
+        }
+
+        // The control is the item, or holds it: a combo box opens for it and closes again.
+        private static bool SelectIn(IElement element, string item)
+        {
+            var automation = Automation;
+            if (!IsContainer(element))
+            {
+                if (!string.Equals((element.CurrentName ?? "").Trim(), item.Trim(), StringComparison.OrdinalIgnoreCase)) return false;
+                return SelectItem(element);
+            }
+
+            var expand = element.GetCurrentPattern(ExpandCollapsePatternId) as IExpandCollapsePattern;
+            var opened = false;
+            if (expand is { CurrentExpandCollapseState: 0 })
+            {
+                try { expand.Expand(); opened = true; Thread.Sleep(100); } catch (COMException) { }
+            }
+            try
+            {
+                var found = element.FindFirst(TreeScopeDescendants, automation.CreatePropertyConditionEx(NamePropertyId, item, IgnoreCase))
+                    ?? element.FindFirst(TreeScopeDescendants, automation.CreatePropertyConditionEx(NamePropertyId, item, IgnoreCase | MatchSubstring));
+                if (found != null && SelectItem(found)) { Settle(element); return true; }
+                // A combo box one can type into takes the text itself.
+                return TypeName(element.CurrentControlType) == "ComboBox" && SetValue(element, item);
+            }
+            finally
+            {
+                if (opened && expand is { CurrentExpandCollapseState: 1 })
+                    try { expand.Collapse(); } catch (COMException) { }
+            }
+        }
+
+        private static bool SelectItem(IElement item)
+        {
+            if (item.GetCurrentPattern(SelectionItemPatternId) is ISelectionItemPattern selection) { selection.Select(); return true; }
+            if (item.GetCurrentPattern(InvokePatternId) is IInvokePattern invoke) { invoke.Invoke(); return true; }
+            if (item.GetCurrentPattern(LegacyIAccessiblePatternId) is ILegacyIAccessiblePattern legacy) { legacy.DoDefaultAction(); return true; }
+            return false;
+        }
+
+        private static bool IsPassword(IElement element) => element.GetCurrentPropertyValue(IsPasswordPropertyId) is true;
+
+        // A field says its text even when that is empty; a label is its name.
+        private static string Shown(IElement element)
+        {
+            if (element.GetCurrentPattern(ValuePatternId) is IValuePattern value) return OneLineEnd(value.CurrentValue ?? "");
+            if (element.GetCurrentPattern(TextPatternId) is ITextPattern text) return OneLineEnd(text.DocumentRange.GetText(MaxTextLength) ?? "");
+            if (element.GetCurrentPattern(TogglePatternId) is ITogglePattern toggle) return toggle.CurrentToggleState switch { 1 => "on", 2 => "mixed", _ => "off" };
+            if (element.GetCurrentPattern(SelectionPatternId) is ISelectionPattern selection)
+            {
+                var selected = selection.GetCurrentSelection();
+                return string.Join(", ", Enumerable.Range(0, selected.Length).Select(i => selected.GetElement(i).CurrentName ?? ""));
+            }
+            return element.CurrentName ?? "";
+        }
+
+        private static IReadOnlyList<string[]> Rows(IElement list)
+        {
+            var walker = Automation.ControlViewWalker;
+            var rows = new List<string[]>();
+            for (var row = walker.GetFirstChildElement(list); row != null && rows.Count < MaxRows; row = walker.GetNextSiblingElement(row))
+            {
+                if (TypeName(row.CurrentControlType) is "Header" or "HeaderItem" or "ScrollBar" or "Thumb" or "Button" or "Separator") continue;
+                var cells = new List<string>();
+                var headers = 0;
+                for (var cell = walker.GetFirstChildElement(row); cell != null; cell = walker.GetNextSiblingElement(cell))
+                {
+                    var type = TypeName(cell.CurrentControlType);
+                    if (type is "HeaderItem" or "Header") headers++;
+                    if (type is "Image" or "ScrollBar" or "Thumb") continue;
+                    cells.Add(CellText(cell));
+                }
+                // The row of a table's column titles is no row of data.
+                if (headers > 0 && headers >= cells.Count / 2) continue;
+                rows.Add(cells.Count > 0 ? cells.ToArray() : [CellText(row)]);
+            }
+            return rows;
+        }
+
+        private static string CellText(IElement cell) =>
+            cell.GetCurrentPattern(ValuePatternId) is IValuePattern value && !string.IsNullOrEmpty(value.CurrentValue) ? value.CurrentValue : cell.CurrentName ?? "";
+
+        private static ForeignDialog? Dialog(IntPtr window)
+        {
+            var automation = Automation;
+            var root = automation.ElementFromHandle(window);
+            string Texts(int controlType)
+            {
+                var found = root.FindAll(TreeScopeDescendants, automation.CreatePropertyCondition(ControlTypePropertyId, controlType));
+                return string.Join("\n", Enumerable.Range(0, found.Length).Select(i => (found.GetElement(i).CurrentName ?? "").Trim()).Where(t => t.Length > 0));
+            }
+            var buttons = Texts(ButtonControlType).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var text = Texts(TextControlType);
+            if (buttons.Length == 0 && text.Length == 0) return null;
+            return new ForeignDialog(WindowTitle(window), text, buttons);
         }
 
         private static string TypeName(int controlType) => (controlType - 50000) switch
@@ -641,14 +1029,19 @@ namespace Neo.App
         [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] private static extern long SetWindowLongPtr(IntPtr window, int index, long value);
         [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out Rect value, int size);
         [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out int value, int size);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr window, StringBuilder name, int maxCount);
+        [DllImport("user32.dll")] private static extern IntPtr SendMessageTimeout(IntPtr window, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
+
+        private const uint SMTO_ABORTIFHUNG = 0x2;
 
         // ── UI Automation, declared here: its managed wrapper exists only for WPF programs ──
         // Slots that are not used still have to be there: the order is the interface. From UIAutomationClient.h.
 
-        private const int InvokePatternId = 10000, ValuePatternId = 10002, TextPatternId = 10014;
+        private const int InvokePatternId = 10000, SelectionPatternId = 10001, ValuePatternId = 10002, ExpandCollapsePatternId = 10005,
+            SelectionItemPatternId = 10010, TextPatternId = 10014, TogglePatternId = 10015, LegacyIAccessiblePatternId = 10018;
         private const int ControlTypePropertyId = 30003, BoundingRectanglePropertyId = 30001, NamePropertyId = 30005,
-            IsEnabledPropertyId = 30010, AutomationIdPropertyId = 30011;
-        private const int EditControlType = 50004, DocumentControlType = 50030;
+            IsEnabledPropertyId = 30010, AutomationIdPropertyId = 30011, IsPasswordPropertyId = 30019, NativeWindowHandlePropertyId = 30020;
+        private const int ButtonControlType = 50000, EditControlType = 50004, TextControlType = 50020, DocumentControlType = 50030;
         private const int TreeScopeDescendants = 4;
         private const int IgnoreCase = 1, MatchSubstring = 2; // PropertyConditionFlags
 
@@ -749,6 +1142,40 @@ namespace Neo.App
         private interface IInvokePattern
         {
             void Invoke();
+        }
+
+        [ComImport, Guid("5ed5202e-b2ac-47a6-b638-4b0bf140d78e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface ISelectionPattern
+        {
+            IElementArray GetCurrentSelection();
+        }
+
+        [ComImport, Guid("a8efa66a-0fda-421a-9194-38021f3578ea"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface ISelectionItemPattern
+        {
+            void Select();
+        }
+
+        [ComImport, Guid("94cf8058-9b8d-4ab9-8bfd-4cd0a33c8c70"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface ITogglePattern
+        {
+            void Toggle();
+            int CurrentToggleState { get; } // 0 off, 1 on, 2 neither
+        }
+
+        [ComImport, Guid("619be086-1f4e-4ee4-bafa-210128738730"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IExpandCollapsePattern
+        {
+            void Expand();
+            void Collapse();
+            int CurrentExpandCollapseState { get; } // 0 collapsed, 1 expanded
+        }
+
+        [ComImport, Guid("828055ad-355b-4435-86d5-3b51c14a9b1b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface ILegacyIAccessiblePattern
+        {
+            void Select(int flags);
+            void DoDefaultAction();
         }
 
         [ComImport, Guid("32eba289-3583-42c9-9c59-3b6d9a1e9b6a"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]

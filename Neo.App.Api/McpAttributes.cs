@@ -34,6 +34,12 @@ public sealed class McpCallableAttribute : Attribute
     /// <summary>Per-invocation timeout. Default 30 s. Set higher for long-running tasks.</summary>
     public int TimeoutSeconds { get; init; } = 30;
 
+    /// <summary>
+    /// <c>true</c> when the method changes something: it books, saves, deletes, sends, or changes another program.
+    /// Before another app or Claude calls it, the person is asked in the app's window.
+    /// </summary>
+    public bool Changes { get; init; }
+
     public McpCallableAttribute(string description) => Description = description;
 }
 

@@ -658,6 +658,8 @@ public sealed class PreviewSessionManager : IAsyncDisposable
         var timeoutSeconds = overrideTimeoutSeconds
             ?? entry?.TimeoutSeconds
             ?? 30;
+        // A method that changes something waits for the person's answer in the app's window first.
+        if (entry?.Changes == true) timeoutSeconds += (int)Neo.App.AppNetwork.ConsentWait.TotalSeconds;
 
         var frame = new InvokeMethodMessage(method, argsJson ?? "[]", hops);
         var env = await SendRequestAsync(windowId, IpcTypes.InvokeMethod, Json.ToJson(frame), timeoutSeconds + 2, ct);

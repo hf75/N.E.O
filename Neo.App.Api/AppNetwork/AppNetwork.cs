@@ -50,6 +50,26 @@ public static class AppNetwork
     public static AppDescriptor? Published => s_server?.Descriptor;
 
     /// <summary>
+    /// Asks the person before a method that changes something runs for another app or for Claude
+    /// (<see cref="McpCallableAttribute.Changes"/>): true lets it run. Set by the window that runs the app. Without it
+    /// such a call is refused, because nobody could be asked.
+    /// </summary>
+    public static Func<ChangeRequest, Task<bool>>? ChangeGate { get; set; }
+
+    /// <summary>How long a call that changes something may wait for the person's answer.</summary>
+    public static TimeSpan ConsentWait { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Repairs the app when a call ran into another program that changed (a ForeignControlMissingException): true
+    /// once the repaired app is in place, and the call is made again. The call waits meanwhile. Set by the window of a
+    /// host that can repair; without it the caller gets the error.
+    /// </summary>
+    public static Func<RepairRequest, Task<bool>>? RepairHandler { get; set; }
+
+    /// <summary>How long a call waits for a repair (<see cref="AppDescriptor.RepairSeconds"/> of an interface).</summary>
+    public static TimeSpan RepairAllowance { get; set; } = TimeSpan.FromSeconds(150);
+
+    /// <summary>
     /// Announces <paramref name="app"/> on the app network. The name comes from its
     /// <see cref="AppInfoAttribute"/>, otherwise <paramref name="hostName"/>. Calling it again
     /// (a new app instance, a live update) replaces the offer and keeps the same address, so callers
@@ -86,7 +106,8 @@ public static class AppNetwork
 
     // ── Wire format ──────────────────────────────────────────────────────────
 
-    internal sealed record Request(string Op, string? Name, JsonElement[]? Args, int Hops);
+    /// <param name="From">Who calls: the name of the calling app, or what the process calls itself (<see cref="Apps.CallerName"/>). Shown to the person, not proof of anything.</param>
+    internal sealed record Request(string Op, string? Name, JsonElement[]? Args, int Hops, string? From = null);
     internal sealed record Response(bool Ok, JsonElement? Result, string? Error);
 
     internal static readonly JsonSerializerOptions WireJson = new(JsonSerializerDefaults.Web);
@@ -122,10 +143,12 @@ public static class AppNetwork
         {
             var type = app.GetType();
             string name = hostName, description = "";
+            string? program = null;
             if (Attribute(type, InfoAttribute) is { } info)
             {
                 name = Str(info, "Name") is { Length: > 0 } n ? n : hostName;
                 description = Str(info, "Description") ?? "";
+                program = Str(info, "Program") is { Length: > 0 } p ? p.Trim() : null;
             }
 
             var methods = new List<AppMethod>();
@@ -138,7 +161,8 @@ public static class AppNetwork
                     m.GetParameters().Select(p => new AppParameter(p.Name ?? "_", TypeName(p.ParameterType))).ToList(),
                     TypeName(UnwrapTask(m.ReturnType)),
                     attr.GetType().GetProperty("OffUiThread")?.GetValue(attr) as bool? ?? false,
-                    attr.GetType().GetProperty("TimeoutSeconds")?.GetValue(attr) as int? ?? 30));
+                    attr.GetType().GetProperty("TimeoutSeconds")?.GetValue(attr) as int? ?? 30,
+                    attr.GetType().GetProperty("Changes")?.GetValue(attr) as bool? ?? false));
             }
 
             var values = new List<AppValue>();
@@ -148,7 +172,9 @@ public static class AppNetwork
                 values.Add(new AppValue(p.Name, Str(attr, "Description") ?? "", TypeName(p.PropertyType)));
             }
 
-            return new AppDescriptor(_id, name, description, Environment.ProcessId, Pipe, methods, values, DateTimeOffset.Now);
+            // A caller of an interface waits while it is repaired, where a repair can happen.
+            var repairSeconds = program != null && RepairHandler != null ? (int)RepairAllowance.TotalSeconds : 0;
+            return new AppDescriptor(_id, name, description, Environment.ProcessId, Pipe, methods, values, DateTimeOffset.Now, program, repairSeconds);
         }
 
         private async Task AcceptLoopAsync()
@@ -245,38 +271,79 @@ public static class AppNetwork
                     var entry = descriptor.Methods.FirstOrDefault(m => m.Name == request.Name);
                     if (entry == null)
                         return new Response(false, null, $"'{descriptor.Name}' has no method called '{request.Name}'.");
-                    var method = app.GetType().GetMethod(request.Name!, BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)!;
-                    var args = BindArguments(method.GetParameters(), request.Args ?? []);
+
+                    if (entry.Changes)
+                    {
+                        if (ChangeGate is not { } gate)
+                            return new Response(false, null, $"'{descriptor.Name}.{entry.Name}' changes something, and the window of '{descriptor.Name}' cannot ask the person.");
+                        if (!await gate(new ChangeRequest(descriptor.Name, entry.Name, ArgumentsText(request.Args), request.From)).ConfigureAwait(false))
+                            return new Response(false, null, $"The person did not allow '{descriptor.Name}.{entry.Name}'.");
+                    }
 
                     using (EnterCall(request.Hops))
                     {
-                        var timeout = TimeSpan.FromSeconds(Math.Max(1, entry.TimeoutSeconds));
-                        var work = entry.OffUiThread
-                            ? Task.Run(() => Unwrap(method.Invoke(app, args)))
-                            : UnwrapOnUi(onUiThread, method, app, args);
-                        var done = await Task.WhenAny(work, Task.Delay(timeout)).ConfigureAwait(false);
-                        if (done != work)
-                            return new Response(false, null, $"'{descriptor.Name}.{request.Name}' did not finish within {entry.TimeoutSeconds} s.");
+                        var (response, changed) = await InvokeAsync(entry, request).ConfigureAwait(false);
+                        if (changed == null || RepairHandler is not { } repair) return response;
+
+                        // The other program changed under the interface: the call waits while the app is repaired, then goes again.
+                        var repaired = false;
                         try
                         {
-                            var result = await work.ConfigureAwait(false);
-                            return new Response(true, method.ReturnType == typeof(void) || method.ReturnType == typeof(Task)
-                                ? null : JsonSerializer.SerializeToElement(result, WireJson), null);
+                            repaired = await repair(new RepairRequest(descriptor.Name, entry.Name, changed.GetType().FullName ?? changed.GetType().Name,
+                                changed.Message, changed.ToString(), changed.GetType().GetProperty("Program")?.GetValue(changed) as string ?? descriptor.Program)).ConfigureAwait(false);
                         }
-                        catch (TargetInvocationException tie) when (tie.InnerException != null)
-                        {
-                            return new Response(false, null, $"'{descriptor.Name}.{request.Name}' threw {tie.InnerException.GetType().Name}: {tie.InnerException.Message}");
-                        }
-                        catch (Exception ex)
-                        {
-                            return new Response(false, null, $"'{descriptor.Name}.{request.Name}' threw {ex.GetType().Name}: {ex.Message}");
-                        }
+                        catch (Exception) { /* not repaired */ }
+                        if (!repaired) return response with { Error = response.Error + " The interface could not be repaired." };
+                        return (await InvokeAsync(entry, request).ConfigureAwait(false)).Response;
                     }
                 }
 
                 default:
                     return new Response(false, null, $"Unknown operation '{request.Op}'.");
             }
+        }
+
+        // After a repair the app and its code can be new: everything is looked up again.
+        private async Task<(Response Response, Exception? Changed)> InvokeAsync(AppMethod entry, Request request)
+        {
+            var app = _app;
+            var onUiThread = _onUiThread;
+            var descriptor = Descriptor;
+            if (app == null || onUiThread == null || descriptor == null)
+                return (new Response(false, null, "The app is not loaded right now."), null);
+            var method = app.GetType().GetMethod(entry.Name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+            if (method == null)
+                return (new Response(false, null, $"'{descriptor.Name}' has no method called '{entry.Name}' any more."), null);
+            var args = BindArguments(method.GetParameters(), request.Args ?? []);
+
+            var timeout = TimeSpan.FromSeconds(Math.Max(1, entry.TimeoutSeconds));
+            var work = entry.OffUiThread
+                ? Task.Run(() => Unwrap(method.Invoke(app, args)))
+                : UnwrapOnUi(onUiThread, method, app, args);
+            var done = await Task.WhenAny(work, Task.Delay(timeout)).ConfigureAwait(false);
+            if (done != work)
+                return (new Response(false, null, $"'{descriptor.Name}.{entry.Name}' did not finish within {entry.TimeoutSeconds} s."), null);
+            try
+            {
+                var result = await work.ConfigureAwait(false);
+                return (new Response(true, method.ReturnType == typeof(void) || method.ReturnType == typeof(Task)
+                    ? null : JsonSerializer.SerializeToElement(result, WireJson), null), null);
+            }
+            catch (Exception ex)
+            {
+                var thrown = ex is TargetInvocationException { InnerException: { } inner } ? inner : ex;
+                return (new Response(false, null, $"'{descriptor.Name}.{entry.Name}' threw {thrown.GetType().Name}: {thrown.Message}"),
+                    IsProgramChanged(thrown) ? thrown : null);
+            }
+        }
+
+        // The helper for other programs is compiled into the app as source: its exception is known by its name.
+        internal static bool IsProgramChanged(Exception ex) => ex.GetType().Name == "ForeignControlMissingException";
+
+        private static string ArgumentsText(JsonElement[]? args)
+        {
+            var text = string.Join(", ", (args ?? []).Select(a => a.GetRawText()));
+            return text.Length <= 300 ? text : text[..297] + "...";
         }
 
         // The UI-thread dispatch returns whatever the method returned; a Task is awaited here, on

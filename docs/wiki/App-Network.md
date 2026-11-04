@@ -28,6 +28,8 @@ public class DynamicUserControl : UserControl
 - `[AppInfo(name, description)]` names the app on the network. Without it the app is known by the name its host gives it (the living app's title, else the preview window's title). The AI puts it on every app it writes.
 - `[McpCallable]` methods can be called by other apps; they run on the app's UI thread (or off it with `OffUiThread = true`), with a timeout (`TimeoutSeconds`, default 30). Parameters and results are plain data — strings, numbers, lists, records — serialized as JSON.
 - `[McpObservable]` properties can be read and watched.
+- `[McpCallable(…, Changes = true)]` marks a method that changes something (books, saves, deletes, sends). Before another app or Claude runs it, the window of the app asks the person: *Allow*, *Always for …*, *No*; no answer within a minute is a no, and a window that cannot ask refuses.
+- `[AppInfo(…, Program = "Stockroom2003")]` makes the app the interface of another program: a call that finds that program changed waits while the app is repaired, and a drop on that program's window goes to this app ([[Program Interfaces]]).
 
 ## What an app uses
 
@@ -42,8 +44,11 @@ foreach (var app in Apps.Running()) app.Describe();                    // who is
 
 - Calls cross processes and are asynchronous — always `await`, never block the UI thread on them.
 - `Watch` runs the callback on the thread that called it (the UI thread) with the current value right away and again on every change; the value is read twice a second. While the other app is not running nothing is reported; when it appears, watching resumes. Dispose the returned handle to stop.
-- `AppNotFoundException`: no app of that name is running. `AppCallException`: the other app could not carry out the call — unknown method, wrong arguments, an exception in the method (its type and message), a timeout — the message says which.
+- `AppNotFoundException`: no app of that name is running. `AppCallException`: the other app could not carry out the call — unknown method, wrong arguments, an exception in the method (its type and message), a timeout, the person said no — the message says which.
 - A chain of calls that runs in circles (A calls B calls A …) is cut off after 8 nested calls.
+- A call that changes something waits for the person's answer as well (up to a minute), a call of an interface also for a repair (`RepairSeconds`, 150 s): the caller's own timeout includes both.
+- Who calls is shown to the person when a change is asked about: the calling app's name, or what a process without an app calls itself (`Apps.CallerName`; the MCP server says *Claude Code*). It is what the caller says, not proof.
+- `Apps.CallJsonAsync(app, method, "[\"4711\", 3]")` and `Apps.ReadJsonAsync` take and give JSON, for callers that have no types for it. Claude reaches every app through `call_running_app` and `read_running_app` of the [[MCP Server]].
 
 ## What the AI knows
 
@@ -67,5 +72,6 @@ Limits: one machine (named pipes), no authentication between apps (everything ru
 | Client API, descriptors, registry, server | `Neo.App.Api/Apps.cs`, `AppNetwork/AppDescriptor.cs`, `AppRegistry.cs`, `AppNetwork.cs` |
 | Naming | `Neo.App.Api/AppInfoAttribute.cs` (`[McpCallable]`/`[McpObservable]` in `McpAttributes.cs`) |
 | Publishing in the windows | `PublishOnAppNetworkAsync` in `Neo.PluginWindowAvalonia.Core/App.axaml.cs` and `Neo.PluginWindowWPF.Core/App.cs`; `--app-name` argument |
-| Prompt | `Neo.AssemblyForge.Core/AppNetworkGuidance.cs`; `AppController.OtherRunningApps` (desktop, per prompt); `list_running_apps` in `Neo.McpServer/Tools/LiveMcpTools.cs` |
+| Prompt | `Neo.AssemblyForge.Core/AppNetworkGuidance.cs`; `AppController.OtherRunningApps` (desktop, per prompt); `list_running_apps` in `Neo.McpServer/Tools/LiveMcpTools.cs`, `call_running_app` and `read_running_app` in `ForeignProgramTools.cs` |
+| Asking before a change, repairing an interface | `AppNetwork.ChangeGate`, `RepairHandler`; the windows set them (`WireInterfaces` in `Neo.PluginWindowAvalonia.Core/App.axaml.cs`, `AskToAllowAsync` in the WPF window) |
 | Tests | `Neo.App.Api.Tests` (two apps in one process over the real pipes: calls, values, errors, timeout, recursion guard, watch, stale entries), `Neo.PluginWindow.SmokeTests/AppNetworkSmokeTests` (two real plugin windows per head: one app uses the other, live update changes the offer, unload) |

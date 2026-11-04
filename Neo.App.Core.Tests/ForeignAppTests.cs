@@ -43,6 +43,26 @@ public class ForeignAppTests
                     _watched.Dispose();
                     return await _program.ReadTextAsync() + ok + found.Count + field?.Length;
                 }
+
+                // An interface: what a person does in the program, as methods that throw instead of returning false.
+                public async Task<string> BookOut(string item, int quantity)
+                {
+                    try
+                    {
+                        await _program.SetAsync("Item no.:", item);
+                        await _program.SetAsync("Quantity:>Edit", quantity.ToString());
+                        await _program.CheckAsync("Print slip", true);
+                        await _program.SelectAsync("Store", "Main");
+                        await _program.PressAsync("Book out");
+                        await _program.WaitForAsync("Edit:2", seconds: 5);
+                        ForeignDialog? dialog = await _program.DialogAsync(seconds: 2);
+                        if (dialog != null) { await _program.PressAsync(dialog.Buttons[0]); return dialog.Title + dialog.Text; }
+                        IReadOnlyList<string[]> rows = await _program.RowsAsync("Bookings");
+                        return await _program.GetAsync("status") + rows.Count + rows[0][0];
+                    }
+                    catch (ForeignProgramClosedException closed) { return closed.Program; }
+                    catch (ForeignControlMissingException missing) { throw new InvalidOperationException(missing.Program + missing.Control, missing); }
+                }
             }
         }
         """;
@@ -95,11 +115,85 @@ public class ForeignAppTests
     [InlineData("public Task<bool> SetTextAsync(string text)")]
     [InlineData("public Task<bool> SetValueAsync(string name, string value)")]
     [InlineData("public Task<string?> ReadValueAsync(string name)")]
+    [InlineData("public Task SetAsync(string control, string value)")]
+    [InlineData("public Task PressAsync(string control)")]
+    [InlineData("public Task<string> GetAsync(string control)")]
+    [InlineData("public Task CheckAsync(string control, bool on)")]
+    [InlineData("public Task SelectAsync(string control, string item)")]
+    [InlineData("public Task<IReadOnlyList<string[]>> RowsAsync(string control)")]
+    [InlineData("public Task WaitForAsync(string control, int seconds = 10)")]
+    [InlineData("public Task<ForeignDialog?> DialogAsync(int seconds = 0)")]
     public void The_prompt_documents_what_the_helper_really_has(string member)
     {
         ForeignAppGuidance.Notes.Should().Contain(member);
         Helper().Should().Contain(member);
     }
+
+    [Theory]
+    [InlineData("record ForeignDialog(string Title, string Text, IReadOnlyList<string> Buttons)")]
+    [InlineData("ForeignControlMissingException")]
+    [InlineData("ForeignProgramClosedException")]
+    public void The_prompt_names_the_records_and_exceptions_of_the_helper(string name)
+    {
+        ForeignAppGuidance.Notes.Should().Contain(name);
+        Helper().Should().Contain(name.StartsWith("record") ? "public sealed " + name : "public sealed class " + name);
+    }
+
+    [Fact]
+    public void An_interface_is_told_how_it_is_found_and_what_is_asked_first()
+    {
+        ForeignAppGuidance.Notes.Should().Contain(ForeignAppGuidance.Interfaces);
+        ForeignAppGuidance.Interfaces.Should().Contain("Program = \"<its process name>\"").And.Contain("Changes = true")
+            .And.Contain("never catch ForeignControlMissingException");
+    }
+
+    // ── Addresses of controls, the same in the helper and in N.E.O.'s description of a window ──
+
+    [Theory]
+    [InlineData("Menge:>Edit", "Menge:", "Edit", 0)]
+    [InlineData("Bestand: > Text", "Bestand:", "Text", 0)]
+    [InlineData("StatusBar:1>Text", "StatusBar:1", "Text", 0)]
+    [InlineData("Booking>Pane", "Booking", "Pane", 0)]
+    [InlineData("Edit:2", null, "Edit", 2)]
+    [InlineData("button:1", null, "button", 1)]
+    public void An_address_is_what_comes_before_and_a_type_or_a_type_and_a_number(string control, string? label, string type, int index)
+    {
+        ForeignApp.ParseAddress(control).Should().Be((label, type, index));
+    }
+
+    [Theory]
+    [InlineData("Book out")]
+    [InlineData("txtArtikel")]
+    [InlineData("Seite:2")]   // no type of control
+    [InlineData("Edit:0")]    // they count from 1
+    [InlineData("a > b")]
+    public void A_name_or_an_id_is_no_address(string control)
+    {
+        ForeignApp.ParseAddress(control).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("Text", "Menge:", "Menge:")]
+    [InlineData("Text", "Kunde: Müller", "")]        // what the program shows
+    [InlineData("Text", "Total: 250,00", "")]
+    [InlineData("Text", "Stock 2:", "")]
+    [InlineData("Edit", "Item no.:", "Item no.:")]   // the label beside the field
+    [InlineData("Edit", "4711", "")]                 // what was typed, in some programs
+    [InlineData("Button", "Book out", "Book out")]
+    [InlineData("ListItem", "Copper pipe", "")]
+    [InlineData("DataItem", "Anna", "")]
+    [InlineData("Document", "Brief an Anna", "")]
+    public void Of_a_control_the_model_sees_its_name_only_where_it_names_a_control(string type, string name, string shown)
+    {
+        Neo.Shared.ForeignWindows.Shown(type, name).Should().Be(shown);
+    }
+
+    [Fact]
+    public void Of_what_a_program_shows_the_model_sees_the_shape()
+    {
+        Neo.Shared.ForeignWindows.Shape("Kunde: Müller GmbH, 250,00 €").Should().Be("Xxxxx: Xxxxxx XxxX, 999,99 €");
+    }
+
 
     [Fact]
     public void The_prompt_tells_of_other_programs_only_where_the_helper_is_compiled_in()

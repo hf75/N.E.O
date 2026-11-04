@@ -93,6 +93,11 @@ namespace Neo.App
                 }
 
                 string exceptionMessage = $"{err.Message}\n\nType: {err.ExceptionType}\n\nStack Trace:\n{err.StackTrace}";
+                if (!string.IsNullOrWhiteSpace(err.ForTheModel))
+                {
+                    exceptionMessage += "\n\n" + err.ForTheModel;
+                    Logger.LogMessage("The AI sees the structure of the other program's window as it is now (the names of its controls and the labels of its fields, not what is written in it), so that the interface fits again.", BubbleType.Info);
+                }
                 LastErrorMsg = exceptionMessage;
 
                 string repairPrompt = inPlace

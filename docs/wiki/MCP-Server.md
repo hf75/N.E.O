@@ -278,6 +278,14 @@ Returns the current state of the preview system: whether a window is running, re
 
 Closes the preview window and cleans up. No parameters.
 
+### `inspect_foreign_program`
+
+Without a program: the programs open on this PC, with process name and window title. With one: the structure of its window, for a preview that docks to it or becomes its interface ([[Program Interfaces]]): controls by name, id or address (`Quantity:>Edit`), the labels of fields, and of everything the program shows only its shape. Windows only.
+
+### `call_running_app` / `read_running_app`
+
+Call a method (arguments as a JSON array) or read a value of any N.E.O. app running on this PC: previews, apps in desktop hosts, living apps, interfaces of other programs ([[App Network]]). A method that changes something waits until the person allows it in that app's window. When an interface finds its program changed, the error comes with how the program looks now.
+
 ## Available Prompts
 
 ### `create_avalonia_app`

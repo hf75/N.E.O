@@ -800,6 +800,7 @@ namespace Neo.PluginWindowWPF
             {
                 var (control, title) = await Dispatcher.InvokeAsync(() => (MainWin.GetLoadedUserControl(), MainWin.Title));
                 if (control == null) return;
+                Neo.App.AppNetwork.ChangeGate ??= AskToAllowAsync;
                 var name = _appName ?? (string.IsNullOrWhiteSpace(title) ? "N.E.O. app" : title);
                 var app = Neo.App.AppNetwork.Publish(control, name,
                     f => Dispatcher.InvokeAsync(f).Task);
@@ -811,6 +812,16 @@ namespace Neo.PluginWindowWPF
             {
                 await SendLogAsync(LogLevel.Warn, "App network: could not publish the app — " + ex.Message, "AppNetwork");
             }
+        }
+
+        /// <summary>Before another app or Claude changes something through this app, the person says whether it may. No answer in time is a no.</summary>
+        private async Task<bool> AskToAllowAsync(Neo.App.ChangeRequest request)
+        {
+            var caller = string.IsNullOrWhiteSpace(request.From) ? "Another app" : request.From;
+            var asked = Dispatcher.InvokeAsync(() => System.Windows.MessageBox.Show(MainWin,
+                $"{caller} wants {request.App} to do: {request.Method}({request.Arguments})\n\nAllow it?",
+                request.App, System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.Yes).Task;
+            return await Task.WhenAny(asked, Task.Delay(Neo.App.AppNetwork.ConsentWait)) == asked && await asked;
         }
 
         private Task SendLogAsync(LogLevel level, string message, string? category = null, string? details = null)

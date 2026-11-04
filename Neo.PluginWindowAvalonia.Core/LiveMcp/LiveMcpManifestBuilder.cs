@@ -47,6 +47,7 @@ internal static class LiveMcpManifestBuilder
             var description = ReadStringProperty(attr, "Description") ?? "";
             var offUiThread = ReadBoolProperty(attr, "OffUiThread") ?? false;
             var timeoutSeconds = ReadInt32Property(attr, "TimeoutSeconds") ?? 30;
+            var changes = ReadBoolProperty(attr, "Changes") ?? false;
 
             var pars = m.GetParameters()
                 .Select(p => new McpParamEntry(p.Name ?? "_", p.ParameterType.FullName ?? p.ParameterType.Name))
@@ -58,7 +59,8 @@ internal static class LiveMcpManifestBuilder
                 Parameters: pars,
                 ReturnTypeName: m.ReturnType.FullName ?? m.ReturnType.Name,
                 OffUiThread: offUiThread,
-                TimeoutSeconds: timeoutSeconds));
+                TimeoutSeconds: timeoutSeconds,
+                Changes: changes));
         }
         return result;
     }

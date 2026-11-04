@@ -178,6 +178,10 @@ Switch between frameworks in **Settings**:
 
 "Give Notepad a live word count": a tool docks to the window of another program, reads it, presses its buttons, and looks like a part of it, without the program's source. Also as an exported program. See **[[Exoskeleton]]**.
 
+## Program Interfaces
+
+"Give Stockroom 2003 an interface": the AI writes methods for what a person does in the program, and other apps, Claude Code and links call the old program like a service, without any AI at call time. A change waits for your yes in the panel; when the program gets an update, the call waits while the interface is repaired, and goes on. See **[[Program Interfaces]]**.
+
 ## Fusion
 
 Drag the window of one running app onto another: one program that does both, with the data of both. The app you dropped it on keeps running and stays in use meanwhile. If it does not work out, the dropped window comes back with everything it held. See **[[Fusion]]**.

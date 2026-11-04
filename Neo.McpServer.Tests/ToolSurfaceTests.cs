@@ -30,7 +30,9 @@ public class ToolSurfaceTests
         // Live-MCP
         "inspect_app_api", "invoke_method", "read_observable", "raise_event", "simulate_input",
         // app network
-        "list_running_apps",
+        "list_running_apps", "call_running_app", "read_running_app",
+        // other programs and their interfaces
+        "inspect_foreign_program",
         // the Claude bridge (desktop app)
         "start_claude_bridge",
     ];

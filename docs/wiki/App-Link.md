@@ -4,7 +4,7 @@ Two programs run side by side, neither written for the other. Drag one onto the 
 
 [[Fusion]] makes one program of two and keeps it. A link is for the two you want to keep as they are, and for what you only need today.
 
-Windows only, and only between app windows of the Avalonia host and its exports, like Fusion.
+Windows only, and only between app windows of the Avalonia host and its exports, like Fusion. A program that has an interface ([[Program Interfaces]]) counts as its interface: drop an app on that program's window, or drag the program's window onto an app, which can only link, since its code is not here.
 
 ## What you see
 

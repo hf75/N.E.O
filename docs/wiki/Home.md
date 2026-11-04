@@ -33,6 +33,7 @@ N.E.O. comes in three flavours that share the same core: a **desktop host** (WPF
 - [[Shared Sessions]] — Build one app together over the internet: invitation code, reply code, no server
 - [[App Network]] — Apps that use each other: every running app offers methods and values, any app can call them, the AI knows who is running
 - [[Exoskeleton]] — New features for programs you have no source of: a panel docks to their window, reads them and uses them
+- [[Program Interfaces]] — Every program gets an interface: other apps and Claude call the old program like a service, a change waits for your yes, and an update of the program is repaired while the call waits
 - [[Fusion]] — Drag one running program onto another: one program that does both, with the data of both
 - [[App Link]] — Or link them: both keep running as they are, the AI wires them together, nothing is saved, and it ends when one of them does
 - [[Teleport]] — In a shared session, the running app moves to another person's PC with everything in it

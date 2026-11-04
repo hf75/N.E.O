@@ -12,5 +12,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Neo.HotReload.Tests" />
+    <InternalsVisibleTo Include="Neo.App.Core.Tests" />
   </ItemGroup>
 </Project>
