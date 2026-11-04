@@ -123,6 +123,36 @@ public class RewriterTests
     }
 
     [Fact]
+    public void A_WPF_DispatcherTimer_is_guarded_as_well()
+    {
+        // WPF's timer lets the exception out, but stops for good: guarded, it keeps ticking and the repair runs the new code.
+        if (TestCompiler.WindowsDesktopDirectory == null) return;   // WPF is there on Windows only
+
+        var lines = Rewrite(TestCompiler.WpfCompilation("""
+            using System;
+            using System.Windows.Threading;
+
+            public class App
+            {
+                private readonly DispatcherTimer _timer = new DispatcherTimer();
+
+                public void Run()
+                {
+                    _timer.Tick += OnTick;
+                    _timer.Tick -= OnTick;
+                    var callback = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Normal, OnTick, Dispatcher.CurrentDispatcher);
+                }
+
+                private void OnTick(object? sender, EventArgs e) { }
+            }
+            """));
+
+        lines.Should().Contain($"        _timer.Tick += {Guard}<global::System.EventHandler>(OnTick);")
+            .And.Contain($"        _timer.Tick -= {Guard}<global::System.EventHandler>(OnTick);")
+            .And.Contain($"        var callback = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Normal, {Guard}<global::System.EventHandler>(OnTick), Dispatcher.CurrentDispatcher);");
+    }
+
+    [Fact]
     public void Nested_places_are_all_rewritten()
     {
         var lines = Rewrite("""
@@ -208,9 +238,10 @@ public class RewriterTests
         runtime.GetText().ChecksumAlgorithm.Should().Be(Microsoft.CodeAnalysis.Text.SourceHashAlgorithm.Sha256);
     }
 
-    private static string[] Rewrite(string source)
+    private static string[] Rewrite(string source) => Rewrite(TestCompiler.Compilation(source));
+
+    private static string[] Rewrite(CSharpCompilation compilation)
     {
-        var compilation = TestCompiler.Compilation(source);
         compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).Should().BeEmpty("the test's own code has to compile");
         var rewritten = LostExceptions.Rewrite(compilation.GetSemanticModel(compilation.SyntaxTrees[0]));
         rewritten.Should().NotBeNull();

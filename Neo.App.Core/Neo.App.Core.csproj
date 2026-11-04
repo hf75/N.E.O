@@ -37,5 +37,6 @@
     <ProjectReference Include="..\Neo.IPC\Neo.IPC.csproj" />
     <ProjectReference Include="..\Neo.Shared\Neo.Shared.csproj" />
     <ProjectReference Include="..\Neo.HotReload\Neo.HotReload.csproj" />
+    <ProjectReference Include="..\Neo.ErrorSurfacing\Neo.ErrorSurfacing.csproj" />
   </ItemGroup>
 </Project>

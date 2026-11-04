@@ -140,9 +140,9 @@ public class RuntimeTests : IClassFixture<RuntimeTests.App>
     {
         var guard = _app.Assembly.GetType("NeoRuntime.LostExceptions")!.GetMethod("Guard")!;
         var delegateTypes = new HashSet<Type>();
-        foreach (var (typeName, eventName) in SurfacingRewriter.LosingEvents)
+        foreach (var (typeName, eventName) in SurfacingRewriter.LosingEvents.Where(e => Testable(e.Type)))
             delegateTypes.Add(FindType(typeName).GetEvent(eventName)!.EventHandlerType!);
-        foreach (var typeName in SurfacingRewriter.LosingCallbackTypes)
+        foreach (var typeName in SurfacingRewriter.LosingCallbackTypes.Where(Testable))
         {
             var type = FindType(typeName);
             var members = type.GetConstructors().Cast<MethodBase>().Concat(type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance));
@@ -182,7 +182,11 @@ public class RuntimeTests : IClassFixture<RuntimeTests.App>
         => AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(fullName)).FirstOrDefault(t => t != null)
            ?? Type.GetType(fullName + ", Avalonia.Base")
            ?? Type.GetType(fullName + ", System.ComponentModel.TypeConverter")
+           ?? TestCompiler.WpfType(fullName)
            ?? throw new InvalidOperationException($"{fullName} not found.");
+
+    // WPF's types where there is WPF (Windows).
+    private static bool Testable(string typeName) => !typeName.StartsWith("System.Windows.") || TestCompiler.WindowsDesktopDirectory != null;
 
     private static string HandlerFor(Type delegateType) => delegateType.GetMethod("Invoke")!.ReturnType == typeof(bool)
         ? nameof(Handlers.ReturnsTrue)

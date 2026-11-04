@@ -14,19 +14,21 @@ internal sealed class SurfacingRewriter : CSharpSyntaxRewriter
 {
     private const string Runtime = "global::NeoRuntime.LostExceptions";
 
-    // Where an API runs app code so that its exceptions vanish, found by trying it in the preview
-    // windows (Neo.McpServer.Tests, LostExceptionProcessTests). Avalonia runs every DispatcherTimer
-    // tick through Dispatcher.InvokeAsync, which keeps the exception in a task nobody awaits, and
-    // the timer stops; System.Timers.Timer catches the exception and goes on.
+    // Where an API runs app code so that its exceptions vanish, or the API with them, found by trying
+    // it in the preview windows (Neo.McpServer.Tests, LostExceptionProcessTests). Avalonia runs every
+    // DispatcherTimer tick through Dispatcher.InvokeAsync, which keeps the exception in a task nobody
+    // awaits, and the timer stops; WPF's DispatcherTimer lets the exception out, but stops for good
+    // as well; System.Timers.Timer catches the exception and goes on.
     private static readonly (string Type, string Event)[] s_losingEvents =
     [
         ("Avalonia.Threading.DispatcherTimer", "Tick"),
+        ("System.Windows.Threading.DispatcherTimer", "Tick"),
         ("System.Timers.Timer", "Elapsed"),
     ];
 
     // Types whose constructors and methods take such handlers as delegates: DispatcherTimer's
-    // constructor with a callback, DispatcherTimer.Run and DispatcherTimer.RunOnce.
-    private static readonly string[] s_losingCallbackTypes = ["Avalonia.Threading.DispatcherTimer"];
+    // constructor with a callback, Avalonia's DispatcherTimer.Run and DispatcherTimer.RunOnce.
+    private static readonly string[] s_losingCallbackTypes = ["Avalonia.Threading.DispatcherTimer", "System.Windows.Threading.DispatcherTimer"];
 
     private static readonly HashSet<string> s_losingEventNames = s_losingEvents.Select(e => e.Event).ToHashSet();
 

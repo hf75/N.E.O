@@ -61,10 +61,12 @@ Limits: the action done again is a button click (anything else that failed is fi
 Some exceptions never reach the window on their own:
 
 - in a task the code drops: `LoadAsync();` without `await`, `Task.Run(…)`, `ContinueWith(…)`, `Dispatcher.UIThread.InvokeAsync(…)`, `_ = …`, the body of `(s, e) => LoadAsync()`;
-- in an Avalonia `DispatcherTimer` tick, and in `DispatcherTimer.Run` / `RunOnce`: Avalonia runs each tick through `Dispatcher.InvokeAsync`, keeps the exception in a task nobody awaits, and the timer stops for good (WPF's timer reports it);
+- in an Avalonia `DispatcherTimer` tick, and in `DispatcherTimer.Run` / `RunOnce`: Avalonia runs each tick through `Dispatcher.InvokeAsync`, keeps the exception in a task nobody awaits, and the timer stops for good;
 - in `System.Timers.Timer.Elapsed`, which catches it.
 
-So every compile of generated code rewrites those places (`Neo.ErrorSurfacing`, called by both compile agents, hot reload and the web app). The task or handler goes to a small runtime class compiled into the app, which posts the exception to the UI thread and throws it there, as .NET does with the exception of an `async void` method. The window then handles it like any other: banner, repair, `runtime_error` for Claude. A guarded timer keeps ticking, so after the repair it runs the new code. Cancellation stays quiet, and code that runs without any UI thread behaves as before. The rewriting keeps every line where it was; the source N.E.O. keeps (and `extract_code` returns) stays as written, and hot reload rewrites each generation the same way.
+WPF's `DispatcherTimer` reports the exception, but stops for good as well, so after the repair the app's clock stood still. It is guarded the same way.
+
+So every compile of generated code rewrites those places (`Neo.ErrorSurfacing`, called by both compile agents, hot reload and the web app). The task or handler goes to a small runtime class compiled into the app, which posts the exception to the UI thread and throws it there, as .NET does with the exception of an `async void` method. The window then handles it like any other: banner, repair, `runtime_error` for Claude. A guarded timer keeps ticking, so after the repair it runs the new code. Cancellation stays quiet, and code that runs without any UI thread behaves as before. The rewriting keeps every line where it was; the source N.E.O. keeps (and `extract_code` returns) stays as written, and hot reload rewrites each generation the same way. An exported app has no N.E.O. behind it: there the errors go to an error window and the app goes on (see [[Export and Import]]).
 
 ## Writing apps that survive changes
 
@@ -101,5 +103,6 @@ The system prompts of the desktop hosts and the MCP server teach these rules (`N
 | Desktop wiring | `AppController.DisplayCompiledDllAsync` |
 | Heal in place | `AppController.CrashRecovery.cs` (`_inPlaceRepair`), `App.*.cs` in both `PluginWindow*.Core` (recoverable errors, banners), `MainWindow.TrackUserActions / FailedActionAddress / ReplayAction` |
 | Errors that would vanish | `Neo.ErrorSurfacing/` (`LostExceptions.Instrument`, `SurfacingRewriter`, the runtime class `Runtime/NeoRuntime.LostExceptions.cs`); called in `CSharpDllCompileAgent`, `CSharpCompileAgent`, `HotReloadSession`, `WasmCompiler`. Tests: `Neo.ErrorSurfacing.Tests`, `Neo.HotReload.Tests/LostExceptionsHotReloadTests`, `Neo.McpServer.Tests/LostExceptionProcessTests` (each pattern through a real window) |
+| Error window of exported apps | `Neo.ErrorSurfacing/ExportErrors.cs`, `Runtime/NeoErrorWindow.Avalonia.cs` / `.Wpf.cs`, put into the export programs by `ExportWindowBaseCode` (desktop hosts) and `CompilationPipeline.GetAvaloniaExportWrapper` (MCP). Tests: `Neo.ErrorSurfacing.Tests/ExportErrorsTests`, `Neo.App.Core.Tests/DesktopExportErrorWindowTests`, `Neo.McpServer.Tests/ExportedErrorWindowTests` (real exported programs) |
 | MCP wiring | `PreviewSessionManager.UpdateAsync` |
 | Tests | `Neo.HotReload.Tests` (engine: packages, new files, subscriptions), `Neo.PluginWindow.SmokeTests/DesktopHotReloadSmokeTests` (both desktop heads: state, routed-event handlers, new package, selection and tree state, a crash healed in place with the click done again), `Neo.McpServer.Tests/HotReloadProcessTests` (server end to end) |

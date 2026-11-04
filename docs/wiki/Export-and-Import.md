@@ -54,6 +54,15 @@ chmod +x ./MyApp
 
 All exported apps require the [.NET Runtime](https://dotnet.microsoft.com/download/dotnet/9.0) (not the SDK) installed on the target machine.
 
+### When an Exported App Runs into an Error
+
+An exported app has no N.E.O. behind it that could repair it (a [[Living Apps|living app]] has one, and heals the way the preview does). An exception the app's code does not catch is shown in a window, with the stack trace to copy, and the app goes on — WPF and Avalonia alike, whether it comes from a click, a timer, a task the code started without waiting for it, or `System.Timers.Timer` (see [[Hot Reload]], *Errors that would vanish*):
+
+- One window at a time. What goes wrong while it is open is counted in it ("3 more errors since this window opened."), and an error of a new kind is added in full.
+- An error seen once is not shown again after the window is closed: a timer that throws on every tick would bring the window back at once.
+- If the app fails already while it is being created (in its constructor), the error is shown in place of the app; closing it ends the app.
+- An exception on a thread the app started itself (`new Thread(…)`) ends the app, .NET does not let it go on; the window shows it first, and the app ends when it is closed.
+
 ### Export Size
 
 The AI agent DLL filtering system automatically excludes AI provider libraries (Claude, OpenAI, Gemini, etc.) from the export unless your generated code explicitly references them. This keeps exports lean.

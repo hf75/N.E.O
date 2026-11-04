@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Neo.ErrorSurfacing;
 
 namespace Neo.App
 {
@@ -10,78 +11,9 @@ namespace Neo.App
     {
         public static string CreateBaseCodeForExport(string windowTitle)
         {
-            // Definiert den C#-Code für ein dynamisch erstelltes Fehlerfenster.
-            // Dieses Fenster zeigt Fehlerdetails an und macht sie kopierbar.
-            // Es wird direkt in den generierten Code eingefügt, um keine zusätzlichen Dateien zu benötigen.
-            string exceptionWindowClass = @"
-    // Ein benutzerdefiniertes Fenster zur Anzeige von unbehandelten Ausnahmen.
-    public class ExceptionWindow : Window
-    {
-        public ExceptionWindow(Exception ex, bool isTerminating)
-        {
-            this.Title = ""An unexpected error occurred"";
-            this.Width = 650;
-            this.Height = 450;
-            this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            this.MinWidth = 400;
-            this.MinHeight = 300;
-
-            var grid = new Grid();
-            grid.Margin = new Thickness(15);
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-            var infoLabel = new Label
-            {
-                Content = isTerminating 
-                    ? ""The application cannot recover from this error and will now exit."" 
-                    : ""The application may be able to continue after this error."",
-                FontWeight = FontWeights.Bold,
-                Foreground = new System.Windows.Media.SolidColorBrush(isTerminating ? System.Windows.Media.Colors.DarkRed : System.Windows.Media.Colors.Black),
-                Margin = new Thickness(0, 0, 0, 10)
-            };
-            Grid.SetRow(infoLabel, 0);
-
-            var scrollViewer = new ScrollViewer
-            {
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto
-            };
-            Grid.SetRow(scrollViewer, 1);
-
-            var textBox = new TextBox
-            {
-                IsReadOnly = true,
-                Text = ex.ToString(), // .ToString() liefert die komplette Info inkl. StackTrace
-                FontFamily = new System.Windows.Media.FontFamily(""Consolas""),
-                TextWrapping = TextWrapping.NoWrap,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                BorderThickness = new Thickness(1)
-            };
-            scrollViewer.Content = textBox;
-
-            var closeButton = new Button
-            {
-                Content = ""Schließen"",
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 10, 0, 0),
-                Padding = new Thickness(12, 6, 12, 6),
-                IsDefault = true
-            };
-            closeButton.Click += (s, e) => this.Close();
-            Grid.SetRow(closeButton, 2);
-
-            grid.Children.Add(infoLabel);
-            grid.Children.Add(scrollViewer);
-            grid.Children.Add(closeButton);
-
-            this.Content = grid;
-        }
-    }";
-
-            // Erstellt den vollständigen C#-Code für die exportierte Anwendung.
+            // Erstellt den vollständigen C#-Code für die exportierte Anwendung. Das Fehlerfenster
+            // (NeoErrorWindow) kommt aus Neo.ErrorSurfacing, wie bei den Avalonia-Exporten, und wird
+            // direkt in den Namespace eingefügt, um keine zusätzlichen Dateien zu benötigen.
             return $@"
 using System;
 using System.IO;
@@ -91,8 +23,6 @@ using System.Windows.Controls;
 using System.Runtime.InteropServices;
 using System.Linq;
 using System.Collections.Generic;
-using System.Threading.Tasks; // Für TaskScheduler
-using System.Windows.Threading; // Für DispatcherUnhandledExceptionEventArgs
 
 namespace Neo.App
 {{
@@ -112,7 +42,7 @@ namespace Neo.App
         }}
     }}
 
-    // Die Anwendungs-Klasse mit Einstiegspunkt und robuster Fehlerbehandlung
+    // Die Anwendungs-Klasse mit Einstiegspunkt
     public class App : Application
     {{
         [DllImport(""kernel32.dll"", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -125,64 +55,18 @@ namespace Neo.App
         [STAThread]
         public static void Main()
         {{
-            // Handler Nr. 1: Für unbeobachtete Task-Exceptions (asynchrone Fehler)
-            TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
-
-            // Handler Nr. 2: Für alle anderen unbehandelten Exceptions (letzte Rettung)
-            AppDomain.CurrentDomain.UnhandledException += AppDomain_UnhandledException;
+            // Eine Ausnahme, die niemand fängt, erscheint in einem Fenster, und die App läuft weiter
+            // (UI-Thread und Tasks; auf einem anderen Thread zeigt das Fenster sie, bevor die App endet).
+            NeoErrorWindow.Install();
 
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
             PreloadAssemblies();
 
             App app = new App();
-            
-            // Handler Nr. 3: Speziell für den UI-Thread (wichtigster Handler für WPF)
-            app.DispatcherUnhandledException += App_DispatcherUnhandledException;
 
-            MainWindow mainWindow = new MainWindow();
-            app.Run(mainWindow);
-        }}
-
-        // Fängt unbehandelte Ausnahmen auf dem UI-Thread ab.
-        private static void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
-        {{
-            HandleException(e.Exception, isTerminating: false);
-            // Verhindert, dass die Anwendung abstürzt.
-            e.Handled = true;
-        }}
-
-        // Fängt unbehandelte Ausnahmen in Hintergrund-Tasks ab, die nicht 'awaited' wurden.
-        private static void TaskScheduler_UnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs e)
-        {{
-            HandleException(e.Exception, isTerminating: false);
-            // Markiert die Ausnahme als ""beobachtet"", um einen Absturz zu verhindern (wichtig für .NET 4.0).
-            e.SetObserved();
-        }}
-
-        // Fängt alle anderen unbehandelten Ausnahmen in der gesamten Anwendungsdomäne ab.
-        // Dies ist die letzte Instanz, die Anwendung wird danach beendet.
-        private static void AppDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
-        {{
-            HandleException((Exception)e.ExceptionObject, e.IsTerminating);
-        }}
-
-        // Zentrale Methode zur Anzeige des Fehlerfensters.
-        private static void HandleException(Exception ex, bool isTerminating)
-        {{
-            // Stellt sicher, dass das UI-Fenster auf dem UI-Thread erstellt wird.
-            if (Application.Current?.Dispatcher != null)
-            {{Application.Current.Dispatcher.Invoke(() =>
-            {{
-                var exceptionWindow = new ExceptionWindow(ex, isTerminating);
-                exceptionWindow.ShowDialog();
-            }});
-            }}
-            else
-            {{
-                        // Fallback, falls der Dispatcher nicht verfügbar ist.
-                        MessageBox.Show(ex.ToString(), ""Critical Error"", MessageBoxButton.OK, MessageBoxImage.Error);
-            }}
+            // Scheitert schon das Hauptfenster, steht der Fehler an seiner Stelle.
+            app.Run(NeoErrorWindow.MainWindow(() => new MainWindow()));
         }}
 
         private static void PreloadAssemblies()
@@ -217,8 +101,7 @@ namespace Neo.App
         }}
     }}
 
-    // Die ExceptionWindow-Klasse wird hier eingefügt.
-    {exceptionWindowClass}
+{ExportErrors.WpfSource}
 }}";
         }
 
@@ -235,15 +118,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia.Threading;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 
@@ -257,10 +137,6 @@ namespace Neo.App
         {
             try
             {
-                // Globale Exception-Handler
-                TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
-                AppDomain.CurrentDomain.UnhandledException += AppDomain_UnhandledException;
-
                 System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
                 // ZUERST: alles aus dem EXE-Verzeichnis laden
@@ -378,59 +254,6 @@ namespace Neo.App
             // OS-spezifische native Bibliotheken (.so/.dylib) nachladen
             NativeLoader.PreloadPlatformSpecific(baseDirectory, nativeHandles);
         }
-
-        // Fängt unbehandelte Ausnahmen in Hintergrund-Tasks ab, die nicht 'awaited' wurden.
-        private static void TaskScheduler_UnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs e)
-        {
-            HandleException(e.Exception, isTerminating: false);
-            // Markiert die Ausnahme als ""beobachtet"", um einen Absturz zu verhindern.
-            e.SetObserved();
-        }
-
-        // Fängt alle anderen unbehandelten Ausnahmen in der gesamten Anwendungsdomäne ab.
-        // Dies ist die letzte Instanz, die Anwendung wird danach ggf. beendet.
-        private static void AppDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
-        {
-            HandleException((Exception)e.ExceptionObject, e.IsTerminating);
-        }
-
-        // Zentrale Methode zur Anzeige des Fehlerfensters.
-        private static void HandleException(Exception ex, bool isTerminating)
-        {
-            void ShowWindow()
-            {
-                var lifetime = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
-                var owner = lifetime?.MainWindow;
-
-                var exceptionWindow = new ExceptionWindow(ex, isTerminating)
-                {
-                    Icon = owner?.Icon
-                };
-
-                if (owner != null)
-                {
-                    exceptionWindow.ShowDialog(owner);
-                }
-                else
-                {
-                    exceptionWindow.Show();
-                }
-            }
-
-            if (Dispatcher.UIThread.CheckAccess())
-            {
-                ShowWindow();
-            }
-            else
-            {
-                Dispatcher.UIThread.Post(ShowWindow);
-            }
-
-            if (isTerminating)
-            {
-                Console.Error.WriteLine(""Fatal error:\n"" + ex);
-            }
-        }
     }
 
     // Anwendungs-Klasse für Avalonia (Desktop-Stil), ohne eigenen Main()
@@ -448,10 +271,15 @@ namespace Neo.App
 
         public override void OnFrameworkInitializationCompleted()
         {
+            // Eine Ausnahme, die niemand fängt, erscheint in einem Fenster, und die App läuft weiter
+            // (UI-Thread und Tasks; auf einem anderen Thread zeigt das Fenster sie, bevor die App endet).
+            // Erst hier: NeoErrorWindow nennt Avalonia-Typen, die erst nach PreloadAssemblies da sind.
+            NeoErrorWindow.Install();
+
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
-                var mainWindow = new MainWindow();
-                desktop.MainWindow = mainWindow;
+                // Scheitert schon das Hauptfenster, steht der Fehler an seiner Stelle.
+                desktop.MainWindow = NeoErrorWindow.MainWindow(() => new MainWindow());
             }
 
             base.OnFrameworkInitializationCompleted();
@@ -572,75 +400,14 @@ namespace Neo.App
         }
     }
 
-    // Ein benutzerdefiniertes Fenster zur Anzeige von unbehandelten Ausnahmen.
-    public class ExceptionWindow : Window
-    {
-        public ExceptionWindow(Exception ex, bool isTerminating)
-        {
-            Title = ""An unexpected error occurred"";
-            Width = 650;
-            Height = 450;
-            MinWidth = 400;
-            MinHeight = 300;
-            WindowStartupLocation = WindowStartupLocation.CenterScreen;
-
-            var grid = new Grid
-            {
-                Margin = new Thickness(15)
-            };
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-            var infoLabel = new TextBlock
-            {
-                Text = isTerminating
-                    ? ""The application cannot recover from this error and will now exit.""
-                    : ""The application may be able to continue after this error."",
-                FontWeight = FontWeight.Bold,
-                Margin = new Thickness(0, 0, 0, 10)
-            };
-            infoLabel.Foreground = new SolidColorBrush(isTerminating ? Colors.DarkRed : Colors.Black);
-            Grid.SetRow(infoLabel, 0);
-
-            var textBox = new TextBox
-            {
-                IsReadOnly = true,
-                Text = ex.ToString(), // .ToString() liefert die komplette Info inkl. StackTrace
-                FontFamily = new FontFamily(""Consolas""),
-                TextWrapping = TextWrapping.NoWrap
-            };
-
-            var scrollViewer = new ScrollViewer
-            {
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                Content = textBox
-            };
-            Grid.SetRow(scrollViewer, 1);
-
-            var closeButton = new Button
-            {
-                Content = ""Schließen"",
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 10, 0, 0),
-                Padding = new Thickness(12, 6, 12, 6)
-            };
-            closeButton.Click += (_, __) => Close();
-            Grid.SetRow(closeButton, 2);
-
-            grid.Children.Add(infoLabel);
-            grid.Children.Add(scrollViewer);
-            grid.Children.Add(closeButton);
-
-            Content = grid;
-        }
-    }
+<<ERROR_WINDOW>>
 }
 ";
 
-            // Fenstertitel sicher einbetten (Anführungszeichen escapen)
-            return template.Replace("<<WINDOW_TITLE>>", windowTitle.Replace("\"", "\"\""));
+            // Fehlerfenster einfügen, Fenstertitel sicher einbetten (Anführungszeichen escapen)
+            return template
+                .Replace("<<ERROR_WINDOW>>", ExportErrors.AvaloniaSource)
+                .Replace("<<WINDOW_TITLE>>", windowTitle.Replace("\"", "\"\""));
         }
     }
 }

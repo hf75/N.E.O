@@ -18,6 +18,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Neo.PluginWindow.SmokeTests\ForegroundTurn.cs" Link="ForegroundTurn.cs" />
+    <Compile Include="..\Neo.McpServer.Tests\ProcessWindows.cs" Link="ProcessWindows.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Neo.App.Core\Neo.App.Core.csproj" />
 
     <!-- Build-order only: AvaloniaSourceTemplateTests compiles the hosts' Avalonia source

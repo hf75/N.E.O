@@ -1,6 +1,7 @@
 using Neo.Agents;
 using Neo.AssemblyForge.Services;
 using Neo.AssemblyForge.Utils;
+using Neo.ErrorSurfacing;
 
 namespace Neo.McpServer.Services;
 
@@ -319,7 +320,8 @@ public sealed class CompilationPipeline
     /// <summary>
     /// Source of the program that turns a <c>DynamicUserControl</c> into a standalone Avalonia
     /// application: preload the DLLs next to the exe, find the control by reflection, show it in
-    /// a window.
+    /// a window. An exception nobody caught is shown in a window of its own, and the app goes on
+    /// (<see cref="ExportErrors"/>, the same as in the exports of the desktop hosts).
     ///
     /// <para>With <paramref name="mcpMode"/> (Frozen-Mode, Phase 4B) the same program also understands
     /// <list type="bullet">
@@ -383,6 +385,8 @@ public sealed class CompilationPipeline
                     Program.StartMcpServer(ctrl, _mcpCts.Token);
 """;
 
+        var errorWindow = ExportErrors.AvaloniaSource;
+
         return $$"""
 using System;
 using System.IO;
@@ -408,9 +412,6 @@ namespace {{ExportHostNamespace}}
         [STAThread]
         public static int Main(string[] args)
         {
-            TaskScheduler.UnobservedTaskException += (s, e) => { e.SetObserved(); };
-            AppDomain.CurrentDomain.UnhandledException += (s, e) => { };
-
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
             // Preload all DLLs from the app directory BEFORE any Avalonia / MCP types are touched.
@@ -470,30 +471,39 @@ namespace {{ExportHostNamespace}}
 
         public override void OnFrameworkInitializationCompleted()
         {
+            // An exception nobody caught is shown in a window, and the app goes on (thrown on another
+            // thread, it is shown before the app ends). Only here: NeoErrorWindow names Avalonia types.
+            NeoErrorWindow.Install();
+
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
-                var ctrl = Program.CreateUserControl();
-                if (ctrl != null)
+                // A control that fails in its constructor: the error takes the main window's place.
+                UserControl? ctrl = null;
+                desktop.MainWindow = NeoErrorWindow.MainWindow(() =>
                 {
-                    ctrl.HorizontalAlignment = HorizontalAlignment.Stretch;
-                    ctrl.VerticalAlignment = VerticalAlignment.Stretch;
-                }
-
-                desktop.MainWindow = new Window
-                {
-                    Title = "{{escapedTitle}}",
-                    Width = 1024,
-                    Height = 768,
-                    WindowStartupLocation = WindowStartupLocation.CenterScreen,
-                    Content = (Avalonia.Controls.Control?)ctrl ?? new TextBlock
+                    ctrl = Program.CreateUserControl();
+                    if (ctrl != null)
                     {
-                        Text = "Error: DynamicUserControl not found.",
-                        FontSize = 24,
-                        Foreground = Brushes.Red,
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center
+                        ctrl.HorizontalAlignment = HorizontalAlignment.Stretch;
+                        ctrl.VerticalAlignment = VerticalAlignment.Stretch;
                     }
-                };
+
+                    return new Window
+                    {
+                        Title = "{{escapedTitle}}",
+                        Width = 1024,
+                        Height = 768,
+                        WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                        Content = (Avalonia.Controls.Control?)ctrl ?? new TextBlock
+                        {
+                            Text = "Error: DynamicUserControl not found.",
+                            FontSize = 24,
+                            Foreground = Brushes.Red,
+                            HorizontalAlignment = HorizontalAlignment.Center,
+                            VerticalAlignment = VerticalAlignment.Center
+                        }
+                    };
+                });
 
                 desktop.Exit += (_, _) => _mcpCts.Cancel();
 {{mcpStartBranch}}
@@ -501,6 +511,8 @@ namespace {{ExportHostNamespace}}
             base.OnFrameworkInitializationCompleted();
         }
     }
+
+{{errorWindow}}
 }
 """;
     }

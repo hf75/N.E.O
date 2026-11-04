@@ -65,7 +65,7 @@ public class AvaloniaSourceTemplateTests
     }
 
     // <repo>/Neo.App.Core.Tests/bin/<Configuration>/<tfm>/  →  <repo>/Neo.PluginWindowAvalonia/bin/<Configuration>/<tfm>/
-    private static string PluginWindowBinDir
+    internal static string PluginWindowBinDir
     {
         get
         {

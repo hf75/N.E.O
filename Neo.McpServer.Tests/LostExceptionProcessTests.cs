@@ -8,7 +8,8 @@ namespace Neo.McpServer.Tests;
 /// Exceptions that used to vanish in a preview window, end to end through the real server and
 /// real windows: a dropped task, a DispatcherTimer tick, System.Timers.Timer. Without the
 /// rewriting (Neo.ErrorSurfacing) none of them reached the window's error handling — no banner,
-/// no repair, no runtime_error for Claude — and a DispatcherTimer whose tick threw stopped for good.
+/// no repair, no runtime_error for Claude — and a DispatcherTimer whose tick threw stopped for
+/// good, WPF's as well as Avalonia's.
 /// </summary>
 [Collection("ExportedProcesses")]
 [Trait("Category", "UiSmoke")]
@@ -80,15 +81,18 @@ public class LostExceptionProcessTests
         }
     }
 
-    [Fact]
-    public async Task A_DispatcherTimer_whose_tick_throws_is_reported_and_keeps_ticking()
+    // WPF's DispatcherTimer reports the exception by itself, but stopped for good after it all the same.
+    [Theory]
+    [InlineData("avalonia", "Avalonia.Controls", "Avalonia.Threading")]
+    [InlineData("wpf", "System.Windows.Controls", "System.Windows.Threading")]
+    public async Task A_DispatcherTimer_whose_tick_throws_is_reported_and_keeps_ticking(string framework, string controls, string threading)
     {
         if (!OperatingSystem.IsWindows()) return;
 
-        const string clock = """
+        var clock = $$"""
             using System;
-            using Avalonia.Controls;
-            using Avalonia.Threading;
+            using {{controls}};
+            using {{threading}};
 
             public class DynamicUserControl : UserControl
             {
@@ -114,13 +118,15 @@ public class LostExceptionProcessTests
         await server.InitializeAsync("neo-lost-exception-tests");
         try
         {
-            (await server.CallToolAsync("compile_and_preview", new { sourceCode = new[] { clock } }, TimeSpan.FromMinutes(3)))
+            (await server.CallToolAsync("compile_and_preview", new { sourceCode = new[] { clock }, framework }, TimeSpan.FromMinutes(3)))
                 .Should().StartWith("SUCCESS", "server stderr:\n" + server.StandardError);
             await Task.Delay(2500);
 
             (await server.CallToolAsync("get_runtime_errors", new { })).Should().Contain("boom at tick 3");
+            // "Value from TextBlock." and the value, quoted (Avalonia) or not (WPF).
             var count = await server.CallToolAsync("read_data", new { target = "count", scope = "value" });
-            int.Parse(count.Split('"')[1]).Should().BeGreaterThan(5, "the timer goes on after the error, so a repair can take over");
+            int.Parse(System.Text.RegularExpressions.Regex.Matches(count, @"\d+").Last().Value)
+                .Should().BeGreaterThan(5, "the timer goes on after the error, so a repair can take over");
         }
         finally
         {

@@ -15,7 +15,7 @@ namespace Neo.ErrorSurfacing;
 ///   <item>a handler that an API runs without letting its exceptions out: Avalonia's
 ///         <c>DispatcherTimer</c> runs each tick through <c>Dispatcher.InvokeAsync</c>, which keeps
 ///         the exception in a task nobody awaits, and the timer stops; <c>System.Timers.Timer</c>
-///         catches it.</item>
+///         catches it. WPF's <c>DispatcherTimer</c> lets it out, but stops all the same.</item>
 /// </list>
 /// The trees are rewritten to hand such a task or handler to a small runtime class that is added
 /// to the app (<see cref="RuntimeSource"/>). It posts the exception to the UI thread and throws it
@@ -31,7 +31,7 @@ public static class LostExceptions
     public const string RuntimeFileName = "NeoRuntime.LostExceptions.cs";
 
     /// <summary>The runtime class every instrumented app is compiled with.</summary>
-    public static string RuntimeSource { get; } = ReadRuntimeSource();
+    public static string RuntimeSource { get; } = EmbeddedSource.Read(RuntimeFileName);
 
     /// <summary>
     /// The compilation with every tree of the app rewritten where needed and the runtime class
@@ -78,13 +78,4 @@ public static class LostExceptions
 
     /// <summary>Whether <paramref name="tree"/> is the runtime class (the rewriter leaves it alone).</summary>
     public static bool IsRuntime(SyntaxTree tree) => Path.GetFileName(tree.FilePath) == RuntimeFileName;
-
-    private static string ReadRuntimeSource()
-    {
-        using var stream = typeof(LostExceptions).Assembly.GetManifestResourceStream(RuntimeFileName)
-            ?? throw new InvalidOperationException($"{RuntimeFileName} is missing from {typeof(LostExceptions).Assembly.GetName().Name}.");
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        // The same text on every machine: the file's line ends depend on how it was checked out.
-        return reader.ReadToEnd().Replace("\r\n", "\n");
-    }
 }
