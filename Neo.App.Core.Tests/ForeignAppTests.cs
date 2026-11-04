@@ -27,6 +27,7 @@ public class ForeignAppTests
             {
                 private readonly ForeignApp _program = ForeignApp.Attach("notepad");
                 private readonly ForeignApp _beside = ForeignApp.Attach("excel", size: 120, side: ForeignSide.Bottom);
+                private readonly ForeignApp _corner = ForeignApp.Attach("paint", size: 200, length: 150);
                 private readonly ForeignApp _watched = ForeignApp.Watch("Rechner");
 
                 public async Task<string> Run()
@@ -36,9 +37,11 @@ public class ForeignAppTests
                     _program.TextChanged += text => Console.WriteLine(text.Length + _program.Text.Length);
                     IReadOnlyList<ForeignElement> elements = await _watched.ReadElementsAsync();
                     foreach (var e in elements) Console.WriteLine(e.Type + e.Name + e.Id + e.IsEnabled);
+                    IReadOnlyList<ForeignElement> found = await _corner.FindAsync("Save");
                     bool ok = await _program.ClickAsync("Save") && await _program.SetTextAsync("x") && await _beside.SetValueAsync("field", "y");
+                    string? field = await _beside.ReadValueAsync("field");
                     _watched.Dispose();
-                    return await _program.ReadTextAsync() + ok;
+                    return await _program.ReadTextAsync() + ok + found.Count + field?.Length;
                 }
             }
         }
@@ -77,7 +80,7 @@ public class ForeignAppTests
     }
 
     [Theory]
-    [InlineData("public static ForeignApp Attach(string program, int size = 300, ForeignSide side = ForeignSide.Right)")]
+    [InlineData("public static ForeignApp Attach(string program, int size = 300, ForeignSide side = ForeignSide.Right, int length = 0)")]
     [InlineData("public static ForeignApp Watch(string program)")]
     [InlineData("public bool IsOpen")]
     [InlineData("public string Title")]
@@ -87,9 +90,11 @@ public class ForeignAppTests
     [InlineData("public event Action<string>? TextChanged")]
     [InlineData("public Task<string> ReadTextAsync()")]
     [InlineData("public Task<IReadOnlyList<ForeignElement>> ReadElementsAsync()")]
+    [InlineData("public Task<IReadOnlyList<ForeignElement>> FindAsync(string name)")]
     [InlineData("public Task<bool> ClickAsync(string name)")]
     [InlineData("public Task<bool> SetTextAsync(string text)")]
     [InlineData("public Task<bool> SetValueAsync(string name, string value)")]
+    [InlineData("public Task<string?> ReadValueAsync(string name)")]
     public void The_prompt_documents_what_the_helper_really_has(string member)
     {
         ForeignAppGuidance.Notes.Should().Contain(member);
@@ -134,6 +139,32 @@ public class ForeignAppTests
     {
         ForeignApp.Place(new(400, 100, 1000, 700), Screen, 120, ForeignSide.Bottom).Should().Be(new ForeignApp.Rect(400, 700, 1000, 820));
         ForeignApp.Place(new(400, 100, 1000, 1000), Screen, 120, ForeignSide.Bottom).Should().Be(new ForeignApp.Rect(400, 880, 1000, 1000));
+    }
+
+    [Fact]
+    public void A_shorter_panel_sits_at_the_lower_end_of_a_side()
+    {
+        ForeignApp.Place(new(400, 100, 1000, 700), Screen, 300, ForeignSide.Right, 200).Should().Be(new ForeignApp.Rect(1000, 500, 1300, 700));
+        ForeignApp.Place(new(400, 100, 1000, 700), Screen, 300, ForeignSide.Left, 200).Should().Be(new ForeignApp.Rect(100, 500, 400, 700));
+    }
+
+    [Fact]
+    public void A_shorter_panel_lies_in_the_corner_when_the_window_fills_the_screen()
+    {
+        // A maximised window keeps its title bar and its buttons free.
+        ForeignApp.Place(Screen, Screen, 300, ForeignSide.Right, 200).Should().Be(new ForeignApp.Rect(1620, 840, 1920, 1040));
+    }
+
+    [Fact]
+    public void A_shorter_panel_sits_at_the_right_end_of_the_bottom()
+    {
+        ForeignApp.Place(new(400, 100, 1000, 700), Screen, 120, ForeignSide.Bottom, 250).Should().Be(new ForeignApp.Rect(750, 700, 1000, 820));
+    }
+
+    [Fact]
+    public void A_length_beyond_the_edge_is_the_whole_edge()
+    {
+        ForeignApp.Place(new(400, 100, 1000, 700), Screen, 300, ForeignSide.Right, 5000).Should().Be(new ForeignApp.Rect(1000, 100, 1300, 700));
     }
 
     [Fact]

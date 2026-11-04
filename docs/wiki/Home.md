@@ -41,6 +41,7 @@ N.E.O. comes in three flavours that share the same core: a **desktop host** (WPF
 - [[Live-MCP]] — Every generated app is an MCP server (Claude calls into it, reads state, subscribes)
 - [[Frozen-Mode]] — Export a Live-MCP app as a standalone MCP-server executable
 - [[Channels]] — Generated apps that push prompts back into Claude
+- [[Claude Bridge]] — The same in the Claude desktop app: a docked panel types the prompts into the session
 
 ### Reference
 

@@ -37,13 +37,16 @@ _notepad.Closed += () => count.Text = "Notepad is closed";
 await _notepad.ClickAsync("Save");                     // presses a button or menu item by name; false when there is none
 await _notepad.SetTextAsync(sorted);                   // replaces the main text; false when the program does not allow it
 var controls = await _notepad.ReadElementsAsync();     // what is in its window
+var saves = await _notepad.FindAsync("Save");          // the controls whose name contains this, in the whole window
+var field = await _notepad.ReadValueAsync("Search");   // the text of a named field; null when there is none
 
 ForeignApp.Attach("excel", size: 120, side: ForeignSide.Bottom);   // a bar below the window
+ForeignApp.Attach("paint", size: 220, length: 280);    // a box at the lower end of the right side
 ForeignApp.Watch("notepad");                           // read and use it without docking
 ```
 
 - Lines always end with `\n`, whatever the program uses. Notepad ends them with a lone `\r`, and code that splits at `\n` would see one long line.
-- The panel goes to the wanted side, to the other one when there is no room, and over the window's edge when the window fills the screen.
+- The panel goes to the wanted side, to the other one when there is no room, and over the window's edge when the window fills the screen. With a `length` it is shorter than the edge and sits at its lower end: over a maximised window it lies in the corner and leaves the title bar and its buttons free.
 
 ## How it works
 
@@ -51,7 +54,8 @@ ForeignApp.Watch("notepad");                           // read and use it withou
 - **Docking:** a background thread looks 33 times a second where the window is and moves the panel there. The panel is no child or owned window of the other program, on purpose: an owned window would end with its owner and tie the two programs' input together, so one that hangs would hang the other. When the program comes to the front, the panel is raised above everything without taking the keyboard.
 - **Leaving N.E.O.:** the window that runs the app normally follows N.E.O., and shows *Generating…* while N.E.O. is minimised. `ForeignApp` marks the process as docked (`AppDomain` data, because the helper may not know N.E.O. in an exported program), and the window then ignores all of that.
 - **A new version of the tool:** a change that can be patched in leaves all of this running. One that cannot replaces the tool in the same process, and each version has its own copy of `ForeignApp`, so the window that runs the app tells them through `AppDomain` data that their version is over, and they stop. A new `Attach` takes the window over as it is, with what it looked like before it first docked, so the title bar still comes back when the program ends. A version that does not dock gets a normal window back. In one version, a window docks to one program: after a later `Attach`, the earlier one only reads and uses its program.
-- **Reading and using:** UI Automation through its COM interface, declared in the helper, because the managed wrapper exists only for WPF programs. The text comes from the largest document or edit field in the window.
+- **Reading and using:** UI Automation through its COM interface, declared in the helper, because the managed wrapper exists only for WPF programs. The text comes from the largest document or edit field in the window. A control is looked for by name in the whole window, not only among its first ones: in a browser or an Electron app the controls that matter lie deep. Such an app may build its accessibility tree only when something asks, so the first look can come back nearly empty.
+- **Claude Code itself:** the [[Claude Bridge]] is a panel of this kind for the Claude desktop app. It types the prompts that N.E.O. apps send with `Ai.Trigger` into the session, which the desktop app does not take as channels.
 - **What the model sees:** when a prompt names a running program, by its process or by what its title calls it (`Bericht.txt - Editor` is named by "Editor", not by "Bericht"), N.E.O. adds the structure of its window to what the model reads, and not to the history. Names only where they name a control. What a text, list item or document says stays on your PC, as does everything the finished tool reads while it runs, unless you ask the tool to send it somewhere.
 
 ## Limits

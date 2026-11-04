@@ -131,6 +131,15 @@ builder.Services
             "   Use neo-preview tools (set_property, inject_data, read_data, patch_preview, etc.) to act on it,\n" +
             "   or call other MCP tools (web search, file ops, etc.) if the instruction requires it.\n\n" +
 
+            "=== CLAUDE DESKTOP APP: THE CLAUDE BRIDGE ===\n" +
+            "Channels arrive only in the terminal CLI started with --dangerously-load-development-channels server:neo-preview,\n" +
+            "not in the Claude desktop app. There, on Windows, start the Claude bridge when an app you build uses Ai.Trigger:\n" +
+            "call get_session with 'self' (a tool of the desktop app), pass its title and link to start_claude_bridge, and tell\n" +
+            "the user that a small panel now sits at the lower right of the Claude window. The bridge types each Ai.Trigger\n" +
+            "prompt into this session's prompt box while this session is in front, Claude is not working and the box is empty.\n" +
+            "Such a message starts with 'From the N.E.O. app \"<window id>\":' and what follows is a user_trigger event:\n" +
+            "act on it as described above.\n\n" +
+
             "=== Neo.App.Api — COMPLETE API REFERENCE ===\n" +
             "The Neo.App.Api assembly is auto-referenced by every generated app. Do NOT search the codebase\n" +
             "or grep for this API — the signatures below are complete and authoritative.\n\n" +

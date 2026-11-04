@@ -33,6 +33,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The Claude bridge is an app like any other: start_claude_bridge compiles it at run time, together with the
+      ForeignApp helper as source (as the desktop hosts do for every app), and shows it in a window of its own.
+      Neither is compiled into the server.
+    -->
+    <Compile Remove="Bridge\**" />
+    <EmbeddedResource Include="Bridge\ClaudeBridge.cs" LogicalName="ClaudeBridge.cs" />
+    <EmbeddedResource Include="..\Neo.App.Core\ForeignApp.cs" LogicalName="ForeignApp.cs" Link="Bridge\ForeignApp.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Neo.McpServer.Tests" />
   </ItemGroup>
 

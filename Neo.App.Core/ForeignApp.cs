@@ -43,6 +43,7 @@ namespace Neo.App
         private bool _dock;
         private readonly int _size;
         private readonly ForeignSide _side;
+        private readonly int _length;
         private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
         private readonly object? _appVersion = AppDomain.CurrentDomain.GetData(AppVersionMark);
         private volatile bool _stopped;
@@ -57,12 +58,13 @@ namespace Neo.App
         private Action<string>? _textChanged;
         private string? _lastText;
 
-        private ForeignApp(string program, bool dock, int size, ForeignSide side)
+        private ForeignApp(string program, bool dock, int size, ForeignSide side, int length)
         {
             _program = program;
             _dock = dock;
             _size = size;
             _side = side;
+            _length = length;
 
             if (!OperatingSystem.IsWindows())
                 return;
@@ -80,10 +82,12 @@ namespace Neo.App
         /// </summary>
         /// <param name="program">Its process name ("notepad", "EXCEL"), or a part of its window title.</param>
         /// <param name="size">The width of the panel in device-independent pixels (its height when docked at the bottom).</param>
-        public static ForeignApp Attach(string program, int size = 300, ForeignSide side = ForeignSide.Right) => new(program, true, size, side);
+        /// <param name="length">How long the panel is along the window's edge, in device-independent pixels; 0 makes it as long
+        /// as the edge. A shorter panel sits at the lower end of a side, or at the right end of the bottom.</param>
+        public static ForeignApp Attach(string program, int size = 300, ForeignSide side = ForeignSide.Right, int length = 0) => new(program, true, size, side, length);
 
         /// <summary>The same without docking: this app stays where it is and only reads and uses the other program.</summary>
-        public static ForeignApp Watch(string program) => new(program, false, 0, ForeignSide.Right);
+        public static ForeignApp Watch(string program) => new(program, false, 0, ForeignSide.Right, 0);
 
         public string Program => _program;
 
@@ -115,6 +119,17 @@ namespace Neo.App
         /// <summary>The controls in its window, in the order they appear. Empty when it is not open.</summary>
         public Task<IReadOnlyList<ForeignElement>> ReadElementsAsync() => Task.Run<IReadOnlyList<ForeignElement>>(() =>
             _target is { } target ? Walk(target.Handle, MaxElements).Select(e => e.Described).ToList() : []);
+
+        /// <summary>
+        /// The controls whose name contains this text, anywhere in its window, also deep inside a large one (a browser,
+        /// an Electron app), in the order they appear. Empty when there are none or it is not open.
+        /// </summary>
+        public Task<IReadOnlyList<ForeignElement>> FindAsync(string name) => Task.Run<IReadOnlyList<ForeignElement>>(() =>
+            _target is { } target ? Guarded(() => Containing(target.Handle, name)) ?? [] : []);
+
+        /// <summary>Reads the text of a named field of the program. Null when there is none.</summary>
+        public Task<string?> ReadValueAsync(string name) => Task.Run(() => Guarded(() =>
+            _target is { } target && Named(target.Handle, name) is { } element ? TextOf(element) : null));
 
         /// <summary>Presses a button or menu item of the program by its name. False when there is none.</summary>
         public Task<bool> ClickAsync(string name) => Task.Run(() => Guarded(() =>
@@ -240,7 +255,8 @@ namespace Neo.App
                 Raise();
             }
 
-            var place = Place(VisibleFrame(target), WorkAreaOf(target), (int)Math.Round(_size * Scale(target)), _side);
+            var scale = Scale(target);
+            var place = Place(VisibleFrame(target), WorkAreaOf(target), (int)Math.Round(_size * scale), _side, (int)Math.Round(_length * scale));
             if (place != _placed)
             {
                 SetWindowPos(_own, IntPtr.Zero, place.Left, place.Top, place.Width, place.Height, SWP_NOZORDER | SWP_NOACTIVATE);
@@ -290,13 +306,17 @@ namespace Neo.App
             _looksDocked = false;
         }
 
-        /// <summary>Where the panel goes: at the wanted side, at the other one if there is no room, else over the window's edge.</summary>
-        internal static Rect Place(Rect window, Rect workArea, int size, ForeignSide side)
+        /// <summary>
+        /// Where the panel goes: at the wanted side, at the other one if there is no room, else over the window's edge.
+        /// A panel shorter than the edge sits at its lower end (at the bottom: its right end).
+        /// </summary>
+        internal static Rect Place(Rect window, Rect workArea, int size, ForeignSide side, int length = 0)
         {
             if (side == ForeignSide.Bottom)
             {
-                var top = window.Bottom + size <= workArea.Bottom ? window.Bottom : window.Bottom - size;
-                return new Rect(window.Left, top, window.Right, top + size);
+                var below = window.Bottom + size <= workArea.Bottom ? window.Bottom : window.Bottom - size;
+                var start = length > 0 && length < window.Width ? window.Right - length : window.Left;
+                return new Rect(start, below, window.Right, below + size);
             }
 
             bool fitsRight = window.Right + size <= workArea.Right, fitsLeft = window.Left - size >= workArea.Left;
@@ -304,7 +324,8 @@ namespace Neo.App
                 : fitsLeft ? window.Left - size
                 : fitsRight ? window.Right
                 : window.Right - size;
-            return new Rect(left, window.Top, left + size, window.Bottom);
+            var top = length > 0 && length < window.Height ? window.Bottom - length : window.Top;
+            return new Rect(left, top, left + size, window.Bottom);
         }
 
         private static Rect VisibleFrame(IntPtr window)
@@ -420,15 +441,16 @@ namespace Neo.App
             }
         }
 
-        private static string? ReadMainText(IntPtr window) => Guarded(() =>
+        private static string? ReadMainText(IntPtr window) => Guarded(() => MainTextElement(window) is { } element ? TextOf(element) : null);
+
+        private static string? TextOf(IElement element)
         {
-            if (MainTextElement(window) is not { } element) return null;
             var text = element.GetCurrentPattern(TextPatternId) is ITextPattern pattern
                 ? pattern.DocumentRange.GetText(MaxTextLength)
                 : element.GetCurrentPattern(ValuePatternId) is IValuePattern value ? value.CurrentValue : null;
 
             return text == null ? null : OneLineEnd(text);
-        });
+        }
 
         // Notepad's text area ends its lines with a lone \r: code that splits at \n would see one line.
         internal static string OneLineEnd(string text) => text.Replace("\r\n", "\n").Replace('\r', '\n');
@@ -454,14 +476,28 @@ namespace Neo.App
             return best;
         }
 
+        // By its name, then by its id, then by a part of its name; enabled controls only. The whole window is searched,
+        // not just its first controls: in a browser or an Electron app the ones that matter lie deep.
         private static IElement? Named(IntPtr window, string name)
         {
-            var all = Walk(window, MaxElements);
-            bool Same(string other) => string.Equals(other, name, StringComparison.OrdinalIgnoreCase);
-            var match = all.FirstOrDefault(e => Same(e.Described.Name) && e.Described.IsEnabled)
-                ?? all.FirstOrDefault(e => Same(e.Described.Id) && e.Described.IsEnabled)
-                ?? all.FirstOrDefault(e => e.Described.IsEnabled && e.Described.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
-            return match?.Element;
+            var automation = Automation;
+            var root = automation.ElementFromHandle(window);
+            var enabled = automation.CreatePropertyCondition(IsEnabledPropertyId, true);
+            IElement? First(int property, int flags) => root.FindFirst(TreeScopeDescendants,
+                automation.CreateAndCondition(automation.CreatePropertyConditionEx(property, name, flags), enabled));
+
+            return First(NamePropertyId, IgnoreCase) ?? First(AutomationIdPropertyId, IgnoreCase) ?? First(NamePropertyId, IgnoreCase | MatchSubstring);
+        }
+
+        private static List<ForeignElement> Containing(IntPtr window, string name)
+        {
+            var automation = Automation;
+            var found = automation.ElementFromHandle(window).FindAll(TreeScopeDescendants,
+                automation.CreatePropertyConditionEx(NamePropertyId, name, IgnoreCase | MatchSubstring));
+            var result = new List<ForeignElement>();
+            for (int i = 0; i < found.Length && result.Count < MaxElements; i++)
+                result.Add(Describe(found.GetElement(i)));
+            return result;
         }
 
         private static bool SetValue(IElement element, string value)
@@ -472,7 +508,7 @@ namespace Neo.App
             return true;
         }
 
-        private sealed record Walked(IElement Element, ForeignElement Described, int Depth);
+        private sealed record Walked(ForeignElement Described, int Depth);
 
         private static List<Walked> Walk(IntPtr window, int limit)
         {
@@ -487,9 +523,12 @@ namespace Neo.App
             return result;
         }
 
+        private static ForeignElement Describe(IElement element) =>
+            new(TypeName(element.CurrentControlType), element.CurrentName ?? "", element.CurrentAutomationId ?? "", element.CurrentIsEnabled != 0);
+
         private static void Visit(ITreeWalker walker, IElement element, int depth, List<Walked> result, int limit)
         {
-            result.Add(new Walked(element, new ForeignElement(TypeName(element.CurrentControlType), element.CurrentName ?? "", element.CurrentAutomationId ?? "", element.CurrentIsEnabled != 0), depth));
+            result.Add(new Walked(Describe(element), depth));
             if (depth >= MaxDepth) return;
             for (var child = walker.GetFirstChildElement(element); child != null && result.Count < limit; child = walker.GetNextSiblingElement(child))
                 Visit(walker, child, depth + 1, result, limit);
@@ -607,9 +646,11 @@ namespace Neo.App
         // Slots that are not used still have to be there: the order is the interface. From UIAutomationClient.h.
 
         private const int InvokePatternId = 10000, ValuePatternId = 10002, TextPatternId = 10014;
-        private const int ControlTypePropertyId = 30003, BoundingRectanglePropertyId = 30001;
+        private const int ControlTypePropertyId = 30003, BoundingRectanglePropertyId = 30001, NamePropertyId = 30005,
+            IsEnabledPropertyId = 30010, AutomationIdPropertyId = 30011;
         private const int EditControlType = 50004, DocumentControlType = 50030;
         private const int TreeScopeDescendants = 4;
+        private const int IgnoreCase = 1, MatchSubstring = 2; // PropertyConditionFlags
 
         private static IAutomation? s_automation;
         private static IAutomation Automation => s_automation ??= (IAutomation)Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("ff48dba4-60ef-4201-aa87-54103eef594e"))!)!;
@@ -638,8 +679,8 @@ namespace Neo.App
             void CreateTrueCondition();
             void CreateFalseCondition();
             ICondition CreatePropertyCondition(int property, [MarshalAs(UnmanagedType.Struct)] object value);
-            void CreatePropertyConditionEx();
-            void CreateAndCondition();
+            ICondition CreatePropertyConditionEx(int property, [MarshalAs(UnmanagedType.Struct)] object value, int flags);
+            ICondition CreateAndCondition(ICondition first, ICondition second);
             void CreateAndConditionFromArray();
             void CreateAndConditionFromNativeArray();
             ICondition CreateOrCondition(ICondition first, ICondition second);
@@ -653,7 +694,7 @@ namespace Neo.App
         {
             void SetFocus();
             void GetRuntimeId();
-            void FindFirst();
+            IElement? FindFirst(int scope, ICondition condition);
             IElementArray FindAll(int scope, ICondition condition);
             void FindFirstBuildCache();
             void FindAllBuildCache();

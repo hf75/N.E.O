@@ -33,14 +33,15 @@ public sealed partial class PreviewTools
 
     /// <summary>Closes all preview windows.</summary>
     [McpServerTool(Name = "close_all_windows")]
-    [Description("Closes all running preview windows at once.")]
+    [Description("Closes all running preview windows at once. The Claude bridge stays: close_preview with windowId 'claude-bridge' closes it.")]
     public static async Task<string> CloseAllWindows(PreviewSessionManager preview)
     {
-        var running = preview.GetRunningWindowIds();
+        var running = preview.GetRunningWindowIds().Where(id => !ClaudeBridgeApp.Is(id)).ToList();
         if (running.Count == 0)
             return "No windows are running.";
 
-        await preview.StopAllAsync();
+        foreach (var id in preview.GetAllWindowIds().Where(id => !ClaudeBridgeApp.Is(id)))
+            await preview.StopAsync(id);
         return $"Closed {running.Count} window(s): {string.Join(", ", running)}";
     }
 
@@ -74,7 +75,8 @@ public sealed partial class PreviewTools
         PreviewSessionManager preview,
         [Description("Layout preset: 'side_by_side', 'top_bottom', 'left_half_right_stack', or 'grid'.")] string layout)
     {
-        var windowIds = preview.GetRunningWindowIds();
+        // The Claude bridge has its place at the Claude window.
+        var windowIds = preview.GetRunningWindowIds().Where(id => !ClaudeBridgeApp.Is(id)).ToList();
         if (windowIds.Count < 2)
             return $"Need at least 2 running windows for layout. Currently: {windowIds.Count}";
 

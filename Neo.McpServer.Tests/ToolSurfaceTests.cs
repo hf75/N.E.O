@@ -31,6 +31,8 @@ public class ToolSurfaceTests
         "inspect_app_api", "invoke_method", "read_observable", "raise_event", "simulate_input",
         // app network
         "list_running_apps",
+        // the Claude bridge (desktop app)
+        "start_claude_bridge",
     ];
 
     [Fact]

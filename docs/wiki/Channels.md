@@ -51,7 +51,7 @@ Claude calls `compile_and_preview` with code that includes the `Ai.Trigger` call
 - **Latency.** Trigger → new turn → tool calls → UI update is seconds, not milliseconds. Fine for "do the research" — terrible for "bounce a ball".
 - **Prompt injection.** Any text the running app passes into a trigger ends up in Claude's context. Don't run untrusted generated code with channels enabled.
 - **Single-window for now.** Multi-window routing of channel events is a future exercise.
-- **Claude Code only (for now).** Claude Desktop / Cowork don't support channels yet.
+- **Claude Code CLI only.** The Claude desktop app and Cowork don't take channels. In the desktop app on Windows, the [[Claude Bridge]] types the prompts of `Ai.Trigger` into the session instead.
 
 ## Enabling it
 

@@ -92,6 +92,7 @@ Open <http://localhost:5099>. Full guide: [docs/wiki/Web-App.md](docs/wiki/Web-A
 - **Optional Python** integration via embedded Python 3.11 (desktop only).
 - **[Live-MCP](docs/wiki/Live-MCP.md)** — every generated app is itself an MCP server. Annotate methods with `[McpCallable]` and properties with `[McpObservable]` and Claude Code can call them directly, read state, subscribe to changes. Works in two modes: live inside N.E.O. (Dev-Mode) or as a standalone exported `.exe` (Frozen-Mode) that anyone can register with `claude mcp add`.
 - **[Channel back-reporting](docs/wiki/Channels.md)** — generated apps can push prompts back into Claude Code to drive business logic without pre-coding. Combined with Live-MCP, this closes the loop: Claude drives the app, the app drives Claude.
+- **[Claude Bridge](docs/wiki/Claude-Bridge.md)** — the same in the Claude desktop app, which takes no channels: an exoskeleton panel docked to the Claude window types each prompt of `Ai.Trigger` into the session (Windows).
 - **[Excel MCP](docs/wiki/Excel-MCP.md)** — a second MCP server that gives Claude read/write access to the active Excel workbook via an in-process COM add-in.
 
 ## Architecture at a glance
@@ -129,6 +130,7 @@ Everything lives in [docs/wiki/](docs/wiki/Home.md). Start with [Home](docs/wiki
 - [Frozen-Mode](docs/wiki/Frozen-Mode.md) — exporting Live-MCP apps as standalone executables
 - [Excel MCP](docs/wiki/Excel-MCP.md) — live Excel integration
 - [Channels](docs/wiki/Channels.md) — generated apps that push prompts back to Claude
+- [Claude Bridge](docs/wiki/Claude-Bridge.md) — the same in the Claude desktop app
 - [Architecture](docs/wiki/Architecture.md) — how the projects fit together
 - [Features Overview](docs/wiki/Features-Overview.md) · [Hot Reload](docs/wiki/Hot-Reload.md) · [Living Apps](docs/wiki/Living-Apps.md) · [App Network](docs/wiki/App-Network.md) · [Shared Sessions](docs/wiki/Shared-Sessions.md) · [Exoskeleton](docs/wiki/Exoskeleton.md) · [Fusion](docs/wiki/Fusion.md) · [Teleport](docs/wiki/Teleport.md) · [Web Search](docs/wiki/Web-Search.md) · [Export and Import](docs/wiki/Export-and-Import.md) · [Settings](docs/wiki/Settings-and-Configuration.md) · [Shortcuts](docs/wiki/Keyboard-Shortcuts.md) · [Troubleshooting](docs/wiki/Troubleshooting.md)
 

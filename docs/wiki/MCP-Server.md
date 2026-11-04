@@ -410,7 +410,7 @@ Lists all running preview windows with their IDs and status. No parameters.
 
 ### `close_all_windows`
 
-Closes all running preview windows at once. No parameters.
+Closes all running preview windows at once. No parameters. The [[Claude Bridge]] stays; `close_preview` with `windowId: "claude-bridge"` closes it.
 
 ### `position_window`
 
@@ -566,6 +566,16 @@ claude --dangerously-load-development-channels server:neo-preview
 ```
 
 The `server:neo-preview` part matches the server's name in your `.claude/settings.json`. Then just describe an app **and** the event behaviour you want ("when I click X, do Y", "after 10 seconds, do Z") — Claude will include `Ai.Trigger(...)` calls automatically.
+
+### In the Claude desktop app: `start_claude_bridge`
+
+The desktop app takes no channels. On Windows, `start_claude_bridge` docks a small panel to the Claude window that types each `Ai.Trigger` prompt into the session, starting with `From the N.E.O. app "<window id>":`, while the session is in front, Claude is not working and the prompt box is empty.
+
+**Parameters:**
+- `sessionTitle` (string, required) — the session's title, from the desktop app's `get_session` with `self`.
+- `sessionLink` (string, optional) — the session's `claude://` link from the same call; the panel offers to open the session with it.
+
+Calling it again binds the running bridge anew. Details: [[Claude Bridge]].
 
 ### Full details
 

@@ -675,6 +675,27 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Calls a method of the running Claude bridge. Outside Claude's loop protection: these are the server's own
+    /// calls (a prompt of Ai.Trigger handed over, the session it belongs to), not a chain of Claude's.
+    /// Null when no bridge runs or it did not answer.
+    /// </summary>
+    public async Task<MethodResultMessage?> CallClaudeBridgeAsync(string method, params string[] args)
+    {
+        var frame = new InvokeMethodMessage(method, System.Text.Json.JsonSerializer.Serialize(args), 0);
+        var env = await SendRequestAsync(ClaudeBridgeApp.WindowId, IpcTypes.InvokeMethod, Json.ToJson(frame), 10);
+        return env?.Type == IpcTypes.MethodResult ? Json.FromJson<MethodResultMessage>(env.PayloadJson) : null;
+    }
+
+    private async Task HandToClaudeBridgeAsync(string windowId, string? prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt) || GetRunningSession(ClaudeBridgeApp.WindowId) is not { } bridge) return;
+        var result = await CallClaudeBridgeAsync("Deliver", windowId, prompt);
+        bridge.AddLog(result is { Success: true }
+            ? $"[BRIDGE] prompt of '{windowId}' handed over"
+            : $"[BRIDGE] prompt of '{windowId}' NOT handed over: {result?.Error ?? "no answer"}");
+    }
+
+    /// <summary>
     /// Phase 2B: tell the app to start emitting <see cref="ObservableValueMessage"/> frames
     /// for the named property. Idempotent app-side. Called from the resources/subscribe handler
     /// in Program.cs and from the manifest re-registration path on hot-reload.
@@ -934,6 +955,9 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                                 _loopProtection.OnAppEvent(s.WindowId, appEvt.Hops);
                                 // Push to Claude via channel notification
                                 _ = PushChannelEventAsync(s.WindowId, appEvt);
+                                // The Claude desktop app takes no channels: there the bridge, if one runs, types the prompt in.
+                                if (appEvt.EventType == "user_trigger" && !ClaudeBridgeApp.Is(s.WindowId))
+                                    _ = HandToClaudeBridgeAsync(s.WindowId, appEvt.Value);
                             }
                             break;
 
@@ -950,6 +974,9 @@ public sealed class PreviewSessionManager : IAsyncDisposable
                                              $"{manifest.Callables.Count} callables, " +
                                              $"{manifest.Observables.Count} observables, " +
                                              $"{manifest.Triggerables.Count} triggerables.");
+
+                                    // The server itself talks to the bridge; it is no app for Claude to use.
+                                    if (ClaudeBridgeApp.Is(s.WindowId)) break;
 
                                     // Phase 2: register one MCP tool per [McpCallable] method.
                                     // Hot-reload semantics live in the registry (signature-hash dedup),

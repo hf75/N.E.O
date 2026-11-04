@@ -42,10 +42,13 @@ public sealed class CompilationPipeline
     /// Avalonia assemblies are resolved from the PluginWindowAvalonia build output (fast).
     /// Additional NuGet packages (non-Avalonia) are resolved via NuGetPackageService.
     /// </summary>
+    /// <param name="remember">False for a build that is not the user's app (the Claude bridge): what patch_preview and
+    /// save_session take as the last app stays as it was.</param>
     public async Task<CompilationResult> CompileAsync(
         IReadOnlyList<string> sourceCode,
         IReadOnlyDictionary<string, string>? nugetPackages = null,
         string framework = "avalonia",
+        bool remember = true,
         CancellationToken ct = default)
     {
         var errors = new List<string>();
@@ -112,9 +115,12 @@ public sealed class CompilationPipeline
             var dllBytes = await File.ReadAllBytesAsync(compiledPath, ct);
 
             // Remember source code and framework for patch_preview
-            LastSourceCode = sourceCode.ToList();
-            LastNuGetPackages = nugetPackages;
-            LastFramework = framework;
+            if (remember)
+            {
+                LastSourceCode = sourceCode.ToList();
+                LastNuGetPackages = nugetPackages;
+                LastFramework = framework;
+            }
 
             // Dependencies to stream to PluginWindow: only NuGet DLLs (framework DLLs are already in the child)
             return new CompilationResult(
