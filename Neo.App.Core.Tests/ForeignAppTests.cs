@@ -291,6 +291,13 @@ public class ForeignAppTests
     }
 
     [Fact]
+    public void A_title_with_an_en_dash_names_the_program_after_it_and_not_the_folder_before_it()
+    {
+        ForeignPrograms.Match("Ein Tool für den Datei-Explorer", [Window("explorer", "Vorgarten – Datei-Explorer")]).Should().ContainSingle();
+        ForeignPrograms.Match("Was liegt im Vorgarten?", [Window("explorer", "Vorgarten – Datei-Explorer")]).Should().BeEmpty();
+    }
+
+    [Fact]
     public void A_title_without_a_dash_names_the_program_as_a_whole()
     {
         ForeignPrograms.Match("Ein Verlauf für den Rechner", [Window("CalculatorApp", "Rechner")]).Should().ContainSingle();

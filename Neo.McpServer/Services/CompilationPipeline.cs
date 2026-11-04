@@ -104,7 +104,7 @@ public sealed class CompilationPipeline
             System.Diagnostics.Debug.WriteLine($"[CompilationPipeline] Compiling with {allAdditionalDlls.Count} additional DLLs...");
 
             var compiledPath = await compilationService.CompileToDllAsync(
-                sourceCode,
+                framework == "wpf" ? sourceCode : WithForeignApp(sourceCode),
                 dllOutputPath,
                 nugetDllPaths: Array.Empty<string>().ToList(),
                 additionalDllPaths: allAdditionalDlls,
@@ -152,6 +152,27 @@ public sealed class CompilationPipeline
         IReadOnlyList<string> Errors);
 
     /// <summary>
+    /// The helper for other programs goes in as source where an app uses it, as the desktop hosts do it for every app: the
+    /// app then needs nothing of the window that runs it, and an exported one nothing of N.E.O. What the app is remembered
+    /// as (patch_preview, extract_code) stays its own code.
+    /// </summary>
+    internal static IReadOnlyList<string> WithForeignApp(IReadOnlyList<string> sources)
+    {
+        if (!sources.Any(s => s.Contains("ForeignApp", StringComparison.Ordinal))
+            || sources.Any(s => System.Text.RegularExpressions.Regex.IsMatch(s, @"\bclass\s+ForeignApp\b")))
+            return sources;
+        return [.. sources, ForeignAppSource.Value];
+    }
+
+    private static readonly Lazy<string> ForeignAppSource = new(() =>
+    {
+        using var stream = typeof(CompilationPipeline).Assembly.GetManifestResourceStream("ForeignApp.cs")
+            ?? throw new InvalidOperationException("ForeignApp.cs is missing from Neo.McpServer's resources.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    });
+
+    /// <summary>
     /// Exports the given source code as a standalone Avalonia executable.
     /// The exported app includes the Avalonia wrapper (window, exception handler, assembly preloader).
     /// </summary>
@@ -188,7 +209,7 @@ public sealed class CompilationPipeline
             var appHostPath = AppHostTemplates.EnsureExtracted(template);
 
             // Build source code: user's code + the appropriate wrapper.
-            var allCode = sourceCode.ToList();
+            var allCode = WithForeignApp(sourceCode).ToList();
             allCode.Add(GetAvaloniaExportWrapper(appName, mcpMode));
 
             // Resolve the packages the plugin window does not already ship (same rule as CompileAsync)

@@ -61,9 +61,10 @@ namespace Neo.App
 
 
             // "Bericht.txt - Editor": the program is at the end, and what stands before it is the user's document.
+            // Edge and the Explorer of a German Windows separate with an en dash.
             var title = window.Title;
-            var dash = title.LastIndexOf(" - ", StringComparison.Ordinal);
-            yield return dash >= 0 ? title[(dash + 3)..].Trim() : title.Trim();
+            var separators = Regex.Matches(title, @"\s[-–—]\s");
+            yield return (separators.Count > 0 ? title[(separators[^1].Index + separators[^1].Length)..] : title).Trim().Trim('​', '‎', '‏');
         }
 
         private static bool Mentions(string prompt, string name) =>

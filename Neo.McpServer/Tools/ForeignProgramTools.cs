@@ -27,7 +27,8 @@ public sealed class ForeignProgramTools
         "A method marked as changing something waits until the person allows it in that app's window.\n";
 
     [McpServerTool(Name = "inspect_foreign_program")]
-    [Description("Without a program: lists the programs open on this PC, each with its process name and window title. With one: " +
+    [Description("Without a program: lists the programs open on this PC, each with its process name and what its window title " +
+        "calls the program (not the document or page open in it). With one: " +
         "the structure of its window, for a preview that docks to it (ForeignApp) or becomes its interface. Controls by their name " +
         "in quotes, their id, or an address in brackets (\"Menge:>Edit\" = the first field after the label \"Menge:\", \"Edit:2\" = " +
         "the second field); the labels of fields are shown, of everything the program shows only its shape (\"Xxxxx: 999,99\"); a " +
@@ -42,9 +43,9 @@ public sealed class ForeignProgramTools
         {
             var open = ForeignWindows.Open().Where(w => !w.Process.StartsWith("Neo.", StringComparison.OrdinalIgnoreCase)).ToList();
             if (open.Count == 0) return "No program has a window open.";
-            var list = new StringBuilder("Open programs (process name, window title), topmost first:\n");
+            var list = new StringBuilder("Open programs (process name, and what the window title calls the program), topmost first:\n");
             foreach (var w in open.GroupBy(w => w.Process, StringComparer.OrdinalIgnoreCase).Select(g => g.First()))
-                list.Append("- ").Append(w.Process).Append(": \"").Append(w.Title).Append("\"\n");
+                list.Append("- ").Append(w.Process).Append(": \"").Append(ProgramPart(w.Title)).Append("\"\n");
             return list.ToString();
         }
 
@@ -90,6 +91,16 @@ public sealed class ForeignProgramTools
         {
             return "ERROR: " + ex.Message;
         }
+    }
+
+    /// <summary>
+    /// "Bericht.txt - Editor" is the program Editor with the person's document in it: only the program goes out. Edge and the
+    /// Explorer of a German Windows separate with an en dash.
+    /// </summary>
+    internal static string ProgramPart(string title)
+    {
+        var separators = System.Text.RegularExpressions.Regex.Matches(title, @"\s[-–—]\s");
+        return (separators.Count > 0 ? title[(separators[^1].Index + separators[^1].Length)..] : title).Trim().Trim('​', '‎', '‏');
     }
 
     // An interface ran into a program that changed: the caller gets what is there now, to repair the interface with.
