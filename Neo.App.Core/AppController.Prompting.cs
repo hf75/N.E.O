@@ -67,11 +67,12 @@ namespace Neo.App
         /// The apps on the app network right now, described for the prompt — every N.E.O. app on
         /// this machine except the one in our own window (the AI is writing that one).
         /// </summary>
-        private List<string> OtherRunningApps()
+        /// <param name="includeOwn">Our own one too: for a program the AI writes beside it, a part torn out of it.</param>
+        private List<string> OtherRunningApps(bool includeOwn = false)
         {
             try
             {
-                var ownPid = ChildProcessService?.ChildProcessId;
+                var ownPid = includeOwn ? null : ChildProcessService?.ChildProcessId;
                 return Neo.App.Apps.Running(includeSelf: true)
                     .Where(a => ownPid == null || a.ProcessId != ownPid)
                     .Select(a => a.Describe())
@@ -174,7 +175,7 @@ namespace Neo.App
                     throw new InvalidOperationException("AI agent is not configured.");
 
                 AiAgent.SetInput("SystemMessage", req.SystemMessage ?? string.Empty);
-                AiAgent.SetInput("Prompt", (req.Prompt ?? string.Empty) + _namedFilesForTheModel + _foreignProgramsForTheModel + _fusionForTheModel);
+                AiAgent.SetInput("Prompt", (req.Prompt ?? string.Empty) + _namedFilesForTheModel + _foreignProgramsForTheModel + _fusionForTheModel + _fissionForTheModel);
                 AiAgent.SetInput("History", req.History ?? string.Empty);
                 AiAgent.SetInput("JsonSchema", req.JsonSchema ?? string.Empty);
 

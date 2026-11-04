@@ -42,6 +42,7 @@ namespace Neo.App
             FusionMessages.Result => ResultOfTheMergeAsync(payload),
             LinkMessages.Offer => Task.FromResult(LinkOffered(payload)),
             LinkMessages.Report => LinkReportAsync(payload),
+            FissionMessages.TearOut => TornOutAsync(payload),
             _ => Task.FromResult<string?>(null),
         };
 

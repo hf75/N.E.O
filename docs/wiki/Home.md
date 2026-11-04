@@ -35,6 +35,7 @@ N.E.O. comes in three flavours that share the same core: a **desktop host** (WPF
 - [[Exoskeleton]] — New features for programs you have no source of: a panel docks to their window, reads them and uses them
 - [[Program Interfaces]] — Every program gets an interface: other apps and Claude call the old program like a service, a change waits for your yes, and an update of the program is repaired while the call waits
 - [[Fusion]] — Drag one running program onto another: one program that does both, with the data of both
+- [[Fission]] — The other way round: tear a part out of a running program with Alt, and it becomes a program of its own that gets its data from the first
 - [[App Link]] — Or link them: both keep running as they are, the AI wires them together, nothing is saved, and it ends when one of them does
 - [[Teleport]] — In a shared session, the running app moves to another person's PC with everything in it
 - [[Web Search]] — Apps that answer from the current web with their sources; Claude looks things up while it builds, if you want

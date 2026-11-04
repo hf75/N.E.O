@@ -82,6 +82,40 @@ namespace Neo.PluginWindowAvalonia
             return text.ToString();
         }
 
+        /// <summary>
+        /// A part of a running app, torn out of it (Fission): the part and what is in it, by their addresses in the whole app,
+        /// so that the model finds the part in the source. What someone entered goes as its shape, as for a link.
+        /// </summary>
+        public static string DescribePart(Control root, Control part, string code)
+        {
+            var text = new StringBuilder("Controls of the part (address in the app, then what it shows now; a text that is not in the source only as its shape, with letters as x and digits as 9):\n");
+            var counted = new Dictionary<Type, int>();
+            int lines = 0;
+
+            foreach (var control in Of(root))
+            {
+                counted.TryGetValue(control.GetType(), out var number);
+                counted[control.GetType()] = number + 1;
+                if (lines >= MaxLines || (!ReferenceEquals(control, part) && !part.IsVisualAncestorOf(control))) continue;
+
+                var address = string.IsNullOrEmpty(control.Name) ? $"{control.GetType().Name}:{number}" : control.Name;
+                var line = Line(control, address, root, code) ?? (ReferenceEquals(control, part) ? address : null);
+                if (line == null) continue;
+                text.Append("  ").Append(line).Append('\n');
+                lines++;
+            }
+            if (lines >= MaxLines) text.Append("  (and more)\n");
+            return text.ToString();
+        }
+
+        /// <summary>The address of a control in the app, as the map gives it: its name, or its type and number.</summary>
+        public static string AddressOf(Control root, Control control)
+        {
+            if (!string.IsNullOrEmpty(control.Name) && control.TemplatedParent == null) return control.Name;
+            var same = Of(root).Where(c => c.GetType() == control.GetType()).ToList();
+            return $"{control.GetType().Name}:{Math.Max(0, same.IndexOf(control))}";
+        }
+
         private static string? Line(Control control, string address, Control root, string code)
         {
             string Shown(string? text) => InTheSource(text, code) ? Shorten(text) : Shape(text);

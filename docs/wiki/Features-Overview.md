@@ -186,6 +186,10 @@ Switch between frameworks in **Settings**:
 
 Drag the window of one running app onto another: one program that does both, with the data of both. The app you dropped it on keeps running and stays in use meanwhile. If it does not work out, the dropped window comes back with everything it held. See **[[Fusion]]**.
 
+## Fission
+
+The other way round: hold Alt, drag a part of a running app (a chart, a list, a group of fields) out of its window and let go. The part leaves the app, and a program of its own opens where you let go, getting its data from the app it came from over the app network. See **[[Fission]]**.
+
 ## App Link
 
 Drop one running app on the right half of another: both stay as they are, the AI reads them and suggests what they can do together, you tick what you want. No line of either changes and nothing is saved; the link ends when one of them does. See **[[App Link]]**.

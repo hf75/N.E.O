@@ -177,7 +177,24 @@ namespace Neo.IPC
     public record LinkOfferMessage(string Name, string Code, string Map, int ProcessId, string TargetName);
 
     /// <param name="Code">The source of the program: a text that is in there says nothing about what someone entered.</param>
-    public record LinkDescribeRequest(string Code);
+    /// <param name="Part">Only this control and what is in it (its address); null: the whole app.</param>
+    public record LinkDescribeRequest(string Code, string? Part = null);
+
+    /// <summary>What the window of an app tells its N.E.O. when a part is torn out of it (see Fission in the docs).</summary>
+    public static class FissionMessages
+    {
+        /// <summary>A part of the app was dragged out of its window with Alt held: it is to become a program of its own.</summary>
+        public const string TearOut = "fission-tear";
+    }
+
+    /// <param name="SourceName">What the app is called on the app network.</param>
+    /// <param name="Address">The part's address in the app: its name, or its type and number ("Border:3").</param>
+    /// <param name="Type">The part's type, a Border, a ListBox, a control of the app's own.</param>
+    /// <param name="Name">The part's name, when it has one.</param>
+    /// <param name="FirstText">The first text in it, to name the new program by; N.E.O. uses it only when the source has it.</param>
+    /// <param name="X">Where it was let go, in screen pixels.</param>
+    /// <param name="Width">The part's size, in device-independent pixels.</param>
+    public record FissionTearMessage(string SourceName, string Address, string Type, string? Name, string? FirstText, int X, int Y, double Width, double Height);
 
     public record LinkDescribedMessage(string Map);
 

@@ -640,8 +640,8 @@ namespace Neo.App
         public async Task<AppStateRestoredMessage?> RestoreAppStateAsync(RestoreAppStateRequest request) =>
             await AskForAppStateAsync(IpcTypes.RestoreAppState, Json.ToJson(request)) is { } json ? Json.FromJson<AppStateRestoredMessage>(json) : null;
 
-        public async Task<string?> DescribeForLinkAsync(string code) =>
-            await AskForAppStateAsync(IpcTypes.LinkDescribe, Json.ToJson(new LinkDescribeRequest(code))) is { } json ? Json.FromJson<LinkDescribedMessage>(json)?.Map : null;
+        public async Task<string?> DescribeForLinkAsync(string code, string? part = null) =>
+            await AskForAppStateAsync(IpcTypes.LinkDescribe, Json.ToJson(new LinkDescribeRequest(code, part))) is { } json ? Json.FromJson<LinkDescribedMessage>(json)?.Map : null;
 
         public async Task<LinkStartedMessage?> StartLinkAsync(LinkStartRequest request) =>
             await AskForAppStateAsync(IpcTypes.LinkStart, Json.ToJson(request)) is { } json ? Json.FromJson<LinkStartedMessage>(json) : null;

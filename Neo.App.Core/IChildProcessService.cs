@@ -47,7 +47,8 @@ namespace Neo.App
         double? AppWindowWidth => null;
 
         /// <summary>What the running app shows and holds, for the model that links it to another one, without what someone entered. Null: no answer.</summary>
-        Task<string?> DescribeForLinkAsync(string code) => Task.FromResult<string?>(null);
+        /// <param name="part">Only this control and what is in it (its address in the app), for a part torn out of it; null: the whole app.</param>
+        Task<string?> DescribeForLinkAsync(string code, string? part = null) => Task.FromResult<string?>(null);
 
         /// <summary>Runs the communicator of an app link in the window of the app. Null: no answer.</summary>
         Task<LinkStartedMessage?> StartLinkAsync(LinkStartRequest request) => Task.FromResult<LinkStartedMessage?>(null);

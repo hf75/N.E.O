@@ -169,6 +169,22 @@ namespace Neo.PluginWindowAvalonia
             pill.Opacity = on ? 1 : 0.55;
         }
 
+        /// <summary>The part that a drag out of the window with Alt would tear out (its place in the window), or none (null).</summary>
+        public void ShowTearTarget(Rect? part)
+        {
+            TearTarget.IsVisible = TearPill.IsVisible = part != null;
+            if (part is not { } p) return;
+            Avalonia.Controls.Canvas.SetLeft(TearTarget, p.X);
+            Avalonia.Controls.Canvas.SetTop(TearTarget, p.Y);
+            TearTarget.Width = p.Width;
+            TearTarget.Height = p.Height;
+            // Over the part, or below it when it starts at the top edge.
+            Avalonia.Controls.Canvas.SetLeft(TearPill, p.X + 6);
+            Avalonia.Controls.Canvas.SetTop(TearPill, p.Y >= 30 ? p.Y - 28 : p.Y + 6);
+        }
+
+        public bool TearTargetShown => TearTarget.IsVisible;
+
         /// <summary>The chip of an app link: it says with whom, and its cross ends the link.</summary>
         public void ShowLinkChip(string id, string text, Action end)
         {

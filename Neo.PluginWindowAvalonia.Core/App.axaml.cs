@@ -593,8 +593,12 @@ namespace Neo.PluginWindowAvalonia
                         string map;
                         try
                         {
-                            var code = Json.FromJson<LinkDescribeRequest>(env.PayloadJson)?.Code ?? "";
-                            map = await Dispatcher.UIThread.InvokeAsync(() => MainWin.GetLoadedUserControl() is { } root ? LinkControls.Describe(root, code) : "");
+                            var request = Json.FromJson<LinkDescribeRequest>(env.PayloadJson);
+                            var code = request?.Code ?? "";
+                            // A part torn out of the app: only what is in it.
+                            map = await Dispatcher.UIThread.InvokeAsync(() => MainWin.GetLoadedUserControl() is not { } root ? ""
+                                : request?.Part is { } part && LinkControls.Find(root, part) is { } found ? LinkControls.DescribePart(root, found, code)
+                                : LinkControls.Describe(root, code));
                         }
                         catch (Exception ex)
                         {
@@ -1007,6 +1011,21 @@ namespace Neo.PluginWindowAvalonia
             _links = new AppLinks(MainWin, AskHostAsync);
             Neo.App.AppNetwork.SystemHandler = HandleSystemMessageAsync;
             _fusionDrag = new FusionDrag(MainWin, () => !DockedToAnotherProgram && MainWin.GetLoadedUserControl() != null, DroppedOnAnotherApp);
+            _tear = new TearGesture(MainWin, () => !DockedToAnotherProgram && MainWin.GetLoadedUserControl() != null, TornOut);
+        }
+
+        private TearGesture? _tear;
+
+        // Fission: a part of the app was dragged out of its window. Its N.E.O. makes a program of its own of it.
+        private void TornOut(Avalonia.Controls.Control part, PixelPoint at)
+        {
+            if (MainWin.GetLoadedUserControl() is not { } root) return;
+            var firstText = (part is Avalonia.Controls.TextBlock own ? [own] : part.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>())
+                .Select(t => t.Text).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t));
+            var tear = new FissionTearMessage(Neo.App.AppNetwork.Published?.Name ?? MainWin.Title ?? "", LinkControls.AddressOf(root, part), part.GetType().Name,
+                string.IsNullOrEmpty(part.Name) ? null : part.Name, firstText, at.X, at.Y, part.Bounds.Width, part.Bounds.Height);
+            MainWin.ShowBanner("Tearing it out: it becomes a program of its own…", "#D07B1FA2", 0);
+            _ = AskHostAsync(FissionMessages.TearOut, Json.ToJson(tear));
         }
 
         private void DroppedOnAnotherApp(Neo.App.AppDescriptor target, PixelPoint cameFrom, bool link)
