@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using Avalonia;
@@ -15,19 +16,23 @@ namespace Neo.PluginWindowAvalonia
     /// <summary>
     /// Fission, the other way round from Fusion: with Alt held, the part of the app under the pointer stands out, and dragged
     /// out of the window with Alt it is torn out, and N.E.O. makes a program of its own of it. Let go inside the window,
-    /// nothing happens. A part is a piece of the layout that lies beside others, not a letter in a text.
+    /// nothing happens. A part is a piece of the layout that lies beside others, not a letter in a text. First the biggest
+    /// part under the pointer stands out, a column, a chart, a list; the mouse wheel goes to smaller ones and back.
     /// </summary>
     internal sealed class TearGesture
     {
         // How far the pointer goes before a press is a drag, in device-independent pixels.
         private const double StartAfter = 8;
         private const double MinWidth = 40, MinHeight = 24;
+        // A piece that covers more of the app than this is the app, not a part of it.
+        private const double MostOfTheApp = 0.75;
 
         private readonly MainWindow _window;
         private readonly Func<bool> _canTear;
         private readonly Action<Control, PixelPoint> _tornOut;
 
         private Control? _part;
+        private int _level; // 0: the biggest part under the pointer; the wheel goes to smaller ones
         private bool _pressed, _dragging;
         private Point _pressedAt;
         private Point _grab; // where in the part the pointer took it, so that its picture stays under the pointer
@@ -44,8 +49,15 @@ namespace Neo.PluginWindowAvalonia
             window.AddHandler(InputElement.PointerMovedEvent, OnMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
             window.AddHandler(InputElement.PointerPressedEvent, OnPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
             window.AddHandler(InputElement.PointerReleasedEvent, OnReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
-            window.AddHandler(InputElement.KeyUpEvent, (_, e) => { if (e.Key is Key.LeftAlt or Key.RightAlt && !_pressed) Show(null); }, RoutingStrategies.Tunnel, handledEventsToo: true);
-            window.PointerExited += (_, _) => { if (!_pressed) Show(null); };
+            window.AddHandler(InputElement.PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel, handledEventsToo: true);
+            window.AddHandler(InputElement.KeyUpEvent, (_, e) => { if (e.Key is Key.LeftAlt or Key.RightAlt && !_pressed) Stop(); }, RoutingStrategies.Tunnel, handledEventsToo: true);
+            window.PointerExited += (_, _) => { if (!_pressed) Stop(); };
+        }
+
+        private void Stop()
+        {
+            _level = 0;
+            Show(null);
         }
 
         private static bool Alt(PointerEventArgs e) => e.KeyModifiers.HasFlag(KeyModifiers.Alt);
@@ -61,6 +73,17 @@ namespace Neo.PluginWindowAvalonia
                 return;
             }
             Show(Alt(e) && _canTear() ? PartAt(e.GetPosition(_window)) : null);
+        }
+
+        // With Alt held, the wheel turned towards you takes a smaller part, away from you a bigger one.
+        private void OnWheel(object? sender, PointerWheelEventArgs e)
+        {
+            if (_pressed || !Alt(e) || e.Delta.Y == 0 || !_canTear()) return;
+            var parts = PartsAt(e.GetPosition(_window));
+            if (parts.Count == 0) return;
+            _level = Math.Clamp(Math.Min(_level, parts.Count - 1) + (e.Delta.Y > 0 ? -1 : 1), 0, parts.Count - 1);
+            Show(parts[_level]);
+            e.Handled = true;
         }
 
         private void OnPressed(object? sender, PointerPressedEventArgs e)
@@ -96,17 +119,34 @@ namespace Neo.PluginWindowAvalonia
             _tornOut(part, screen);
         }
 
-        // The nearest piece of the layout under the pointer that lies beside others, and is big enough to be a part.
-        private Control? PartAt(Point point)
+        private Control? PartAt(Point point) => PartsAt(point) is { Count: > 0 } parts ? parts[Math.Min(_level, parts.Count - 1)] : null;
+
+        // The parts under the pointer, from the biggest to the smallest: pieces of the layout that lie beside others in a
+        // panel, big enough to be a part and not most of the app. Found by where they lie, not by the hit test: a panel
+        // without a background is never hit in its empty space, and that is where a person points at a column.
+        private List<Control> PartsAt(Point point)
         {
-            if (_window.GetLoadedUserControl() is not { } root) return null;
-            for (var visual = _window.InputHitTest(point) as Visual; visual != null && !ReferenceEquals(visual, root); visual = visual.GetVisualParent())
+            var parts = new List<Control>();
+            if (_window.GetLoadedUserControl() is not { } root) return parts;
+            var most = root.Bounds.Width * root.Bounds.Height * MostOfTheApp;
+            for (Visual? visual = root; visual != null;)
             {
-                if (visual is Control { TemplatedParent: null } control && control.GetVisualParent() is Panel { Children.Count: >= 2 }
-                    && control.Bounds.Width >= MinWidth && control.Bounds.Height >= MinHeight && root.IsVisualAncestorOf(control))
-                    return control;
+                Visual? under = null;
+                // The one drawn last lies on top.
+                foreach (var child in visual.GetVisualChildren().OrderBy(c => c.ZIndex).Reverse())
+                {
+                    if (child.IsVisible && _window.TranslatePoint(point, child) is { } local && new Rect(child.Bounds.Size).Contains(local))
+                    {
+                        under = child;
+                        break;
+                    }
+                }
+                if (under is Control { TemplatedParent: null } control && control.GetVisualParent() is Panel { Children.Count: >= 2 }
+                    && control.Bounds.Width >= MinWidth && control.Bounds.Height >= MinHeight && control.Bounds.Width * control.Bounds.Height <= most)
+                    parts.Add(control);
+                visual = under;
             }
-            return null;
+            return parts;
         }
 
         private void Show(Control? part)

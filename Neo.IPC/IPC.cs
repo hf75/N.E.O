@@ -194,7 +194,11 @@ namespace Neo.IPC
     /// <param name="FirstText">The first text in it, to name the new program by; N.E.O. uses it only when the source has it.</param>
     /// <param name="X">Where it was let go, in screen pixels.</param>
     /// <param name="Width">The part's size, in device-independent pixels.</param>
-    public record FissionTearMessage(string SourceName, string Address, string Type, string? Name, string? FirstText, int X, int Y, double Width, double Height);
+    /// <param name="Program">Set when the part was torn out of the other program this app is the interface of: that program.
+    /// <paramref name="SourceName"/> is then the interface, <paramref name="Address"/> the part's address in the program.</param>
+    /// <param name="Map">For a part of another program: its controls, as N.E.O. describes the program (texts only as their shapes).</param>
+    public record FissionTearMessage(string SourceName, string Address, string Type, string? Name, string? FirstText, int X, int Y, double Width, double Height,
+        string? Program = null, string? Map = null);
 
     public record LinkDescribedMessage(string Map);
 

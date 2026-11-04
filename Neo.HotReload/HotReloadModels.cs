@@ -72,6 +72,9 @@ public sealed record HotReloadUpdate(HotReloadStatus Status, HotReloadRequest? R
     /// <summary>References the new version has and the running one had not (a new NuGet package).</summary>
     public IReadOnlyList<string> AddedReferences { get; init; } = [];
 
+    /// <summary>Fields the new version dropped: they stay in the running app, unused, until its next start.</summary>
+    public IReadOnlyList<string> KeptFields { get; init; } = [];
+
     public static HotReloadUpdate NotPossible(string reason) => new(HotReloadStatus.NotPossible, null, reason);
 }
 

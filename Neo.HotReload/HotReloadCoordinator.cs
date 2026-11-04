@@ -149,8 +149,10 @@ public sealed class HotReloadCoordinator : IDisposable
 
             var packages = update.AddedReferences.Count == 0 ? ""
                 : " New dependencies: " + string.Join(", ", update.AddedReferences.Select(Path.GetFileName)) + ".";
+            var kept = update.KeptFields.Count == 0 ? ""
+                : " Kept unused until the next start, because a running app cannot drop a field: " + string.Join(", ", update.KeptFields) + ".";
             return new HotReloadAttempt(true,
-                $"Hot reload (generation {_session.Generation}): the running app was patched in place, its state is preserved. {answer.Details}.{packages}");
+                $"Hot reload (generation {_session.Generation}): the running app was patched in place, its state is preserved. {answer.Details}.{packages}{kept}");
         }
         catch (Exception ex)
         {

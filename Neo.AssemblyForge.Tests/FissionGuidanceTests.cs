@@ -52,4 +52,37 @@ public class FissionGuidanceTests
     {
         FissionGuidance.ChatPrompt("Expense chart").Should().Be("Tear the part \"Expense chart\" out of this app, as a program of its own.");
     }
+
+    // ── Out of another program ──
+
+    [Fact]
+    public void The_interface_offers_what_the_part_of_its_program_does_and_may_already_have_it()
+    {
+        var text = FissionGuidance.ForTheInterface("Stockroom", "Stockroom 2003", "Booking", "the Group \"Booking\"", "  Button \"Book out\"");
+
+        text.Should().Contain("tore one part out of the program \"Stockroom 2003\"").And.Contain("\"Stockroom 2003\" itself stays as it is");
+        text.Should().Contain("[McpCallable(").And.Contain("Changes = true");
+        text.Should().Contain("Keep everything this interface offers now");
+        text.Should().Contain("If it offers all of that already, change nothing");
+        text.Should().Contain("the Group \"Booking\"").And.Contain("  Button \"Book out\"");
+    }
+
+    [Fact]
+    public void The_small_program_uses_the_program_only_through_its_interface()
+    {
+        var text = FissionGuidance.ForTheProgramPart("Stockroom", "Stockroom 2003", "Booking", "the Group \"Booking\"", "  Button \"Book out\"");
+
+        text.Should().Contain("Write the program \"Booking\"");
+        text.Should().Contain("calling the interface \"Stockroom\" with Apps.CallAsync").And.Contain("RUNNING APPS");
+        text.Should().Contain("it never touches \"Stockroom 2003\" itself");
+        text.Should().Contain("While \"Stockroom\" is not running, say so");
+        text.Should().Contain("[AppInfo(\"Booking\"").And.Contain("  Button \"Book out\"");
+    }
+
+    [Fact]
+    public void The_chat_of_the_interface_names_the_part_and_the_program()
+    {
+        FissionGuidance.ChatPromptForProgram("Booking", "Stockroom 2003")
+            .Should().Be("Tear the part \"Booking\" out of Stockroom 2003, as a small program of its own that uses Stockroom 2003 through this interface.");
+    }
 }

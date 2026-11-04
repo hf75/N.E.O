@@ -113,6 +113,27 @@ internal static class TopLevelWindows
         }
     }
 
+    /// <summary>The pointer onto a point of <paramref name="window"/>, no button: only if that point really is on it.</summary>
+    public static void Hover(AutomationElement window, int x, int y)
+    {
+        Foreground(window);
+        var under = AutomationElement.FromPoint(new System.Windows.Point(x, y));
+        if (under == null || under.Current.ProcessId != window.Current.ProcessId)
+            throw new InvalidOperationException($"Another window lies at {x},{y} (process {under?.Current.ProcessId}); not moving there.");
+        SetCursorPos(x, y);
+    }
+
+    /// <summary>One notch of the mouse wheel, towards the user (negative) or away, over <paramref name="window"/> only.</summary>
+    public static void Wheel(AutomationElement window, int notches)
+    {
+        Foreground(window);
+        GetCursorPos(out var at);
+        var under = AutomationElement.FromPoint(new System.Windows.Point(at.X, at.Y));
+        if (under == null || under.Current.ProcessId != window.Current.ProcessId)
+            throw new InvalidOperationException($"Another window lies under the pointer (process {under?.Current.ProcessId}); not turning the wheel.");
+        mouse_event(0x0800, 0, 0, unchecked((uint)(notches * 120)), UIntPtr.Zero);
+    }
+
     // The point may report a part of the target (the text in a button) or what contains it (a control
     // without a hit test). Anything else, a dialog of the same process for one, is in the way.
     private static bool IsWithin(AutomationElement inner, AutomationElement outer)
@@ -186,5 +207,7 @@ internal static class TopLevelWindows
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] private static extern void SwitchToThisWindow(IntPtr hWnd, bool altTab);
     [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out CursorPoint point);
     [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
+    [StructLayout(LayoutKind.Sequential)] private struct CursorPoint { public int X, Y; }
 }

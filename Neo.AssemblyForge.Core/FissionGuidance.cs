@@ -43,6 +43,37 @@ public static class FissionGuidance
         ```
         """;
 
+    // ── Out of another program: the part becomes a small window that drives the program through its interface ──
+
+    /// <summary>What goes into the chat and the history of the interface, when the part is torn out of its program.</summary>
+    public static string ChatPromptForProgram(string newName, string program) =>
+        $"Tear the part \"{newName}\" out of {program}, as a small program of its own that uses {program} through this interface.";
+
+    /// <summary>For the interface of the program the part is torn out of, to go after the prompt.</summary>
+    /// <param name="part">Which part, in words: its type, name and place.</param>
+    /// <param name="map">Its controls as the program shows them, with their addresses, texts only as their shapes.</param>
+    public static string ForTheInterface(string interfaceName, string program, string newName, string part, string map) => $"""
+
+
+        The user tore one part out of the program "{program}" with the mouse, to have it as a small program of its own, "{newName}", that does what the part does through this interface. "{program}" itself stays as it is. The part: {part}.
+        Its controls as they are now (with their addresses; a text in ~"…" is only the shape of what it shows):
+        ```
+        {map}
+        ```
+        Change this interface only where it lacks something the part needs: a public [McpCallable("…")] method for every action of the part, with Changes = true where it changes the program's data, and a way to read every value the part shows. Do each the way a person does it in the part. Keep everything this interface offers now, under the same names. If it offers all of that already, change nothing and only say so.
+        """;
+
+    /// <summary>The prompt for the small program, written in a session of its own.</summary>
+    public static string ForTheProgramPart(string interfaceName, string program, string newName, string part, string map) => $"""
+        Write the program "{newName}": a small window that does what one part of the program "{program}" does, the part the user tore out of it with the mouse: {part}.
+        It shows the same fields and buttons, alone in its window. It does every action by calling the interface "{interfaceName}" with Apps.CallAsync, and gets every value from it, with exactly the names "{interfaceName}" offers in RUNNING APPS; it never touches "{program}" itself. Show what a call answered, or why it failed. While "{interfaceName}" is not running, say so in the window, and go on when it is back. Put [AppInfo("{newName}", "<what it is for>")] on the class. Nothing more: the user wants that part, alone.
+
+        The part's controls in "{program}" (with their addresses; a text in ~"…" is only the shape of what it showed):
+        ```
+        {map}
+        ```
+        """;
+
     /// <summary>A name for the new program from what the part is called or shows: "expenseChart" becomes "Expense chart".</summary>
     public static string NameFor(string? controlName, string? firstText, string type)
     {

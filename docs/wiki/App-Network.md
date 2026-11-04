@@ -52,7 +52,7 @@ foreach (var app in Apps.Running()) app.Describe();                    // who is
 
 ## What the AI knows
 
-The desktop hosts put two things into every prompt: the rules above (`AppNetworkGuidance`, next to the hot reload rules) and a **RUNNING APPS** section listing the other apps on the machine right now — name, description, every method with its parameters and result type, every value. The AI uses exactly those names. The MCP server has the same rules in its prompts and a `list_running_apps` tool.
+The desktop hosts put two things into every prompt: the rules above (`AppNetworkGuidance`, next to the hot reload rules) and a **RUNNING APPS** section listing the other apps on the machine right now — name, description, every method with its parameters and result type, every value. A type of the app's own comes with its public properties (`List<CategoryTotal { string Category, decimal Sum }>`), so that the app reading it writes its own type with the same names. The AI uses exactly those names. The MCP server has the same rules in its prompts and a `list_running_apps` tool.
 
 An app that is not running is not listed; ask for it anyway and the AI writes code that copes (a message in the UI, `Watch` that resumes by itself).
 

@@ -222,6 +222,18 @@ public sealed class HotReloadSession : IDisposable
             if (FirstError(newCompilation) is { } compileError)
                 return HotReloadUpdate.NotPossible("the new code does not compile: " + compileError);
 
+            var (keeping, kept) = await KeepDroppedFieldsAsync(pristine, oldCompilation, newCompilation, cancellationToken).ConfigureAwait(false);
+            if (kept.Count > 0)
+            {
+                var keepingCompilation = (await keeping.GetProject(_projectId)!.GetCompilationAsync(cancellationToken).ConfigureAwait(false))!;
+                if (FirstError(keepingCompilation) == null)
+                {
+                    pristine = keeping;
+                    newCompilation = keepingCompilation;
+                }
+                else kept = []; // a field whose type went too; Roslyn says why it cannot be patched
+            }
+
             var plan = StateMigrationAnalyzer.Analyze(oldCompilation, newCompilation, _options.RootTypeName, _generation + 1);
             if (plan.NotPossibleReason != null)
                 return HotReloadUpdate.NotPossible(plan.NotPossibleReason);
@@ -244,8 +256,18 @@ public sealed class HotReloadSession : IDisposable
             {
                 // Roslyn's delta writer can trip over a change where new initializers alter the constructor while a
                 // lambda starts capturing a local elsewhere (the same method row added twice).
-                updated = await WithoutNewInitializersAsync(updated, oldCompilation, cancellationToken).ConfigureAwait(false);
-                (deltas, diagnostics) = await _service.EmitSolutionUpdateAsync(updated, _projectId, cancellationToken).ConfigureAwait(false);
+                var withoutInitializers = await WithoutNewInitializersAsync(updated, oldCompilation, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    (deltas, diagnostics) = await _service.EmitSolutionUpdateAsync(withoutInitializers, _projectId, cancellationToken).ConfigureAwait(false);
+                    updated = withoutInitializers;
+                }
+                catch (ArgumentException)
+                {
+                    // And over lambdas that leave one method while another method with a lambda changes too (taking a
+                    // part out of an app does that). One method at a time it does not.
+                    (deltas, diagnostics) = await EmitInStepsAsync(updated, cancellationToken).ConfigureAwait(false);
+                }
             }
 
             var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
@@ -267,12 +289,118 @@ public sealed class HotReloadSession : IDisposable
                 plan.Steps,
                 plan.RebuildUi,
                 plan.RebuildMethodName);
-            return new HotReloadUpdate(HotReloadStatus.Ready, request, null) { AddedReferences = addedReferences };
+            return new HotReloadUpdate(HotReloadStatus.Ready, request, null) { AddedReferences = addedReferences, KeptFields = kept };
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    // The change as several generations: first the changed methods one by one, each where it compiles on its own, then the
+    // whole change. Roslyn commits every step, so a step that fails leaves this session out of step with the app: the caller
+    // reports it, and the host reloads as it does after any failure.
+    private async Task<(IReadOnlyList<HotReloadDelta>, IReadOnlyList<Diagnostic>)> EmitInStepsAsync(Solution final, CancellationToken cancellationToken)
+    {
+        var deltas = new List<HotReloadDelta>();
+        var step = _committed;
+        foreach (var documentId in final.GetProject(_projectId)!.DocumentIds)
+        {
+            if (step.GetDocument(documentId) is not { } before) continue; // a new file comes with the whole change
+            var oldRoot = (await before.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false))!;
+            var newRoot = (await final.GetDocument(documentId)!.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false))!;
+            var oldMethods = oldRoot.DescendantNodes().OfType<BaseMethodDeclarationSyntax>().GroupBy(MethodKey).ToDictionary(g => g.Key, g => g.First());
+
+            foreach (var method in newRoot.DescendantNodes().OfType<BaseMethodDeclarationSyntax>())
+            {
+                var key = MethodKey(method);
+                if (!oldMethods.TryGetValue(key, out var old) || old.ToString() == method.ToString()) continue;
+
+                var current = (await step.GetDocument(documentId)!.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false))!;
+                if (current.DescendantNodes().OfType<BaseMethodDeclarationSyntax>().FirstOrDefault(m => MethodKey(m) == key) is not { } replaced) continue;
+                var candidate = step.WithDocumentText(documentId, ToSourceText(current.ReplaceNode(replaced, method).ToFullString()));
+                // A method that needs more of the change (a new field, a new type) comes with a later step.
+                if (FirstError((await candidate.GetProject(_projectId)!.GetCompilationAsync(cancellationToken).ConfigureAwait(false))!) != null) continue;
+
+                var (stepDeltas, stepDiagnostics) = await _service.EmitSolutionUpdateAsync(candidate, _projectId, cancellationToken).ConfigureAwait(false);
+                if (stepDiagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)) return ([], stepDiagnostics);
+                deltas.AddRange(stepDeltas);
+                step = candidate;
+            }
+        }
+
+        var (lastDeltas, lastDiagnostics) = await _service.EmitSolutionUpdateAsync(final, _projectId, cancellationToken).ConfigureAwait(false);
+        if (lastDiagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)) return ([], lastDiagnostics);
+        deltas.AddRange(lastDeltas);
+        return (deltas, lastDiagnostics);
+    }
+
+    // A method by where it is and what it takes: "Outer.Inner.Refresh(int,string)", ".ctor" for a constructor.
+    private static string MethodKey(BaseMethodDeclarationSyntax method)
+    {
+        var types = string.Join(".", method.Ancestors().OfType<BaseTypeDeclarationSyntax>().Reverse().Select(t => t.Identifier.ValueText));
+        var name = method switch
+        {
+            MethodDeclarationSyntax m => m.Identifier.ValueText,
+            ConstructorDeclarationSyntax c => c.Modifiers.Any(SyntaxKind.StaticKeyword) ? ".cctor" : ".ctor",
+            _ => method.Kind().ToString(),
+        };
+        return $"{types}.{name}({string.Join(",", method.ParameterList.Parameters.Select(p => p.Type?.ToString()))})";
+    }
+
+    private static readonly SymbolDisplayFormat s_keptType =
+        SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
+    // A field cannot leave a type that is running: Roslyn calls that a rude edit (ENC0033), and the full reload that
+    // follows loses everything the app holds, also what has nothing to do with the change. A change that takes a part
+    // out of an app drops the fields of that part. So a field the new code no longer has stays in the running app,
+    // unused and without its initializer, under its old name; the next full load compiles the source as it is.
+    // Events declared like fields are fields too.
+    private static async Task<(Solution Solution, IReadOnlyList<string> Kept)> KeepDroppedFieldsAsync(Solution solution,
+        Compilation oldCompilation, Compilation newCompilation, CancellationToken cancellationToken)
+    {
+        var additions = new Dictionary<TypeDeclarationSyntax, List<MemberDeclarationSyntax>>();
+        var kept = new List<string>();
+        foreach (var oldType in StateMigrationAnalyzer.SourceTypes(oldCompilation))
+        {
+            if (newCompilation.GetTypeByMetadataName(StateMigrationAnalyzer.MetadataName(oldType)) is not { } newType
+                || newType.DeclaringSyntaxReferences.Select(r => r.GetSyntax(cancellationToken)).OfType<TypeDeclarationSyntax>().FirstOrDefault() is not { } declaration)
+                continue;
+            foreach (var member in oldType.GetMembers())
+            {
+                if (member.IsImplicitlyDeclared || member is not (IFieldSymbol { AssociatedSymbol: null } or IEventSymbol)
+                    || !newType.GetMembers(member.Name).IsEmpty || Dropped(member) is not { } declared)
+                    continue;
+                if (!additions.TryGetValue(declaration, out var members)) additions[declaration] = members = [];
+                members.Add(declared);
+                kept.Add(member.Name);
+            }
+        }
+
+        foreach (var byTree in additions.GroupBy(a => a.Key.SyntaxTree))
+        {
+            if (solution.GetDocumentId(byTree.Key) is not { } documentId) continue;
+            var root = await byTree.Key.GetRootAsync(cancellationToken).ConfigureAwait(false);
+            var newRoot = root.ReplaceNodes(byTree.Select(a => a.Key), (original, rewritten) => rewritten.AddMembers([.. additions[original]]));
+            solution = solution.WithDocumentText(documentId, ToSourceText(newRoot.ToFullString()));
+        }
+        return (solution, kept);
+    }
+
+    // The old declaration of the one field, as the running app has it, without what it was first set to (a constant keeps its value).
+    private static MemberDeclarationSyntax? Dropped(ISymbol member)
+    {
+        if (member.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is not VariableDeclaratorSyntax declarator) return null;
+        var type = SyntaxFactory.ParseTypeName((member is IFieldSymbol field ? field.Type : ((IEventSymbol)member).Type).ToDisplayString(s_keptType));
+        var variable = (member is IFieldSymbol { IsConst: true } ? declarator : declarator.WithInitializer(null)).WithoutTrivia();
+        var declaration = SyntaxFactory.VariableDeclaration(type, SyntaxFactory.SingletonSeparatedList(variable));
+        MemberDeclarationSyntax? dropped = declarator.Parent?.Parent switch
+        {
+            FieldDeclarationSyntax old => SyntaxFactory.FieldDeclaration(old.AttributeLists, old.Modifiers, declaration),
+            EventFieldDeclarationSyntax old => SyntaxFactory.EventFieldDeclaration(old.AttributeLists, old.Modifiers, declaration),
+            _ => null,
+        };
+        return dropped?.NormalizeWhitespace().WithLeadingTrivia(SyntaxFactory.ElasticCarriageReturnLineFeed).WithTrailingTrivia(SyntaxFactory.ElasticCarriageReturnLineFeed);
     }
 
     // Hosts may list a reference twice (the same agent DLL from two settings). The compiler does

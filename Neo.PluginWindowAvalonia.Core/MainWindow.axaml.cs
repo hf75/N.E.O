@@ -178,9 +178,10 @@ namespace Neo.PluginWindowAvalonia
             Avalonia.Controls.Canvas.SetTop(TearTarget, p.Y);
             TearTarget.Width = p.Width;
             TearTarget.Height = p.Height;
-            // Over the part, or below it when it starts at the top edge.
+            // Over the part, or inside it when it starts at the top edge.
+            const double PillHeight = 40;
             Avalonia.Controls.Canvas.SetLeft(TearPill, p.X + 6);
-            Avalonia.Controls.Canvas.SetTop(TearPill, p.Y >= 30 ? p.Y - 28 : p.Y + 6);
+            Avalonia.Controls.Canvas.SetTop(TearPill, p.Y >= PillHeight + 4 ? p.Y - PillHeight - 2 : p.Y + 6);
         }
 
         public bool TearTargetShown => TearTarget.IsVisible;

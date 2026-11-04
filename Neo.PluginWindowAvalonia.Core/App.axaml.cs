@@ -1012,9 +1012,32 @@ namespace Neo.PluginWindowAvalonia
             Neo.App.AppNetwork.SystemHandler = HandleSystemMessageAsync;
             _fusionDrag = new FusionDrag(MainWin, () => !DockedToAnotherProgram && MainWin.GetLoadedUserControl() != null, DroppedOnAnotherApp);
             _tear = new TearGesture(MainWin, () => !DockedToAnotherProgram && MainWin.GetLoadedUserControl() != null, TornOut);
+            _programTear = new ProgramTear(() => MainWin.GetLoadedUserControl() != null, TornOutOfProgram);
         }
 
         private TearGesture? _tear;
+        private ProgramTear? _programTear;
+
+        // Fission out of the program this app is the interface of: the part becomes a small program that uses it through this app.
+        private void TornOutOfProgram(string program, IntPtr window, Neo.Shared.ForeignWindows.ForeignPart part, PixelPoint at) =>
+            _ = TearOutOfProgramAsync(program, window, part, at);
+
+        private async Task TearOutOfProgramAsync(string program, IntPtr window, Neo.Shared.ForeignWindows.ForeignPart part, PixelPoint at)
+        {
+            try
+            {
+                MainWin.ShowBanner($"Tearing it out of {program}: it becomes a small program of its own…", "#D07B1FA2", 0);
+                var (address, map) = await Task.Run(() => Neo.Shared.ForeignWindows.DescribePart(window, part, 80));
+                var scaling = MainWin.RenderScaling;
+                var tear = new FissionTearMessage(Neo.App.AppNetwork.Published?.Name ?? MainWin.Title ?? "", address, part.Type, part.Name.Length > 0 ? part.Name : null, null,
+                    at.X, at.Y, part.Width / scaling, part.Height / scaling, Program: program, Map: map);
+                await AskHostAsync(FissionMessages.TearOut, Json.ToJson(tear));
+            }
+            catch (Exception ex)
+            {
+                MainWin.ShowBanner("Not torn out: " + ex.Message, "#D0C62828", 8);
+            }
+        }
 
         // Fission: a part of the app was dragged out of its window. Its N.E.O. makes a program of its own of it.
         private void TornOut(Avalonia.Controls.Control part, PixelPoint at)
@@ -1289,9 +1312,11 @@ namespace Neo.PluginWindowAvalonia
                 var name = _appName ?? title ?? "N.E.O. app";
                 var app = Neo.App.AppNetwork.Publish(control, name,
                     f => Dispatcher.UIThread.InvokeAsync(f).GetTask());
-                // An interface: a drag of its program's window is a drag of this app.
+                // An interface: a drag of its program's window is a drag of this app, and a part torn out of it becomes a program that uses this one.
                 if (_fusionDrag is { } drag)
                     await Dispatcher.UIThread.InvokeAsync(() => drag.FollowProgram(app.Program));
+                if (_programTear is { } programTear)
+                    await Dispatcher.UIThread.InvokeAsync(() => programTear.Follow(app.Program));
                 if (app.Methods.Count > 0 || app.Values.Count > 0)
                     await SendLogAsync(LogLevel.Info,
                         $"On the app network as '{app.Name}': {app.Methods.Count} method(s), {app.Values.Count} value(s).", "AppNetwork");

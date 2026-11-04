@@ -188,7 +188,7 @@ Drag the window of one running app onto another: one program that does both, wit
 
 ## Fission
 
-The other way round: hold Alt, drag a part of a running app (a chart, a list, a group of fields) out of its window and let go. The part leaves the app, and a program of its own opens where you let go, getting its data from the app it came from over the app network. See **[[Fission]]**.
+The other way round: hold Alt, drag a part of a running app (a chart, a list, a group of fields) out of its window and let go. The part leaves the app, and a program of its own opens where you let go, getting its data from the app it came from over the app network. Out of another program with an interface, the part becomes a small window that uses that program through its interface. See **[[Fission]]**.
 
 ## App Link
 

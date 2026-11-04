@@ -389,7 +389,11 @@ public static class AppNetwork
             return t;
         }
 
-        private static string TypeName(Type t)
+        private static string TypeName(Type t) => TypeName(t, withMembers: true);
+
+        // A type of the app's own goes with its public properties, one level deep: an app that reads or passes one
+        // has to write its own type with exactly these names ("CategoryTotal { string Category, decimal Sum }").
+        private static string TypeName(Type t, bool withMembers)
         {
             if (t == typeof(void)) return "void";
             if (t == typeof(string)) return "string";
@@ -399,15 +403,31 @@ public static class AppNetwork
             if (t == typeof(decimal)) return "decimal";
             if (t == typeof(bool)) return "bool";
             if (t == typeof(object)) return "object";
-            if (Nullable.GetUnderlyingType(t) is { } inner) return TypeName(inner) + "?";
-            if (t.IsArray) return TypeName(t.GetElementType()!) + "[]";
+            if (Nullable.GetUnderlyingType(t) is { } inner) return TypeName(inner, withMembers) + "?";
+            if (t.IsArray) return TypeName(t.GetElementType()!, withMembers) + "[]";
             if (t.IsGenericType)
             {
                 var name = t.Name[..t.Name.IndexOf('`')];
-                return name + "<" + string.Join(", ", t.GetGenericArguments().Select(TypeName)) + ">";
+                return name + "<" + string.Join(", ", t.GetGenericArguments().Select(a => TypeName(a, withMembers))) + ">";
             }
+            if (withMembers && IsOwnType(t) && MembersOf(t) is { Count: > 0 } members)
+                return t.Name + " { " + string.Join(", ", members.Select(m => TypeName(m.Type, withMembers: false) + " " + m.Name)) + " }";
             return t.Name;
         }
+
+        // A type of the app (or of a package it uses), not one of .NET or of the toolkit, whose shape everybody knows.
+        private static bool IsOwnType(Type t)
+        {
+            if (t.IsPrimitive || t.IsEnum || t.IsInterface || (t.Namespace ?? "").StartsWith("System", StringComparison.Ordinal)) return false;
+            var assembly = t.Assembly.GetName().Name ?? "";
+            return assembly is not ("mscorlib" or "netstandard") && !assembly.StartsWith("System", StringComparison.Ordinal)
+                && !assembly.StartsWith("Microsoft", StringComparison.Ordinal) && !assembly.StartsWith("Avalonia", StringComparison.Ordinal);
+        }
+
+        private static List<(string Name, Type Type)> MembersOf(Type t) =>
+            t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanRead && p.GetIndexParameters().Length == 0).Select(p => (p.Name, p.PropertyType))
+                .Concat(t.GetFields(BindingFlags.Public | BindingFlags.Instance).Select(f => (f.Name, f.FieldType)))
+                .Take(12).ToList();
 
         private static object? Attribute(MemberInfo member, string fullName) =>
             member.GetCustomAttributes(inherit: false).FirstOrDefault(a => a.GetType().FullName == fullName);

@@ -18,6 +18,14 @@
 | **F11** | Toggle main window fullscreen | — | Yes |
 | **Escape** | Cancel current operation / exit fullscreen / close code editor | Yes | Yes |
 
+## In the app window
+
+| Shortcut | Action | WPF | Avalonia |
+|----------|--------|-----|----------|
+| **Alt** held | Show the part under the pointer that a drag would tear out ([[Fission]]) | — | Yes (Windows) |
+| **Alt+mouse wheel** | A smaller part under the pointer (towards you) or a bigger one (away from you) | — | Yes (Windows) |
+| **Alt+drag** out of the window | Tear the part out: it becomes a program of its own | — | Yes (Windows) |
+
 ## AI
 
 | Shortcut | Action | WPF | Avalonia |

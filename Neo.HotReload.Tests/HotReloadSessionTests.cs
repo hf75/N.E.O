@@ -400,6 +400,130 @@ public class HotReloadSessionTests
     }
 
     [Fact]
+    public async Task A_field_the_new_code_drops_stays_unused_and_the_app_keeps_its_state()
+    {
+        using var app = await HotReloadHarness.StartAsync(V1);
+        app.Call("AddItem", "kept");
+
+        // "Take the click counter out": its field goes with it, and Roslyn cannot take a field out of a running app (ENC0033).
+        var v2 = V1.Replace("private int _clicks;", "")
+                   .Replace(" _clicks++;", "")
+                   .Replace("\"v1 clicks=\" + _clicks", "\"v2 items=\" + _items.Count");
+        var (update, _) = await app.UpdateAsync(v2);
+
+        update.Status.Should().Be(HotReloadStatus.Ready, update.Reason);
+        update.KeptFields.Should().Equal("_clicks");
+        app.Call("Describe").Should().Be("v2 items=1", "the item added before the change is still there");
+
+        // The next change starts from the source as it was written, without the field.
+        var (next, _) = await app.UpdateAsync(v2.Replace("\"v2 items=\"", "\"v3 items=\""));
+        next.Status.Should().Be(HotReloadStatus.Ready, next.Reason);
+        app.Call("Describe").Should().Be("v3 items=1");
+    }
+
+    [Fact]
+    public async Task An_event_the_new_code_drops_stays_too()
+    {
+        using var app = await HotReloadHarness.StartAsync(LoopApp);
+
+        var (update, _) = await app.UpdateAsync(LoopApp
+            .Replace("public event EventHandler? Pressed;", "")
+            .Replace("Pressed += (s, e) => { _clicks = _clicks + 1; };", ""));
+
+        update.Status.Should().Be(HotReloadStatus.Ready, update.Reason);
+        update.KeptFields.Should().Equal("Pressed");
+    }
+
+    [Fact]
+    public async Task A_dropped_field_whose_type_went_too_still_means_a_full_reload()
+    {
+        const string withNote = """
+            public class Note { public string Text = ""; }
+
+            public class DynamicUserControl
+            {
+                private Note? _note = new Note();
+                public string Ui = "";
+                public DynamicUserControl() { BuildUi(); }
+                private void BuildUi() { Ui = "note"; }
+                public string Describe() => "v1";
+            }
+            """;
+        using var app = await HotReloadHarness.StartAsync(withNote);
+
+        var (update, _) = await app.UpdateAsync(withNote
+            .Replace("public class Note { public string Text = \"\"; }", "")
+            .Replace("private Note? _note = new Note();", "")
+            .Replace("\"v1\"", "\"v2\""));
+
+        update.Status.Should().Be(HotReloadStatus.NotPossible, "the field cannot stay without its type");
+        update.Reason.Should().Contain("ENC");
+        update.KeptFields.Should().BeEmpty();
+    }
+
+    // What a real Fission tear wrote: the bars leave a method with their lambdas, and the totals come back as new properties with lambdas.
+    private const string Tracker = """
+        using System;
+        using System.Collections.Generic;
+        using System.Linq;
+
+        public class DynamicUserControl
+        {
+            private readonly List<(decimal Amount, string Category)> _expenses = new List<(decimal, string)>();
+            public string Ui = "";
+            public string Bars = "";
+            public Action? Clicked;
+
+            public DynamicUserControl() { BuildUi(); }
+
+            private void BuildUi() { Clicked = () => Add(1m, "Click"); Ui = "tracker"; Refresh(); }
+
+            public void Add(decimal amount, string category) { _expenses.Add((amount, category)); Refresh(); }
+
+            private void Refresh()
+            {
+                Ui = "tracker " + _expenses.Count;
+                var groups = _expenses.GroupBy(x => x.Category, StringComparer.OrdinalIgnoreCase)
+                    .Select(x => (Name: x.Key, Sum: x.Sum(y => y.Amount))).OrderByDescending(x => x.Sum).ToList();
+                var max = groups.Count > 0 ? groups.Max(x => x.Sum) : 1m;
+                Bars = string.Join(",", groups.Select(g => g.Name + "=" + g.Sum / max));
+            }
+        }
+        """;
+
+    [Fact]
+    public async Task Lambdas_that_leave_a_method_while_new_ones_come_in_new_members_are_patched()
+    {
+        using var app = await HotReloadHarness.StartAsync(Tracker);
+        app.Call("Add", 12m, "Food");
+        app.Call("Add", 40m, "Travel");
+
+        var (update, _) = await app.UpdateAsync(Tracker
+            .Replace("public class DynamicUserControl", "public sealed record CategoryTotal(string Category, decimal Sum);\n\npublic class DynamicUserControl")
+            .Replace("private void BuildUi() { Clicked = () => Add(1m, \"Click\"); Ui = \"tracker\"; Refresh(); }", "private void BuildUi() { Clicked = () => Add(1m, \"Click\"); Refresh(); }")
+            .Replace("""
+                    var groups = _expenses.GroupBy(x => x.Category, StringComparer.OrdinalIgnoreCase)
+                        .Select(x => (Name: x.Key, Sum: x.Sum(y => y.Amount))).OrderByDescending(x => x.Sum).ToList();
+                    var max = groups.Count > 0 ? groups.Max(x => x.Sum) : 1m;
+                    Bars = string.Join(",", groups.Select(g => g.Name + "=" + g.Sum / max));
+            """, "")
+            .Replace("private void Refresh()", """
+                public decimal TotalAmount => _expenses.Sum(x => x.Amount);
+
+                public List<CategoryTotal> CategoryTotals => _expenses.GroupBy(x => x.Category, StringComparer.OrdinalIgnoreCase)
+                    .Select(x => new CategoryTotal(x.Key, x.Sum(y => y.Amount))).OrderByDescending(x => x.Sum).ToList();
+
+                private void Refresh()
+            """));
+
+        update.Status.Should().Be(HotReloadStatus.Ready, update.Reason);
+        app.Get<decimal>("TotalAmount").Should().Be(52m, "the expenses from before are still there");
+        app.Get<string>("Ui").Should().Be("tracker 2", "the new code runs");
+        app.Get<Action>("Clicked")();
+        app.Get<decimal>("TotalAmount").Should().Be(53m, "the lambda that stayed still works");
+    }
+
+    [Fact]
     public async Task Generations_stack_up()
     {
         using var app = await HotReloadHarness.StartAsync(V1);

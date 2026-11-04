@@ -56,6 +56,8 @@ namespace Neo.App
         /// <summary>Null when the part is a program of its own now; else why not.</summary>
         private async Task<string?> TearOutCoreAsync(FissionTearMessage tear)
         {
+            if (tear.Program != null) return await TearOutOfProgramAsync(tear, tear.Program);
+
             var before = GetCurrentCode();
             if (string.IsNullOrWhiteSpace(before)) return "there is no app yet.";
 
@@ -89,6 +91,49 @@ namespace Neo.App
             var project = SaveNewProgram(newName, code, packages);
             var started = StartNewProgram(project, tear);
             Logger.LogMessage($"\"{newName}\" is a program of its own now, saved as {project}. It gets its data from {sourceName} while that runs; Ctrl+Shift+N in it changes it.", BubbleType.Info);
+            await ChildProcessService.SetAppWindowAsync(new AppWindowMessage(Banner: $"\"{newName}\" is a program of its own now.", BannerColor: BannerGreen, BannerSeconds: 6));
+            _ = PlaceNewProgramAsync(started, tear);
+            return null;
+        }
+
+        // Out of the other program this app is the interface of. That program keeps its part, nobody has its source; the new
+        // program is a small window that does what the part does, through this interface.
+        private async Task<string?> TearOutOfProgramAsync(FissionTearMessage tear, string program)
+        {
+            var before = GetCurrentCode();
+            if (string.IsNullOrWhiteSpace(before)) return "there is no interface yet.";
+
+            var interfaceName = FusionName(tear.SourceName, before);
+            var newName = FissionGuidance.NameFor(tear.Name, null, $"Small {program}");
+            if (string.Equals(newName, interfaceName, StringComparison.OrdinalIgnoreCase) || string.Equals(newName, program, StringComparison.OrdinalIgnoreCase))
+                newName += " (torn out)";
+            var part = $"the {tear.Type}" + (tear.Name != null ? $" \"{tear.Name}\"" : "") + (tear.Address.Length > 0 ? $" at the address \"{tear.Address}\"" : "")
+                + $", {Math.Round(tear.Width)} × {Math.Round(tear.Height)} px";
+            var map = tear.Map ?? "";
+
+            // 1. The interface offers what the part needs. It may have all of that already: no change is an answer too.
+            Logger.LogMessage($"Tearing \"{newName}\" out of {program}: the AI sees the part's controls (what they show only as its shape) and the source of this interface.", BubbleType.Info);
+            _fissionForTheModel = FissionGuidance.ForTheInterface(interfaceName, program, newName, part, map);
+            bool ran;
+            try
+            {
+                ran = await ExecutePromptAsync(FissionGuidance.ChatPromptForProgram(newName, program));
+            }
+            finally
+            {
+                _fissionForTheModel = string.Empty;
+            }
+            if (!ran) return "N.E.O. is busy with this interface right now.";
+
+            // 2. The small program, in a session of its own, with this interface on its list of running apps.
+            await ChildProcessService.SetAppWindowAsync(new AppWindowMessage(Banner: $"Writing \"{newName}\" as a program of its own…", BannerColor: BannerDark));
+            var (code, packages, problem) = await WriteNewProgramAsync(FissionGuidance.ForTheProgramPart(interfaceName, program, newName, part, map));
+            if (code == null) return problem ?? "the AI could not write the new program.";
+
+            // 3. As for a part of an app: a living app, where the part was let go.
+            var project = SaveNewProgram(newName, code, packages);
+            var started = StartNewProgram(project, tear);
+            Logger.LogMessage($"\"{newName}\" is a program of its own now, saved as {project}. It uses {program} through {interfaceName} while both run; Ctrl+Shift+N in it changes it.", BubbleType.Info);
             await ChildProcessService.SetAppWindowAsync(new AppWindowMessage(Banner: $"\"{newName}\" is a program of its own now.", BannerColor: BannerGreen, BannerSeconds: 6));
             _ = PlaceNewProgramAsync(started, tear);
             return null;

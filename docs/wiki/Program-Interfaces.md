@@ -22,6 +22,7 @@ Windows only, like the [[Exoskeleton]] it is built on.
 | Another N.E.O. app | `Apps.CallAsync` and `Apps.ReadAsync` ([[App Network]]). The AI finds the interface in the list of running apps it is given. |
 | Claude Code | `call_running_app` and `read_running_app` of the [[MCP Server]]. With `inspect_foreign_program`, Claude reads a program's structure and can write an interface itself. |
 | A link | Drag an app onto the program's window: the halves *Drop to merge* and *Drop to link* show over the program. Or drag the program's own window onto an app: it can only be linked, its code is not here ([[App Link]]). |
+| A part torn out | Hold Alt over the program's window and drag a part of it out, its booking fields for one: a small program of its own that does what the part does, through the interface ([[Fission]]). |
 
 ## In generated apps
 

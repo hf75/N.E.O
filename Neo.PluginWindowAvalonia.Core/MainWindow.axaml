@@ -38,8 +38,11 @@
         <!-- Alt held: the part under the pointer, which dragged out of the window with Alt becomes a program of its own -->
         <Canvas x:Name="TearLayer" IsHitTestVisible="False" ZIndex="250">
             <Border x:Name="TearTarget" IsVisible="False" BorderBrush="#7B1FA2" BorderThickness="3" Background="#207B1FA2" CornerRadius="4"/>
-            <Border x:Name="TearPill" IsVisible="False" Padding="10,5" CornerRadius="12" Background="#E07B1FA2">
-                <TextBlock Text="Drag it out with Alt: a program of its own" Foreground="White" FontSize="12"/>
+            <Border x:Name="TearPill" IsVisible="False" Padding="10,4" CornerRadius="10" Background="#E07B1FA2">
+                <StackPanel>
+                    <TextBlock Text="Drag it out with Alt: a program of its own" Foreground="White" FontSize="12"/>
+                    <TextBlock Text="Mouse wheel: a bigger or a smaller part" Foreground="#D0FFFFFF" FontSize="11"/>
+                </StackPanel>
             </Border>
         </Canvas>
 

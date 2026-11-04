@@ -97,11 +97,7 @@ public sealed class ForeignProgramTools
     /// "Bericht.txt - Editor" is the program Editor with the person's document in it: only the program goes out. Edge and the
     /// Explorer of a German Windows separate with an en dash.
     /// </summary>
-    internal static string ProgramPart(string title)
-    {
-        var separators = System.Text.RegularExpressions.Regex.Matches(title, @"\s[-–—]\s");
-        return (separators.Count > 0 ? title[(separators[^1].Index + separators[^1].Length)..] : title).Trim().Trim('​', '‎', '‏');
-    }
+    internal static string ProgramPart(string title) => ForeignWindows.ProgramPart(title);
 
     // An interface ran into a program that changed: the caller gets what is there now, to repair the interface with.
     private static string HowTheProgramLooksNow(string app, string error)

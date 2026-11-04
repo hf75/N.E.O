@@ -81,6 +81,101 @@ public static class ForeignWindows
         return text.ToString();
     }
 
+    /// <summary>
+    /// The program's part of a window title: "Bericht.txt - Editor" is the program Editor with the person's document in it.
+    /// Edge and the Explorer of a German Windows separate with an en dash.
+    /// </summary>
+    public static string ProgramPart(string title)
+    {
+        var separators = System.Text.RegularExpressions.Regex.Matches(title, @"\s[-–—]\s");
+        return (separators.Count > 0 ? title[(separators[^1].Index + separators[^1].Length)..] : title).Trim().Trim('​', '‎', '‏');
+    }
+
+    /// <summary>The title of a window, or empty.</summary>
+    public static string TitleOf(IntPtr window) => OperatingSystem.IsWindows() ? WindowTitle(window) : "";
+
+    /// <summary>A part of another program's window: what it is (its type and the name it shows) and where it lies, in screen pixels.</summary>
+    public sealed record ForeignPart(string Type, string Name, int Left, int Top, int Width, int Height)
+    {
+        public bool Contains(int x, int y) => x >= Left && y >= Top && x < Left + Width && y < Top + Height;
+    }
+
+    // What Fission takes for a part, as in an app's own window: at least this big (device-independent pixels), at most
+    // this much of the window, and none of the pieces every window has.
+    private const int PartMinWidth = 40, PartMinHeight = 24;
+    private const double MostOfTheWindow = 0.75;
+    private static readonly HashSet<string> NoParts = new(StringComparer.Ordinal) { "TitleBar", "MenuBar", "Menu", "ScrollBar", "Thumb", "ToolTip", "Separator" };
+
+    /// <summary>
+    /// The parts of a window under a point of the screen, from the biggest to the smallest, the way Fission tears them out
+    /// of an app: pieces that lie in a container beside others, big enough, and not most of the window. Found by where they
+    /// lie, from the window down, so that a window of N.E.O.'s own over the part does not hide it.
+    /// </summary>
+    public static List<ForeignPart> PartsAt(IntPtr window, int x, int y)
+    {
+        var parts = new List<ForeignPart>();
+        if (!OperatingSystem.IsWindows()) return parts;
+        Guarded(() =>
+        {
+            var automation = Automation;
+            var walker = automation.ControlViewWalker;
+            IElement? element = automation.ElementFromHandle(window);
+            if (BoundsOf(element) is not { } whole) return true;
+            var scale = GetDpiForWindow(window) is var dpi and > 0 ? dpi / 96.0 : 1.0;
+            var most = (double)whole.Width * whole.Height * MostOfTheWindow;
+            for (int depth = 0; depth < MaxDepth && element != null; depth++)
+            {
+                IElement? under = null;
+                Box? bounds = null;
+                int children = 0;
+                for (var child = walker.GetFirstChildElement(element); child != null && children < MaxWalk; child = walker.GetNextSiblingElement(child))
+                {
+                    children++;
+                    if (under == null && BoundsOf(child) is { } b && b.Contains(x, y)) (under, bounds) = (child, b);
+                }
+                if (under == null || bounds is not { } r) break;
+                var type = TypeName(under.CurrentControlType);
+                if (NoParts.Contains(type)) break;
+                if (children >= 2 && r.Width >= PartMinWidth * scale && r.Height >= PartMinHeight * scale && (double)r.Width * r.Height <= most)
+                    parts.Add(new ForeignPart(type, Shown(type, (under.CurrentName ?? "").Trim()), r.Left, r.Top, r.Width, r.Height));
+                element = under;
+            }
+            return true;
+        });
+        return parts;
+    }
+
+    /// <summary>
+    /// The controls of one part of a window, written as <see cref="Describe"/> writes the whole window and with the same
+    /// addresses, and how ForeignApp finds the part itself: its name, its id or its address (empty when it has none).
+    /// </summary>
+    public static (string Address, string Map) DescribePart(IntPtr window, ForeignPart part, int maxLines)
+    {
+        if (!OperatingSystem.IsWindows()) return ("", "");
+        Restore(window);
+        var text = new StringBuilder();
+        var description = new Description(window, maxLines, text) { Within = new Box(part.Left, part.Top, part.Width, part.Height), PartType = part.Type };
+        Guarded(() => description.Write());
+        return (description.PartAddress ?? "", text.ToString());
+    }
+
+    private readonly record struct Box(int Left, int Top, int Width, int Height)
+    {
+        public bool Contains(int x, int y) => x >= Left && y >= Top && x < Left + Width && y < Top + Height;
+
+        // Inside this box, give or take the pixels of a frame.
+        public bool Holds(Box inner) => inner.Left >= Left - 2 && inner.Top >= Top - 2
+            && inner.Left + inner.Width <= Left + Width + 2 && inner.Top + inner.Height <= Top + Height + 2;
+
+        public bool IsAbout(Box other) => Math.Abs(other.Left - Left) <= 2 && Math.Abs(other.Top - Top) <= 2
+            && Math.Abs(other.Width - Width) <= 2 && Math.Abs(other.Height - Height) <= 2;
+    }
+
+    private static Box? BoundsOf(IElement element) =>
+        element.GetCurrentPropertyValue(BoundingRectanglePropertyId) is double[] { Length: 4 } r && r[2] > 0 && r[3] > 0
+            ? new Box((int)Math.Round(r[0]), (int)Math.Round(r[1]), (int)Math.Round(r[2]), (int)Math.Round(r[3]))
+            : null;
+
     /// <summary>Restores a minimised window without taking the keyboard, and waits until it shows its controls again.</summary>
     public static void Restore(IntPtr window)
     {
@@ -129,6 +224,12 @@ public static class ForeignWindows
         private int _walked;
         private int _lines;
         private bool _full;
+
+        /// <summary>Only the controls inside this part are written; the walk, and so every address, is that of the whole window.</summary>
+        public Box? Within { get; init; }
+        public string? PartType { get; init; }
+        /// <summary>How ForeignApp finds the part itself, once the walk has passed it.</summary>
+        public string? PartAddress { get; private set; }
 
         public bool Write()
         {
@@ -191,7 +292,10 @@ public static class ForeignWindows
             if (name.Length > 0) _called.Add(name);
             if (id.Length > 0) _called.Add(id);
 
-            if (print)
+            var bounds = Within != null ? BoundsOf(element) : null;
+            if (Within is { } part && bounds is { } own && PartAddress == null && type == PartType && part.IsAbout(own))
+                PartAddress = byName && firstCalled ? name : id.Length > 0 ? id : address ?? "";
+            if (print && (Within is not { } within || bounds is { } placed && within.Holds(placed)))
             {
                 if (_lines < maxLines) { text.Append(line).Append('\n'); _lines++; }
                 else _full = true;
@@ -334,7 +438,9 @@ public static class ForeignWindows
     // ── UI Automation, declared here like in ForeignApp: its managed wrapper exists only for WPF programs ──
     // Slots that are not used still have to be there: the order is the interface. From UIAutomationClient.h.
 
-    private const int IsPasswordPropertyId = 30019;
+    private const int IsPasswordPropertyId = 30019, BoundingRectanglePropertyId = 30001;
+
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr window);
 
     private static IAutomation? s_automation;
     private static IAutomation Automation => s_automation ??= (IAutomation)Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("ff48dba4-60ef-4201-aa87-54103eef594e"))!)!;

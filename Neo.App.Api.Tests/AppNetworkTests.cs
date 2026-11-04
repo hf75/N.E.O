@@ -93,6 +93,31 @@ public class AppNetworkTests : IDisposable
         Apps.IsRunning("Inventory").Should().BeFalse();
     }
 
+    public sealed record ProductTotal(string Product, decimal Sum);
+
+    [AppInfo("Totals", "Sums per product.")]
+    public class TotalsApp
+    {
+        [McpObservable("The sum per product.")]
+        public List<ProductTotal> PerProduct => [new("Coffee", 7m)];
+
+        [McpCallable("The sum of one product.")]
+        public ProductTotal Of(string product) => new(product, 0m);
+    }
+
+    [Fact]
+    public async Task A_type_of_the_app_is_described_with_the_names_another_app_reads_it_by()
+    {
+        Publish(new TotalsApp());
+
+        // A program torn out of an app wrote its own type for this with other names, and showed the sums without the products.
+        var described = Apps.Find("Totals")!.Describe();
+        described.Should().Contain("value PerProduct: List<ProductTotal { string Product, decimal Sum }> — The sum per product.");
+        described.Should().Contain("method Of(string product) → ProductTotal { string Product, decimal Sum }");
+
+        (await Apps.ReadAsync<List<ProductTotal>>("Totals", "PerProduct")).Should().ContainSingle().Which.Should().Be(new ProductTotal("Coffee", 7m));
+    }
+
     [Fact]
     public void An_app_without_AppInfo_gets_the_name_its_host_gives_it()
     {
