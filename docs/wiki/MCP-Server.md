@@ -574,6 +574,7 @@ The desktop app takes no channels. On Windows, `start_claude_bridge` docks a sma
 **Parameters:**
 - `sessionTitle` (string, required) — the session's title, from the desktop app's `get_session` with `self`.
 - `sessionLink` (string, optional) — the session's `claude://` link from the same call; the panel offers to open the session with it.
+- `bringToFront` (bool, optional, default false) — when a prompt waits and another session is in front, the bridge brings this session to the front by its link, after nobody used mouse or keyboard for 20 s and while the session in front has an empty prompt box.
 
 Calling it again binds the running bridge anew. Details: [[Claude Bridge]].
 

@@ -679,7 +679,7 @@ public sealed class PreviewSessionManager : IAsyncDisposable
     /// calls (a prompt of Ai.Trigger handed over, the session it belongs to), not a chain of Claude's.
     /// Null when no bridge runs or it did not answer.
     /// </summary>
-    public async Task<MethodResultMessage?> CallClaudeBridgeAsync(string method, params string[] args)
+    public async Task<MethodResultMessage?> CallClaudeBridgeAsync(string method, params object[] args)
     {
         var frame = new InvokeMethodMessage(method, System.Text.Json.JsonSerializer.Serialize(args), 0);
         var env = await SendRequestAsync(ClaudeBridgeApp.WindowId, IpcTypes.InvokeMethod, Json.ToJson(frame), 10);

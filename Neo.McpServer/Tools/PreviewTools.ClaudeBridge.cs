@@ -23,7 +23,10 @@ public sealed partial class PreviewTools
         CompilationPipeline compilation,
         PreviewSessionManager preview,
         [Description("This session's title, as get_session with 'self' returns it: the bridge recognizes the session in the Claude window by it.")] string sessionTitle,
-        [Description("This session's link from get_session with 'self' (claude://…): the bridge offers to open the session with it.")] string? sessionLink = null)
+        [Description("This session's link from get_session with 'self' (claude://…): the bridge offers to open the session with it.")] string? sessionLink = null,
+        [Description("True when the user wants prompts to arrive while another session is in front or they are away: then the bridge " +
+            "brings this session to the front by its link when a prompt waits, but only after nobody used mouse or keyboard for " +
+            "20 s and while the session in front has nothing in its prompt box. Needs the link. Default false; the panel has a switch for it.")] bool bringToFront = false)
     {
         if (!OperatingSystem.IsWindows())
             return "The Claude bridge needs Windows: it docks to the window of the Claude desktop app.";
@@ -59,9 +62,14 @@ public sealed partial class PreviewTools
                 return "The bridge runs but did not take the session: " + (bound?.Error ?? "no answer") +
                        LoadNote(preview, ClaudeBridgeApp.WindowId);
 
+            var front = bringToFront && !string.IsNullOrWhiteSpace(sessionLink);
+            await preview.CallClaudeBridgeAsync("BringToFront", front);
+
             return (started ? "The Claude bridge runs" : "The Claude bridge is bound anew") +
                    $" and types the Ai.Trigger prompts of this server's apps into the session \"{sessionTitle.Trim()}\", " +
-                   "when it is in front, Claude is not working and the prompt box is empty. " +
+                   "when it is in front, Claude is not working and the prompt box is empty" +
+                   (front ? "; it brings the session to the front when a prompt waits and nobody uses the PC. "
+                          : bringToFront ? ". It cannot bring the session to the front without its link. " : ". ") +
                    "Tell the user that a small panel now sits at the lower right of the Claude window and shows what waits.";
         }
         catch (Exception ex)

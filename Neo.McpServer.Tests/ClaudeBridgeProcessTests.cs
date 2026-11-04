@@ -100,26 +100,9 @@ public class ClaudeBridgeProcessTests
     {
         if (!OperatingSystem.IsWindows()) return;
 
-        using var server = StdioJsonRpcProcess.Start("dotnet", $"\"{McpServerProcessTests.ServerDll}\"", new Dictionary<string, string>
-        {
-            ["NEO_CLAUDE_BRIDGE_TARGET"] = _claudeTitle,
-            ["NEO_LIVEMCP_MAX_DEPTH"] = "100", // the test drives the stand-in more often than loop protection allows Claude
-        });
-        await server.InitializeAsync("neo-claude-bridge-tests");
-
+        using var server = await StartAsync(bringToFront: false);
         try
         {
-            (await server.CallToolAsync("compile_and_preview", new { sourceCode = new[] { FakeClaude }, framework = "avalonia", windowId = "claude" }, TimeSpan.FromMinutes(3)))
-                .Should().StartWith("SUCCESS", "server stderr:\n" + server.StandardError);
-            (await server.CallToolAsync("position_window", new { windowId = "claude", x = 100, y = 100, width = 700, height = 560 }))
-                .Should().Contain("positioned");
-            (await server.CallToolAsync("compile_and_preview", new { sourceCode = new[] { App }, framework = "avalonia", windowId = "app" }, TimeSpan.FromMinutes(3)))
-                .Should().StartWith("SUCCESS", "server stderr:\n" + server.StandardError);
-
-            var started = await server.CallToolAsync("start_claude_bridge",
-                new { sessionTitle = "Session A", sessionLink = "claude://claude.ai/epitaxy/local_test" }, TimeSpan.FromMinutes(3));
-            started.Should().Contain("The Claude bridge runs", "server stderr:\n" + server.StandardError);
-
             // At the lower right of the stand-in, shorter than it: the title bar and its buttons stay free.
             await WaitForAsync(() => Task.FromResult(Windows.DockedAtLowerRight(_claudeTitle, PreviewTitle)), "the bridge to dock to the Claude window");
 
@@ -160,10 +143,90 @@ public class ClaudeBridgeProcessTests
         }
         finally
         {
-            try { await server.CallToolAsync("close_preview", new { windowId = "claude-bridge" }, TimeSpan.FromSeconds(20)); } catch { /* the server is killed anyway */ }
-            try { await server.CallToolAsync("close_all_windows", new { }, TimeSpan.FromSeconds(20)); } catch { }
+            await CloseAsync(server);
         }
     }
+
+    [Fact]
+    public async Task A_session_in_the_background_is_brought_to_the_front_and_followed_when_it_was_renamed()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        using var server = await StartAsync(bringToFront: true);
+        try
+        {
+            // Someone writes in another session: that one stays in front.
+            await CallAsync(server, "claude", "Show", "[\"Session B\"]");
+            await CallAsync(server, "claude", "Draft", "[\"typing in B\"]");
+            await CallAsync(server, "app", "Fire", "[\"first prompt\"]");
+            await WaitForAsync(async () => (await StateAsync(server)).Contains("holds a draft"), "the bridge to leave the session in front alone");
+            (await OpenedAsync(server)).Should().Be(0);
+
+            // Nobody writes: the bridge opens its session's link (the stand-in only counts it), and the session comes.
+            await CallAsync(server, "claude", "Draft", "[\"\"]");
+            await WaitForAsync(async () => await OpenedAsync(server) == 1, "the bridge to open the session's link");
+            await CallAsync(server, "claude", "Show", "[\"Session A\"]");
+            await WaitForAsync(async () => (await SentAsync(server)).Length == 1, "the first prompt to be sent");
+
+            // Meanwhile the session was renamed: it comes to the front under its new title, and the bridge follows it.
+            await CallAsync(server, "claude", "Show", "[\"Session C\"]");
+            await CallAsync(server, "app", "Fire", "[\"second prompt\"]");
+            await WaitForAsync(async () => await OpenedAsync(server) == 2, "the bridge to open the link again");
+            await CallAsync(server, "claude", "Show", "[\"Session A, renamed\"]");
+            await WaitForAsync(async () => (await SentAsync(server)).Length == 2, "the second prompt to be sent");
+            JsonSerializer.Deserialize<string>(await ObservableAsync(server, "claude-bridge", "Session")).Should().Be("Session A, renamed");
+
+            // A link that brings nothing: the prompt waits, and the bridge does not try again at once.
+            await CallAsync(server, "claude", "Show", "[\"Session D\"]");
+            await CallAsync(server, "app", "Fire", "[\"third prompt\"]");
+            await WaitForAsync(async () => (await StateAsync(server)).Contains("the last try did not bring it"), "the bridge to give the link up for a while");
+            (await OpenedAsync(server)).Should().Be(3);
+            (await SentAsync(server)).Should().HaveCount(2);
+        }
+        finally
+        {
+            await CloseAsync(server);
+        }
+    }
+
+    // The real server with the stand-in for the Claude window, an app that calls Ai.Trigger, and the bridge for "Session A".
+    private async Task<StdioJsonRpcProcess> StartAsync(bool bringToFront)
+    {
+        var server = StdioJsonRpcProcess.Start("dotnet", $"\"{McpServerProcessTests.ServerDll}\"", new Dictionary<string, string>
+        {
+            ["NEO_CLAUDE_BRIDGE_TARGET"] = _claudeTitle,
+            ["NEO_LIVEMCP_MAX_DEPTH"] = "100", // the test drives the stand-in more often than loop protection allows Claude
+        });
+        try
+        {
+            await server.InitializeAsync("neo-claude-bridge-tests");
+            (await server.CallToolAsync("compile_and_preview", new { sourceCode = new[] { FakeClaude }, framework = "avalonia", windowId = "claude" }, TimeSpan.FromMinutes(3)))
+                .Should().StartWith("SUCCESS", "server stderr:\n" + server.StandardError);
+            (await server.CallToolAsync("position_window", new { windowId = "claude", x = 100, y = 100, width = 700, height = 560 }))
+                .Should().Contain("positioned");
+            (await server.CallToolAsync("compile_and_preview", new { sourceCode = new[] { App }, framework = "avalonia", windowId = "app" }, TimeSpan.FromMinutes(3)))
+                .Should().StartWith("SUCCESS", "server stderr:\n" + server.StandardError);
+
+            var started = await server.CallToolAsync("start_claude_bridge",
+                new { sessionTitle = "Session A", sessionLink = "claude://claude.ai/epitaxy/local_test", bringToFront }, TimeSpan.FromMinutes(3));
+            started.Should().Contain("The Claude bridge runs", "server stderr:\n" + server.StandardError);
+            return server;
+        }
+        catch
+        {
+            server.Dispose();
+            throw;
+        }
+    }
+
+    private static async Task CloseAsync(StdioJsonRpcProcess server)
+    {
+        try { await server.CallToolAsync("close_preview", new { windowId = "claude-bridge" }, TimeSpan.FromSeconds(20)); } catch { /* the server is killed anyway */ }
+        try { await server.CallToolAsync("close_all_windows", new { }, TimeSpan.FromSeconds(20)); } catch { }
+    }
+
+    private static async Task<int> OpenedAsync(StdioJsonRpcProcess server) =>
+        JsonSerializer.Deserialize<int>(await ObservableAsync(server, "claude-bridge", "Opened"));
 
     private static async Task CallAsync(StdioJsonRpcProcess server, string windowId, string method, string argsJson)
     {
