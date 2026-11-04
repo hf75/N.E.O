@@ -294,7 +294,10 @@ public static class AppNetwork
                         }
                         catch (Exception) { /* not repaired */ }
                         if (!repaired) return response with { Error = response.Error + " The interface could not be repaired." };
-                        return (await InvokeAsync(entry, request).ConfigureAwait(false)).Response;
+                        // A repair that could not be patched in replaced the app, and with it this server: the new one takes the call.
+                        AppServer current;
+                        lock (s_gate) current = s_server ?? this;
+                        return (await current.InvokeAsync(entry, request).ConfigureAwait(false)).Response;
                     }
                 }
 

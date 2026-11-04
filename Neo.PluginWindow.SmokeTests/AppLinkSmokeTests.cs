@@ -21,7 +21,7 @@ public class AppLinkSmokeTests : IDisposable
     private readonly string _settingsA = Path.Combine(Path.GetTempPath(), "neo_link_a_" + Guid.NewGuid().ToString("N")[..8]);
     private readonly string _settingsB = Path.Combine(Path.GetTempPath(), "neo_link_b_" + Guid.NewGuid().ToString("N")[..8]);
 
-    private const string Meter = """
+    internal const string Meter = """
         using Avalonia.Controls;
         using Neo.App;
 
@@ -106,7 +106,7 @@ public class AppLinkSmokeTests : IDisposable
 
     private static object Settings => new { UseAvalonia = true, ClaudeModel = "stand-in", ClaudeEffort = "low", AcceptAutomatic = true };
 
-    private static AutomationElement AppOf(System.Diagnostics.Process host) =>
+    internal static AutomationElement AppOf(System.Diagnostics.Process host) =>
         System.Diagnostics.Process.GetProcessesByName(ChildProcessName(Host))
             .Where(p => TopLevelWindows.ParentProcessId(p.Id) == host.Id)
             .Select(p => TopLevelWindows.Find(w => w.Pid == p.Id))
@@ -123,7 +123,7 @@ public class AppLinkSmokeTests : IDisposable
     private static void SetSlider(AutomationElement window, double value) =>
         ((RangeValuePattern)SliderIn(window).GetCurrentPattern(RangeValuePattern.Pattern)).SetValue(value);
 
-    private static async Task<AutomationElement> DialogOfAsync(System.Diagnostics.Process host)
+    internal static async Task<AutomationElement> DialogOfAsync(System.Diagnostics.Process host)
     {
         try
         {
@@ -143,7 +143,7 @@ public class AppLinkSmokeTests : IDisposable
             return $"{r.L},{r.T} to {r.R},{r.B}: {string.Join(" | ", TextsIn(w).TakeLast(8))}";
         }));
 
-    private static (int X, int Y) TitleBarOf(AutomationElement window)
+    internal static (int X, int Y) TitleBarOf(AutomationElement window)
     {
         var handle = (IntPtr)window.Current.NativeWindowHandle;
         GetWindowRect(handle, out var r);
@@ -192,7 +192,7 @@ public class AppLinkSmokeTests : IDisposable
         });
     }
 
-    private static async Task ConnectAsync(System.Diagnostics.Process host, params string[] leaveOut)
+    internal static async Task ConnectAsync(System.Diagnostics.Process host, params string[] leaveOut)
     {
         var dialog = await DialogOfAsync(host);
         await WaitForAsync(() => ButtonIn(dialog, "Connect").Current.IsEnabled ? "ready" : null, 30, "the suggestions");

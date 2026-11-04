@@ -143,6 +143,27 @@ public class ProgramInterfaceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_repair_that_replaces_the_app_gives_the_call_to_the_new_one()
+    {
+        var before = new StockroomInterface();
+        var after = new StockroomInterface { Pressed = "Issue" };
+        AppNetwork.Publish(before, "Unnamed", f => Task.FromResult(f()));
+        AppNetwork.ChangeGate = _ => Task.FromResult(true);
+        AppNetwork.RepairHandler = _ =>
+        {
+            // What a window does when the fix cannot be patched in: the old app goes, the new one comes.
+            AppNetwork.Unpublish();
+            AppNetwork.Publish(after, "Unnamed", f => Task.FromResult(f()));
+            return Task.FromResult(true);
+        };
+
+        (await Apps.CallAsync<string>("Stockroom", "BookOut", "4711", 2)).Should().Be("Booked 2 x 4711 out.");
+
+        after.BookedOut.Should().Be(2, "the new app took the call");
+        before.BookedOut.Should().Be(0);
+    }
+
+    [Fact]
     public async Task A_repair_that_does_not_happen_gives_the_caller_the_error()
     {
         Publish(new StockroomInterface());
@@ -179,6 +200,7 @@ public class ProgramInterfaceTests : IDisposable
 
     public void Dispose()
     {
+        AppNetwork.Unpublish();
         AppNetwork.ChangeGate = null;
         AppNetwork.RepairHandler = null;
         Apps.CallerName = null;

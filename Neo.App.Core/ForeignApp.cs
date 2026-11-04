@@ -820,6 +820,19 @@ namespace Neo.App
 
         private static bool Press(IElement element, string program)
         {
+            // A button with a window of its own is pressed the way Windows itself tells its parent: through UI Automation, a press that
+            // opens a dialog holds the program, and it answers nothing more until the dialog is closed, so nobody could read or close it.
+            if (element.CurrentControlType == ButtonControlType
+                && element.GetCurrentPropertyValue(NativeWindowHandlePropertyId) is int handle && handle != 0
+                && ClassName((IntPtr)handle).Contains("BUTTON", StringComparison.OrdinalIgnoreCase)
+                && GetParent((IntPtr)handle) is var parent && parent != IntPtr.Zero)
+            {
+                var button = (IntPtr)handle;
+                SendMessageTimeout(parent, WM_COMMAND, (IntPtr)((BN_CLICKED << 16) | (GetDlgCtrlID(button) & 0xFFFF)), button, SMTO_ABORTIFHUNG, (uint)PressWait.TotalMilliseconds, out _);
+                Settle(button);
+                return true;
+            }
+
             if (element.GetCurrentPattern(InvokePatternId) is IInvokePattern invoke)
             {
                 // A button that opens a dialog may not come back until the dialog is closed.
@@ -844,6 +857,12 @@ namespace Neo.App
             Thread.Sleep(150);
             if (element.GetCurrentPropertyValue(NativeWindowHandlePropertyId) is int handle && handle != 0)
                 SendMessageTimeout((IntPtr)handle, 0, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 3000, out _);
+        }
+
+        private static void Settle(IntPtr window)
+        {
+            Thread.Sleep(150);
+            SendMessageTimeout(window, 0, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 3000, out _);
         }
 
         // The control is the item, or holds it: a combo box opens for it and closes again.
@@ -1031,8 +1050,11 @@ namespace Neo.App
         [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out int value, int size);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr window, StringBuilder name, int maxCount);
         [DllImport("user32.dll")] private static extern IntPtr SendMessageTimeout(IntPtr window, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
+        [DllImport("user32.dll")] private static extern IntPtr GetParent(IntPtr window);
+        [DllImport("user32.dll")] private static extern int GetDlgCtrlID(IntPtr window);
 
-        private const uint SMTO_ABORTIFHUNG = 0x2;
+        private const uint SMTO_ABORTIFHUNG = 0x2, WM_COMMAND = 0x0111;
+        private const int BN_CLICKED = 0;
 
         // ── UI Automation, declared here: its managed wrapper exists only for WPF programs ──
         // Slots that are not used still have to be there: the order is the interface. From UIAutomationClient.h.

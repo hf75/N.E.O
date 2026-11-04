@@ -649,7 +649,8 @@ namespace Neo.PluginWindowAvalonia
                 case IpcTypes.UnloadControl:
                     {
                         _repairPending = false;
-                        InterfaceRepaired(false);
+                        // A repair that cannot be patched in replaces the app: the new one comes right after this.
+                        ExpectTheRepairedApp();
                         await Dispatcher.UIThread.InvokeAsync(() =>
                         {
                             MainWin.HideBanner();
@@ -1128,6 +1129,20 @@ namespace Neo.PluginWindowAvalonia
                 return false;
             }
             return await repair.Task;
+        }
+
+        // The app was unloaded while a repair waits: a new one has a while to come, then the waiting calls give up.
+        private void ExpectTheRepairedApp()
+        {
+            TaskCompletionSource<bool>? repair;
+            lock (_interfaceRepairGate) repair = _interfaceRepair;
+            if (repair == null) return;
+            _ = Task.Delay(TimeSpan.FromSeconds(30)).ContinueWith(_ =>
+            {
+                lock (_interfaceRepairGate)
+                    if (!ReferenceEquals(_interfaceRepair, repair)) return;
+                InterfaceRepaired(false);
+            }, TaskScheduler.Default);
         }
 
         /// <summary>The repaired app is in place (true), or the app is gone (false): calls waiting for it go on.</summary>

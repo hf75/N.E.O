@@ -40,7 +40,7 @@ public class ProgramInterfaceSmokeTests : IDisposable
         [AppInfo("Stockroom", "The stockroom program: the stock of an item, and booking items out.", Program = "{{_title}}")]
         public class DynamicUserControl : UserControl
         {
-            private readonly TextBlock _log = new TextBlock { Text = "LOG{{version}} none" };
+            private readonly TextBlock _log = new TextBlock { Text = "LOG none" };
             private readonly ForeignApp _stockroom;
 
             public DynamicUserControl()
@@ -123,6 +123,8 @@ public class ProgramInterfaceSmokeTests : IDisposable
             _ready.Wait(TimeSpan.FromSeconds(10));
         }
 
+        public IntPtr Handle => (IntPtr)_form.Invoke(() => _form.Handle);
+
         /// <summary>The next version of the program: a label and a button are called differently.</summary>
         public void Update() => _form.Invoke(() =>
         {
@@ -200,9 +202,20 @@ public class ProgramInterfaceSmokeTests : IDisposable
             // The program gets a new version. The call finds it changed, waits while the interface is repaired, and goes on.
             await Task.Delay(2000); // hot reload arms itself in the background
             _program.Update();
-            (await Apps.CallAsync<string>("Stockroom", "BookOut", "4711", 2)).Should().Be("Booked 2 x 4711 out. Stock now 12.");
+            string repaired;
+            try
+            {
+                repaired = (await Apps.CallAsync<string>("Stockroom", "BookOut", "4711", 2))!;
+            }
+            catch (AppCallException ex)
+            {
+                var neo = TopLevelWindows.Find(w => w.Pid == host.Id && w.Title.StartsWith("N.E.O"));
+                throw new InvalidOperationException(ex.Message + " N.E.O. says: " + (neo == null ? "(no window)" : string.Join(" | ", TextsIn(neo))) + $" ({api.Requests.Count} request(s))", ex);
+            }
+            repaired.Should().Be("Booked 2 x 4711 out. Stock now 12.");
             _program.Stock.Should().Be(12);
-            await WaitForTextAsync(host, ChildProcessName(Host), t => t.StartsWith("LOG v2 Booked"), 10, "the repaired interface, the same instance", api);
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t.StartsWith("LOG v2 Booked"), 10, "the repaired interface", api);
+            await WaitForTextAsync(host, ChildProcessName(Host), t => t.StartsWith("Repaired in place"), 10, "the repair patched into the running interface, not a new one", api);
 
             // The repair saw how the program looks now, and still nothing of its data.
             api.Prompts.Should().HaveCount(2);
@@ -217,8 +230,133 @@ public class ProgramInterfaceSmokeTests : IDisposable
         }
     }
 
+    // ── Links with the program: an app dropped on its window, and its window dropped on an app ──
+
+    private readonly string _settingsMeter = Path.Combine(Path.GetTempPath(), "neo_iface_meter_" + Guid.NewGuid().ToString("N")[..8]);
+
+    private static object Settings => new { UseAvalonia = true, ClaudeModel = "stand-in", ClaudeEffort = "low", AcceptAutomatic = true };
+
+    // What the model of the N.E.O. dropped on suggests: pressing Bump asks the stockroom for its stock.
+    private static string Proposal(string meter, string stockroom) => Newtonsoft.Json.JsonConvert.SerializeObject(new
+    {
+        blocks = new[] { new { title = "Bump looks up the stock", detail = "Pressing Bump asks the stockroom for item 4711.", code = $"{meter}.OnClick(\"Button:0\", () => {stockroom}.Call(\"Stock\", \"4711\"));" } },
+        note = "",
+    });
+
+    private async Task<(System.Diagnostics.Process Meter, System.Diagnostics.Process Interface)> MeterAndInterfaceAsync(StandInClaudeApi meterApi, StandInClaudeApi interfaceApi)
+    {
+        _program = new Stockroom(_title, 760, 120);
+        var meter = Start(Host, meterApi, _settingsMeter, Settings);
+        var stockroom = Start(Host, interfaceApi, _settings, Settings);
+        await SendPromptAsync(meter, "Build it.");
+        await WaitForTextAsync(meter, ChildProcessName(Host), t => t.StartsWith("METER 0"), 60, "the meter", meterApi);
+        await SendPromptAsync(stockroom, $"Give {_title} an interface.");
+        await WaitForTextAsync(stockroom, ChildProcessName(Host), t => t == "LOG none", 60, "the interface", interfaceApi);
+        await Task.Delay(3000); // hot reload arms itself in the background, and a N.E.O. docks its app once more after a prompt
+
+        // Both N.E.O.s out of the way; the meter on the left, the program with its panel on the right.
+        foreach (var host in new[] { meter, stockroom })
+            MoveWindow((IntPtr)TopLevelWindows.Find(w => w.Pid == host.Id && w.Title.StartsWith("N.E.O"))!.Current.NativeWindowHandle, 650, 600, 640, 400, true);
+        MoveWindow((IntPtr)AppLinkSmokeTests.AppOf(meter).Current.NativeWindowHandle, 100, 120, 500, 420, true);
+        await Task.Delay(400);
+        return (meter, stockroom);
+    }
+
+    private AutomationElement ProgramWindow => AutomationElement.FromHandle(_program!.Handle);
+
+    private static AutomationElement? Overlay() => TopLevelWindows.Find(w => w.Title == "N.E.O. drop");
+
+    [Fact]
+    public async Task An_app_dropped_on_the_window_of_a_program_links_with_its_interface()
+    {
+        using var meterApi = new StandInClaudeApi();
+        using var interfaceApi = new StandInClaudeApi();
+        meterApi.AnswerWithCode(AppLinkSmokeTests.Meter);
+        interfaceApi.AnswerWithCode(Interface("Quantity:>Edit", "Book out", ""));
+        interfaceApi.AnswerWithText(Proposal("a", "b"));
+
+        var (meter, stockroom) = await MeterAndInterfaceAsync(meterApi, interfaceApi);
+        try
+        {
+            var dragged = AppLinkSmokeTests.AppOf(meter);
+            TopLevelWindows.Foreground(ProgramWindow);
+            TopLevelWindows.Foreground(dragged);
+            await Task.Delay(300);
+            var from = AppLinkSmokeTests.TitleBarOf(dragged);
+            GetWindowRect(_program!.Handle, out var r);
+
+            // Over the program the halves show, and the right one links.
+            await TopLevelWindows.DragAsync(dragged, from.X, from.Y, r.L + (r.R - r.L) * 3 / 4, r.T + 150, async () =>
+                await WaitForAsync(() => Overlay() is { } over ? TextsIn(over).FirstOrDefault(t => t == "Drop to link Meter with this program") : null, 5, "the halves over the program"));
+
+            var dialog = await AppLinkSmokeTests.DialogOfAsync(stockroom);
+            dialog.Current.Name.Should().Be("Link Meter with Stockroom", "the program is linked through its interface");
+            await WaitForAsync(() => Overlay() == null ? "gone" : null, 5, "the halves going after the drop");
+            await AppLinkSmokeTests.ConnectAsync(stockroom);
+
+            await WaitForTextAsync(meter, ChildProcessName(Host), t => t == "Linked to Stockroom", 10, "the chip on the meter", meterApi);
+            var inMeter = AppLinkSmokeTests.AppOf(meter);
+            TopLevelWindows.Click(inMeter, inMeter.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button))
+                .Cast<AutomationElement>().First(b => b.Current.Name == "Bump"));
+            await WaitForTextAsync(stockroom, ChildProcessName(Host), t => t == "LOG stock 17", 10, "the stockroom looked up through the link", interfaceApi);
+        }
+        finally
+        {
+            Stop(meter);
+            Stop(stockroom);
+        }
+    }
+
+    [Fact]
+    public async Task The_window_of_a_program_dragged_onto_an_app_links_its_interface_with_it()
+    {
+        using var meterApi = new StandInClaudeApi();
+        using var interfaceApi = new StandInClaudeApi();
+        meterApi.AnswerWithCode(AppLinkSmokeTests.Meter);
+        meterApi.AnswerWithText(Proposal("b", "a"));
+        interfaceApi.AnswerWithCode(Interface("Quantity:>Edit", "Book out", ""));
+
+        var (meter, stockroom) = await MeterAndInterfaceAsync(meterApi, interfaceApi);
+        try
+        {
+            var target = AppLinkSmokeTests.AppOf(meter);
+            var program = ProgramWindow;
+            GetWindowRect(_program!.Handle, out var before);
+            TopLevelWindows.Foreground(target);
+            TopLevelWindows.Foreground(program);
+            await Task.Delay(300);
+            var from = AppLinkSmokeTests.TitleBarOf(program);
+            GetWindowRect((IntPtr)target.Current.NativeWindowHandle, out var r);
+
+            // Its code is not here: the app says that a drop links, on either half.
+            await TopLevelWindows.DragAsync(program, from.X, from.Y, r.L + (r.R - r.L) / 4, r.T + 150, async () =>
+                await WaitForAsync(() => TextsIn(AppLinkSmokeTests.AppOf(meter)).FirstOrDefault(t => t == "Drop to link Stockroom with this app"), 5, "the meter saying that a drop would link"));
+
+            var dialog = await AppLinkSmokeTests.DialogOfAsync(meter);
+            dialog.Current.Name.Should().Be("Link Stockroom with Meter");
+            await WaitForAsync(() => { GetWindowRect(_program.Handle, out var now); return now.L == before.L && now.T == before.T ? "back" : null; }, 5, "the program back where it was");
+            await AppLinkSmokeTests.ConnectAsync(meter);
+
+            await WaitForTextAsync(meter, ChildProcessName(Host), t => t == "Linked to Stockroom", 10, "the chip on the meter", meterApi);
+            var inMeter = AppLinkSmokeTests.AppOf(meter);
+            TopLevelWindows.Click(inMeter, inMeter.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button))
+                .Cast<AutomationElement>().First(b => b.Current.Name == "Bump"));
+            await WaitForTextAsync(stockroom, ChildProcessName(Host), t => t == "LOG stock 17", 10, "the stockroom looked up through the link", interfaceApi);
+        }
+        finally
+        {
+            Stop(meter);
+            Stop(stockroom);
+        }
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] private struct Rect { public int L, T, R, B; }
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window, out Rect rect);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool MoveWindow(IntPtr window, int x, int y, int width, int height, bool repaint);
+
     public void Dispose()
     {
+        try { Directory.Delete(_settingsMeter, recursive: true); } catch { }
         _program?.Dispose();
         Apps.CallerName = null;
         Environment.SetEnvironmentVariable("NEO_APP_NETWORK_DIR", null);
