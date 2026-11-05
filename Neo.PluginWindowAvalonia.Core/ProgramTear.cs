@@ -277,7 +277,7 @@ namespace Neo.PluginWindowAvalonia
             if (bitmap != null)
             {
                 using var png = new System.IO.MemoryStream();
-                bitmap.Save(png);
+                bitmap.Save(png, PngBitmapEncoderOptions.Default);
                 _picture = png.ToArray();
             }
             Control picture = bitmap != null
