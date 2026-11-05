@@ -52,10 +52,11 @@ public static class FissionGuidance
     /// <summary>For the interface of the program the part is torn out of, to go after the prompt.</summary>
     /// <param name="part">Which part, in words: its type, name and place.</param>
     /// <param name="map">Its controls as the program shows them, with their addresses, texts only as their shapes.</param>
-    public static string ForTheInterface(string interfaceName, string program, string newName, string part, string map) => $"""
+    /// <param name="picture">The model gets the picture of the part that went along with the pointer.</param>
+    public static string ForTheInterface(string interfaceName, string program, string newName, string part, string map, bool picture = false) => $"""
 
 
-        The user tore one part out of the program "{program}" with the mouse, to have it as a small program of its own, "{newName}", that does what the part does through this interface. "{program}" itself stays as it is. The part: {part}.
+        The user tore one part out of the program "{program}" with the mouse, to have it as a small program of its own, "{newName}", that does what the part does through this interface. "{program}" itself stays as it is. The part: {part}.{(picture ? " The picture shows the part as it looks now." : "")}
         Its controls as they are now (with their addresses; a text in ~"…" is only the shape of what it shows):
         ```
         {map}
@@ -64,9 +65,12 @@ public static class FissionGuidance
         """;
 
     /// <summary>The prompt for the small program, written in a session of its own.</summary>
-    public static string ForTheProgramPart(string interfaceName, string program, string newName, string part, string map) => $"""
+    /// <param name="picture">The model gets the picture of the part that went along with the pointer.</param>
+    public static string ForTheProgramPart(string interfaceName, string program, string newName, string part, string map, bool picture = false) => $"""
         Write the program "{newName}": a small window that does what one part of the program "{program}" does, the part the user tore out of it with the mouse: {part}.
-        It shows the same fields and buttons, alone in its window. You see the part only as the list below, not how it looks: make every button show what it does as plainly as it does in "{program}", with the symbol or word such a button carries there, and the color it applies where its name names one (a button for a color shows that color). It does every action by calling the interface "{interfaceName}" with Apps.CallAsync, and gets every value from it, with exactly the names "{interfaceName}" offers in RUNNING APPS; it never touches "{program}" itself. Show what a call answered, or why it failed. While "{interfaceName}" is not running, say so in the window, and go on when it is back. Put [AppInfo("{newName}", "<what it is for>")] on the class. Nothing more: the user wants that part, alone.
+        It shows the same fields and buttons, alone in its window. {(picture
+            ? $"The picture shows the part as it looks in \"{program}\": make the window look like it, with the same symbols, colors and arrangement, so that every button shows what it does as plainly as it does there; where none of your symbols looks like the one in the picture, write the button's name on it instead. The list below gives the controls and their addresses."
+            : $"You see the part only as the list below, not how it looks: make every button show what it does as plainly as it does in \"{program}\", with the symbol or word such a button carries there, and the color it applies where its name names one (a button for a color shows that color).")} It does every action by calling the interface "{interfaceName}" with Apps.CallAsync, and gets every value from it, with exactly the names "{interfaceName}" offers in RUNNING APPS; it never touches "{program}" itself. Show what a call answered, or why it failed. While "{interfaceName}" is not running, say so in the window, and go on when it is back. Put [AppInfo("{newName}", "<what it is for>")] on the class. Nothing more: the user wants that part, alone.
 
         The part's controls in "{program}" (with their addresses; a text in ~"…" is only the shape of what it showed):
         ```

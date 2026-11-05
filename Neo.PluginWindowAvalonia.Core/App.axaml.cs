@@ -1037,10 +1037,10 @@ namespace Neo.PluginWindowAvalonia
         private ProgramTear? _programTear;
 
         // Fission out of the program this app is the interface of: the part becomes a small program that uses it through this app.
-        private void TornOutOfProgram(string program, IntPtr window, Neo.Shared.ForeignWindows.ForeignPart part, PixelPoint at) =>
-            _ = TearOutOfProgramAsync(program, window, part, at);
+        private void TornOutOfProgram(string program, IntPtr window, Neo.Shared.ForeignWindows.ForeignPart part, PixelPoint at, byte[]? picture) =>
+            _ = TearOutOfProgramAsync(program, window, part, at, picture);
 
-        private async Task TearOutOfProgramAsync(string program, IntPtr window, Neo.Shared.ForeignWindows.ForeignPart part, PixelPoint at)
+        private async Task TearOutOfProgramAsync(string program, IntPtr window, Neo.Shared.ForeignWindows.ForeignPart part, PixelPoint at, byte[]? picture)
         {
             try
             {
@@ -1049,8 +1049,10 @@ namespace Neo.PluginWindowAvalonia
                 MainWin.ShowBanner($"Tearing it out of {shown}: it becomes a small program of its own…", "#D07B1FA2", 0);
                 var (address, map) = await Task.Run(() => Neo.Shared.ForeignWindows.DescribePart(window, part, 80));
                 var scaling = MainWin.RenderScaling;
+                // The picture that went along with the pointer goes to the model as it is: the person chose to drag what it shows.
                 var tear = new FissionTearMessage(Neo.App.AppNetwork.Published?.Name ?? MainWin.Title ?? "", address, part.Type, part.Name.Length > 0 ? part.Name : null, null,
-                    at.X, at.Y, part.Width / scaling, part.Height / scaling, Program: program, Map: map, ProgramName: shown);
+                    at.X, at.Y, part.Width / scaling, part.Height / scaling, Program: program, Map: map, ProgramName: shown,
+                    Picture: picture != null ? Convert.ToBase64String(picture) : null);
                 await AskHostAsync(FissionMessages.TearOut, Json.ToJson(tear));
             }
             catch (Exception ex)

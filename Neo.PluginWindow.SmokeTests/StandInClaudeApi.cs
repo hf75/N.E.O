@@ -18,6 +18,7 @@ internal sealed class StandInClaudeApi : IDisposable
     private readonly ConcurrentQueue<(string Query, string Title, string Url, string Answer, bool Cited)> _searchedAnswers = new();
     private readonly ConcurrentQueue<string> _prompts = new();
     private readonly ConcurrentQueue<string> _requests = new();
+    private readonly ConcurrentQueue<int> _pictures = new();
 
     public StandInClaudeApi()
     {
@@ -34,6 +35,9 @@ internal sealed class StandInClaudeApi : IDisposable
 
     /// <summary>The whole requests received so far, as JSON.</summary>
     public IReadOnlyList<string> Requests => _requests.ToArray();
+
+    /// <summary>How many pictures came with each user message so far.</summary>
+    public IReadOnlyList<int> Pictures => _pictures.ToArray();
 
     /// <summary>The next answer: replace the app with this code, which needs these packages.</summary>
     public void AnswerWithCode(string code, params string[] nuGetPackages)
@@ -97,7 +101,11 @@ internal sealed class StandInClaudeApi : IDisposable
             var body = await reader.ReadToEndAsync();
             _requests.Enqueue(body);
             var request = JsonNode.Parse(body)!;
-            _prompts.Enqueue(request["messages"]!.AsArray().Last()!["content"]!.GetValue<string>());
+            // A text, or blocks: pictures before the text they belong to.
+            var content = request["messages"]!.AsArray().Last()!["content"]!;
+            var blocks = content as JsonArray;
+            _prompts.Enqueue(blocks == null ? content.GetValue<string>() : string.Concat(blocks.Where(b => (string?)b?["type"] == "text").Select(b => (string?)b?["text"])));
+            _pictures.Enqueue(blocks?.Count(b => (string?)b?["type"] == "image") ?? 0);
 
             if (_hold is { } hold)
                 await hold.Task;

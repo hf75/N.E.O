@@ -16,6 +16,10 @@ namespace Neo.App
         // What the part is and how it looked, added to what the model reads and kept out of the history.
         private string _fissionForTheModel = string.Empty;
 
+        // Pictures that go to Claude with the prompt (the part of another program, as it went along with the pointer);
+        // the other providers get the text only.
+        private List<byte[]> _picturesForTheModel = [];
+
         private Task<string?> TornOutAsync(string? payload)
         {
             if (payload == null || Json.FromJson<FissionTearMessage>(payload) is not { } tear)
@@ -110,31 +114,47 @@ namespace Neo.App
                 + $", {Math.Round(tear.Width)} × {Math.Round(tear.Height)} px";
             var map = tear.Map ?? "";
 
-            // 1. The interface offers what the part needs. It may have all of that already: no change is an answer too.
-            Logger.LogMessage($"Tearing \"{newName}\" out of {shown}: the AI sees the part's controls (what they show only as its shape) and the source of this interface.", BubbleType.Info);
-            _fissionForTheModel = FissionGuidance.ForTheInterface(interfaceName, program, newName, part, map);
-            bool ran;
+            // The picture that went along with the pointer, as it is: how the part looks, which no list of controls says.
+            // Claude reads pictures; the other providers get the list only, and are not told of a picture.
+            byte[]? picture = null;
+            try { if (tear.Picture is { Length: > 0 } base64) picture = Convert.FromBase64String(base64); }
+            catch (FormatException) { /* no picture then */ }
+            var withPicture = picture != null && ReferenceEquals(AiAgent, Claude);
+            _picturesForTheModel = withPicture ? [picture!] : [];
             try
             {
-                ran = await ExecutePromptAsync(FissionGuidance.ChatPromptForProgram(newName, program));
+                // 1. The interface offers what the part needs. It may have all of that already: no change is an answer too.
+                Logger.LogMessage(withPicture
+                    ? $"Tearing \"{newName}\" out of {shown}: the AI sees the part as it went along with the pointer, its controls, and the source of this interface."
+                    : $"Tearing \"{newName}\" out of {shown}: the AI sees the part's controls (what they show only as its shape) and the source of this interface.", BubbleType.Info);
+                _fissionForTheModel = FissionGuidance.ForTheInterface(interfaceName, program, newName, part, map, withPicture);
+                bool ran;
+                try
+                {
+                    ran = await ExecutePromptAsync(FissionGuidance.ChatPromptForProgram(newName, program));
+                }
+                finally
+                {
+                    _fissionForTheModel = string.Empty;
+                }
+                if (!ran) return "N.E.O. is busy with this interface right now.";
+
+                // 2. The small program, in a session of its own, with this interface on its list of running apps.
+                await ChildProcessService.SetAppWindowAsync(new AppWindowMessage(Banner: $"Writing \"{newName}\" as a program of its own…", BannerColor: BannerDark));
+                var (code, packages, problem) = await WriteNewProgramAsync(FissionGuidance.ForTheProgramPart(interfaceName, program, newName, part, map, withPicture));
+                if (code == null) return problem ?? "the AI could not write the new program.";
+
+                // 3. As for a part of an app: a living app, where the part was let go.
+                var project = SaveNewProgram(newName, code, packages);
+                StartNewProgram(project, tear);
+                Logger.LogMessage($"\"{newName}\" is a program of its own now, saved as {project}. It uses {shown} through {interfaceName} while both run; Ctrl+Shift+N in it changes it.", BubbleType.Info);
+                await ChildProcessService.SetAppWindowAsync(new AppWindowMessage(Banner: $"\"{newName}\" is a program of its own now.", BannerColor: BannerGreen, BannerSeconds: 6));
+                return null;
             }
             finally
             {
-                _fissionForTheModel = string.Empty;
+                _picturesForTheModel = [];
             }
-            if (!ran) return "N.E.O. is busy with this interface right now.";
-
-            // 2. The small program, in a session of its own, with this interface on its list of running apps.
-            await ChildProcessService.SetAppWindowAsync(new AppWindowMessage(Banner: $"Writing \"{newName}\" as a program of its own…", BannerColor: BannerDark));
-            var (code, packages, problem) = await WriteNewProgramAsync(FissionGuidance.ForTheProgramPart(interfaceName, program, newName, part, map));
-            if (code == null) return problem ?? "the AI could not write the new program.";
-
-            // 3. As for a part of an app: a living app, where the part was let go.
-            var project = SaveNewProgram(newName, code, packages);
-            StartNewProgram(project, tear);
-            Logger.LogMessage($"\"{newName}\" is a program of its own now, saved as {project}. It uses {shown} through {interfaceName} while both run; Ctrl+Shift+N in it changes it.", BubbleType.Info);
-            await ChildProcessService.SetAppWindowAsync(new AppWindowMessage(Banner: $"\"{newName}\" is a program of its own now.", BannerColor: BannerGreen, BannerSeconds: 6));
-            return null;
         }
 
         private async Task<(string? Code, Dictionary<string, string> Packages, string? Problem)> WriteNewProgramAsync(string prompt)

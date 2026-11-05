@@ -65,6 +65,7 @@ namespace Neo.Agents
             metadata.InputParameters.Add(new InputParameter<string>("Prompt", true, "User-Eingabe."));
             metadata.InputParameters.Add(new InputParameter<string>("JsonSchema", false, "Das JSON-Schema für die Antwort."));
             metadata.InputParameters.Add(new InputParameter<string>("WebSearchGuidance", false, "Kommt zur System-Instruction, wenn das Modell suchen darf."));
+            metadata.InputParameters.Add(new InputParameter<List<byte[]>>("Images", false, "PNG-Bilder, die zum Prompt gehören; sie stehen vor seinem Text."));
 
             metadata.OutputParameters.Add(new OutputParameter<string>(
                 name: "Result",
@@ -113,6 +114,7 @@ namespace Neo.Agents
             var history = GetInput<string>("History") ?? string.Empty;
             var prompt = GetInput<string>("Prompt");
             var jsonSchema = GetInput<string>("JsonSchema");
+            var images = GetInput<List<byte[]>>("Images");
 
             var timeout = timeoutSeconds == 0
                 ? System.Threading.Timeout.InfiniteTimeSpan
@@ -130,7 +132,7 @@ namespace Neo.Agents
             var messages = new List<ApiMessage>();
             if (!string.IsNullOrEmpty(history))
                 messages.Add(new ApiMessage { Role = "assistant", Content = history });
-            messages.Add(new ApiMessage { Role = "user", Content = prompt });
+            messages.Add(new ApiMessage { Role = "user", Content = UserContent(prompt, images) });
 
             var capabilities = await GetCapabilitiesAsync(httpClient, model, ct);
 
@@ -208,6 +210,21 @@ namespace Neo.Agents
             SetOutput("Result", rawJsonResponse);
             SetOutput("WebSources", SourcesOf(result));
             SetOutput("WebSearches", SearchesOf(result));
+        }
+
+        // A picture goes before the text it belongs to; without one the prompt stays a plain text.
+        private static JsonNode UserContent(string prompt, List<byte[]>? images)
+        {
+            if (images is not { Count: > 0 }) return prompt;
+            var blocks = new JsonArray();
+            foreach (var png in images)
+                blocks.Add(new JsonObject
+                {
+                    ["type"] = "image",
+                    ["source"] = new JsonObject { ["type"] = "base64", ["media_type"] = "image/png", ["data"] = Convert.ToBase64String(png) },
+                });
+            blocks.Add(new JsonObject { ["type"] = "text", ["text"] = prompt });
+            return blocks;
         }
 
         private static async Task<ModelCapabilities> GetCapabilitiesAsync(HttpClient httpClient, string model, CancellationToken ct)

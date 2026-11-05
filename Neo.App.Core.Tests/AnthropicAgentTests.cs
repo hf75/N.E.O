@@ -440,6 +440,50 @@ public class AnthropicAgentTests
         (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain("ended before");
     }
 
+    // ── Pictures ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Images_GoBeforeThePromptAsBase64Png()
+    {
+        // Fission out of another program: the picture of the part that went along with the pointer.
+        var api = new FakeApi { Message = TextAnswer("ok") };
+        var agent = new AnthropicTextChatAgent { Handler = api };
+        agent.SetOption("ApiKey", "test-key");
+        agent.SetOption("Model", NewModel());
+        agent.SetInput("SystemMessage", "system");
+        agent.SetInput("Prompt", "prompt");
+        agent.SetInput("History", "");
+        agent.SetInput("JsonSchema", "");
+        var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 1, 2, 3 };
+        agent.SetInput("Images", new List<byte[]> { png });
+
+        await agent.ExecuteAsync();
+
+        var content = api.LastBody.GetProperty("messages")[0].GetProperty("content");
+        content.GetArrayLength().Should().Be(2);
+        content[0].GetProperty("type").GetString().Should().Be("image");
+        content[0].GetProperty("source").GetProperty("type").GetString().Should().Be("base64");
+        content[0].GetProperty("source").GetProperty("media_type").GetString().Should().Be("image/png");
+        content[0].GetProperty("source").GetProperty("data").GetString().Should().Be(Convert.ToBase64String(png));
+        content[1].GetProperty("type").GetString().Should().Be("text");
+        content[1].GetProperty("text").GetString().Should().Be("prompt");
+
+        // The next request of the same agent has none again once the caller says so.
+        agent.SetInput("Images", new List<byte[]>());
+        await agent.ExecuteAsync();
+        api.LastBody.GetProperty("messages")[0].GetProperty("content").ValueKind.Should().Be(JsonValueKind.String);
+    }
+
+    [Fact]
+    public async Task Images_NotSetLeaveThePromptAPlainText()
+    {
+        var api = new FakeApi { Message = TextAnswer("ok") };
+
+        await Run(api, NewModel(), "");
+
+        api.LastBody.GetProperty("messages")[0].GetProperty("content").GetString().Should().Be("prompt");
+    }
+
     // ── Asking the API about a model ──────────────────────────────────────
 
     [Fact]

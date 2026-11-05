@@ -258,6 +258,10 @@ public class ProgramFissionSmokeTests : IDisposable
                 .And.NotContain("Bookings", "the part's own controls, not the rest of the window");
             toTheInterface.Should().NotContain("Copper pipe");
             api.Prompts[2].Should().Contain("Write the program \"Booking\"").And.Contain("calling the interface \"Stockroom\"").And.NotContain("Copper pipe");
+            // The picture that went along with the pointer goes with both prompts about the part, as it is (the list stays shapes).
+            api.Pictures.Take(3).Should().Equal([0, 1, 1], "the part's picture goes with the two prompts about it, not with the interface's first");
+            toTheInterface.Should().Contain("The picture shows the part as it looks now.");
+            api.Prompts[2].Should().Contain($"The picture shows the part as it looks in \"{_title}\"");
             GetWindowRect((IntPtr)created.Current.NativeWindowHandle, out var placed);
             placed.L.Should().BeInRange(780, 960, "it opens where the part was let go");
             Directory.GetFiles(_programs, "*.resx").Should().ContainSingle().Which.Should().EndWith("Booking.resx");

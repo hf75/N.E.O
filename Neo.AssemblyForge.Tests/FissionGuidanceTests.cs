@@ -88,6 +88,26 @@ public class FissionGuidanceTests
         text.Should().Contain("You see the part only as the list below, not how it looks");
         text.Should().Contain("make every button show what it does as plainly as it does in \"WINWORD\"");
         text.Should().Contain("a button for a color shows that color");
+        text.Should().NotContain("The picture", "a provider that reads no pictures gets none and is told of none");
+    }
+
+    [Fact]
+    public void With_the_picture_of_the_part_the_small_program_is_built_to_look_like_it()
+    {
+        // Paint's palette: twenty colour fields whose names reach the model only as shapes; the picture shows the colours.
+        var text = FissionGuidance.ForTheProgramPart("Paint", "mspaint", "Farbe", "the Group \"Farbe\"", "  ListItem ~\"Xxxxxxx\"", picture: true);
+
+        text.Should().Contain("The picture shows the part as it looks in \"mspaint\"");
+        text.Should().Contain("the same symbols, colors and arrangement");
+        // Paint's eraser and colour picker have no emoji that looks like them: a syringe is no colour picker.
+        text.Should().Contain("where none of your symbols looks like the one in the picture, write the button's name on it instead");
+        text.Should().Contain("The list below gives the controls and their addresses");
+        text.Should().NotContain("You see the part only as the list below");
+
+        FissionGuidance.ForTheInterface("Paint", "mspaint", "Farbe", "the Group \"Farbe\"", "", picture: true)
+            .Should().Contain("The picture shows the part as it looks now.");
+        FissionGuidance.ForTheInterface("Paint", "mspaint", "Farbe", "the Group \"Farbe\"", "")
+            .Should().NotContain("picture");
     }
 
     [Fact]

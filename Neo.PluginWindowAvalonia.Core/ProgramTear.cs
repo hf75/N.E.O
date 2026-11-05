@@ -29,7 +29,8 @@ namespace Neo.PluginWindowAvalonia
         private const double PillRoom = 44;   // above the part, for what it says
 
         private readonly Func<bool> _canTear;
-        private readonly Action<string, IntPtr, ForeignWindows.ForeignPart, PixelPoint> _tornOut;
+        private readonly Action<string, IntPtr, ForeignWindows.ForeignPart, PixelPoint, byte[]?> _tornOut;
+        private byte[]? _picture; // the picture that goes along with the pointer, as a PNG: the model gets it as it is
 
         private string? _program;
         private IntPtr _programWindow;
@@ -45,8 +46,9 @@ namespace Neo.PluginWindowAvalonia
         private (int X, int Y) _lookedAt = (int.MinValue, int.MinValue);
         private PixelPoint _pressedAt, _grab;
 
-        /// <param name="tornOut">The program, its window, the part, and where on the screen it was let go.</param>
-        public ProgramTear(Func<bool> canTear, Action<string, IntPtr, ForeignWindows.ForeignPart, PixelPoint> tornOut)
+        /// <param name="tornOut">The program, its window, the part, where on the screen it was let go, and the picture of the part
+        /// that went along with the pointer (a PNG; null when the program would not draw itself).</param>
+        public ProgramTear(Func<bool> canTear, Action<string, IntPtr, ForeignWindows.ForeignPart, PixelPoint, byte[]?> tornOut)
         {
             _canTear = canTear;
             _tornOut = tornOut;
@@ -241,7 +243,9 @@ namespace Neo.PluginWindowAvalonia
             var at = _frame.PointToScreen(e.GetPosition(_frame));
             var dragged = _dragging;
             var part = _shown;
+            var picture = _picture;
             _pressed = _dragging = false;
+            _picture = null;
             _ghost?.Close();
             _ghost = null;
             Stop();
@@ -249,7 +253,7 @@ namespace Neo.PluginWindowAvalonia
 
             // Let go over the program, the person changed their mind.
             if (GetWindowRect(_programWindow, out var window) && at.X >= window.Left && at.X < window.Right && at.Y >= window.Top && at.Y < window.Bottom) return;
-            _tornOut(_program, _programWindow, part, at);
+            _tornOut(_program, _programWindow, part, at, picture);
         }
 
         // With Alt held, the wheel turned towards you takes a smaller part, away from you a bigger one.
@@ -268,7 +272,15 @@ namespace Neo.PluginWindowAvalonia
             _dragging = true;
             var scaling = _frame.RenderScaling;
             var size = new Size(part.Width / scaling, part.Height / scaling);
-            Control picture = PictureOf(_programWindow, part) is { } bitmap
+            var bitmap = PictureOf(_programWindow, part);
+            _picture = null;
+            if (bitmap != null)
+            {
+                using var png = new System.IO.MemoryStream();
+                bitmap.Save(png);
+                _picture = png.ToArray();
+            }
+            Control picture = bitmap != null
                 ? new Image { Source = bitmap, Width = size.Width, Height = size.Height, Stretch = Stretch.Fill }
                 : new Border { Width = size.Width, Height = size.Height, Background = Brush.Parse("#307B1FA2") };
             _ghost = new Window

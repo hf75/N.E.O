@@ -185,6 +185,7 @@ namespace Neo.App
                 if (claude != null)
                 {
                     claude.SetOption("Effort", EffortForAttempt(Settings.ClaudeEffort, req.Attempt));
+                    claude.SetInput("Images", _picturesForTheModel);
                     claude.SetOption("WebSearchMaxUses", Settings.ClaudeWebSearch ? WebSearchesPerTry : 0);
                     claude.SetInput("WebSearchGuidance", AISystemMessages.WebSearchWhileBuilding());
                     claude.WebSearchProgress = query => _view.InvokeOnUIThreadAsync(() =>
