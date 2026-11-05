@@ -197,8 +197,9 @@ namespace Neo.IPC
     /// <param name="Program">Set when the part was torn out of the other program this app is the interface of: that program.
     /// <paramref name="SourceName"/> is then the interface, <paramref name="Address"/> the part's address in the program.</param>
     /// <param name="Map">For a part of another program: its controls, as N.E.O. describes the program (texts only as their shapes).</param>
+    /// <param name="ProgramName">For a part of another program: the program as its title bar names it ("Word" for WINWORD), for the person.</param>
     public record FissionTearMessage(string SourceName, string Address, string Type, string? Name, string? FirstText, int X, int Y, double Width, double Height,
-        string? Program = null, string? Map = null);
+        string? Program = null, string? Map = null, string? ProgramName = null);
 
     public record LinkDescribedMessage(string Map);
 

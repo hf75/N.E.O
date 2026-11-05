@@ -107,7 +107,7 @@ public class ProgramFissionSmokeTests : IDisposable
         }
         """;
 
-    /// <summary>The other program: the booking fields in a group, the status and the list of bookings outside it.</summary>
+    /// <summary>The other program: a menu, the booking fields in a group, the status and the list of bookings outside it.</summary>
     private sealed class Stockroom : IDisposable
     {
         private readonly Thread _thread;
@@ -117,19 +117,26 @@ public class ProgramFissionSmokeTests : IDisposable
 
         public int Stock { get; private set; } = 17; // of item 4711
 
+        /// <summary>Its menu bar took the keyboard: what a lone Alt let go of does in a program with a menu.</summary>
+        public bool MenuOpened { get; private set; }
+
         public Stockroom(string title, int x, int y)
         {
             _thread = new Thread(() =>
             {
-                _form = new Form { Text = title, StartPosition = FormStartPosition.Manual, Bounds = new Rectangle(x, y, 520, 380) };
-                _booking = new GroupBox { Text = "Booking", Location = new Point(12, 12), Size = new Size(340, 140) };
+                _form = new Form { Text = title, StartPosition = FormStartPosition.Manual, Bounds = new Rectangle(x, y, 520, 404) };
+                var menu = new MenuStrip();
+                menu.Items.Add(new ToolStripMenuItem("&File", null, new ToolStripMenuItem("E&xit")));
+                menu.MenuActivate += (_, _) => MenuOpened = true;
+                _form.MainMenuStrip = menu;
+                _booking = new GroupBox { Text = "Booking", Location = new Point(12, 36), Size = new Size(340, 140) };
                 var item = new TextBox { AccessibleName = "Item no.:", Location = new Point(100, 25), Width = 100 };
                 var quantity = new TextBox { Location = new Point(100, 57), Width = 60 };
                 var bookOut = new Button { Text = "Book out", Location = new Point(100, 92), AutoSize = true };
                 _booking.Controls.AddRange([new Label { Text = "Item no.:", Location = new Point(12, 28), AutoSize = true }, item,
                     new Label { Text = "Quantity:", Location = new Point(12, 60), AutoSize = true }, quantity, bookOut]);
-                var status = new Label { Name = "status", Text = "Ready.", Location = new Point(12, 165), AutoSize = true };
-                var bookings = new ListBox { AccessibleName = "Bookings", Location = new Point(12, 195), Size = new Size(480, 120) };
+                var status = new Label { Name = "status", Text = "Ready.", Location = new Point(12, 189), AutoSize = true };
+                var bookings = new ListBox { AccessibleName = "Bookings", Location = new Point(12, 219), Size = new Size(480, 120) };
                 bookings.Items.AddRange(["4711 Copper pipe 17", "4712 Brass fitting 5", "4713 Valve 40"]);
 
                 bookOut.Click += (_, _) =>
@@ -142,7 +149,7 @@ public class ProgramFissionSmokeTests : IDisposable
                     else status.Text = "Not booked.";
                 };
 
-                _form.Controls.AddRange([_booking, status, bookings]);
+                _form.Controls.AddRange([_booking, status, bookings, menu]);
                 _form.Shown += (_, _) => _ready.Set();
                 Application.Run(_form);
             }) { IsBackground = true };
@@ -217,14 +224,19 @@ public class ProgramFissionSmokeTests : IDisposable
                 framed.Left.Should().BeApproximately(group.Left, 4, "the frame lies over the group");
                 framed.Bottom.Should().BeApproximately(group.Bottom, 4);
 
-                // Dragged out of the program's window, its picture goes along.
+                // Dragged out of the program's window, its picture goes along. The program stays in front, as for a person:
+                // the frame takes the press, not the activation.
                 await TopLevelWindows.DragAsync(frame, fromX, fromY, 900, 640, async () =>
-                    await WaitForAsync(() => TopLevelWindows.Find(w => w.Title == "N.E.O. tear"), 5, "the picture of the part going along"));
+                    await WaitForAsync(() => TopLevelWindows.Find(w => w.Title == "N.E.O. tear"), 5, "the picture of the part going along"), inFront: false);
+                TopLevelWindows.IsForeground(stockroom).Should().BeTrue("a press on the frame does not take the program's place in front");
             }
             finally
             {
                 AltUp();
             }
+            // The Alt was N.E.O.'s: letting it go after the drag opens no menu of the program (nor the key tips of a ribbon).
+            await Task.Delay(600);
+            _program.MenuOpened.Should().BeFalse("the program never sees the gesture, not even its Alt");
 
             // The program keeps its part; the model saw the group's controls and nothing of the data in the program.
             AutomationElement created;

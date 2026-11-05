@@ -37,10 +37,11 @@ namespace Neo.PluginWindowAvalonia
         private DispatcherTimer? _timer;
         private Window? _frame, _ghost;
         private TextBlock _say = null!;
+        private Border _pill = null!, _box = null!;
         private List<ForeignWindows.ForeignPart> _parts = [];
         private int _level; // 0: the biggest part under the pointer
         private ForeignWindows.ForeignPart? _shown;
-        private bool _looking, _pressed, _dragging;
+        private bool _looking, _pressed, _dragging, _masked;
         private (int X, int Y) _lookedAt = (int.MinValue, int.MinValue);
         private PixelPoint _pressedAt, _grab;
 
@@ -73,7 +74,9 @@ namespace Neo.PluginWindowAvalonia
         private void Tick()
         {
             if (_pressed) return;
-            if (!AltHeld() || !_canTear() || !GetCursorPos(out var cursor))
+            var alt = AltHeld();
+            if (!alt) _masked = false;
+            if (!alt || !_canTear() || !GetCursorPos(out var cursor))
             {
                 Stop();
                 return;
@@ -133,14 +136,24 @@ namespace Neo.PluginWindowAvalonia
                 _frame?.Hide();
                 return;
             }
+            // Alt is N.E.O.'s now: a key of no meaning while it is held, so that letting it go opens neither the program's
+            // menu nor the key tips of its ribbon.
+            if (!_masked)
+            {
+                _masked = true;
+                keybd_event(VK_NO_MEANING, 0, 0, UIntPtr.Zero);
+                keybd_event(VK_NO_MEANING, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            }
+
             var frame = _frame ??= CreateFrame();
             var scaling = frame.Screens.ScreenFromPoint(new PixelPoint(part.Left, part.Top))?.Scaling ?? 1;
             var room = (int)Math.Round(PillRoom * scaling);
-            // Named as its title bar names it.
-            var shownName = ForeignWindows.ProgramPart(ForeignWindows.TitleOf(_programWindow)) is { Length: > 0 } title ? title : _program;
-            _say.Text = $"Drag it out with Alt: a small program that uses {shownName}";
+            _say.Text = $"Drag it out with Alt: a small program that uses {ShownName()}";
             frame.Position = new PixelPoint(part.Left, part.Top - room);
-            frame.Width = part.Width / scaling;
+            // What it says may be wider than a narrow part: the window then reaches beyond the part, the box does not.
+            _pill.Measure(Size.Infinity);
+            _box.Width = part.Width / scaling;
+            frame.Width = Math.Max(_box.Width, _pill.DesiredSize.Width + _pill.Margin.Left + 2);
             frame.Height = (part.Height + room) / scaling;
             if (!frame.IsVisible) frame.Show();
 
@@ -153,21 +166,28 @@ namespace Neo.PluginWindowAvalonia
             }
         }
 
+        // The program as its title bar names it ("Word", not "WINWORD").
+        private string ShownName() => ForeignWindows.ProgramPart(ForeignWindows.TitleOf(_programWindow)) is { Length: > 0 } title ? title : _program ?? "";
+
         private Window CreateFrame()
         {
             _say = new TextBlock { Foreground = Brushes.White, FontSize = 12 };
-            var pill = new Border
+            _pill = new Border
             {
                 Padding = new Thickness(10, 4), CornerRadius = new CornerRadius(10), Background = Brush.Parse("#E07B1FA2"),
                 HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(6, 0, 0, 2),
                 Child = new StackPanel { Children = { _say, new TextBlock { Text = "Mouse wheel: a bigger or a smaller part", Foreground = Brush.Parse("#D0FFFFFF"), FontSize = 11 } } },
             };
             // Not quite transparent: the press over the part has to land here, not in the program.
-            var box = new Border { BorderBrush = Brush.Parse("#7B1FA2"), BorderThickness = new Thickness(3), Background = Brush.Parse("#207B1FA2"), CornerRadius = new CornerRadius(4) };
+            _box = new Border
+            {
+                BorderBrush = Brush.Parse("#7B1FA2"), BorderThickness = new Thickness(3), Background = Brush.Parse("#207B1FA2"), CornerRadius = new CornerRadius(4),
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
             var layout = new Grid { RowDefinitions = new RowDefinitions($"{PillRoom},*") };
-            layout.Children.Add(pill);
-            Grid.SetRow(box, 1);
-            layout.Children.Add(box);
+            layout.Children.Add(_pill);
+            Grid.SetRow(_box, 1);
+            layout.Children.Add(_box);
 
             var frame = new Window
             {
@@ -326,11 +346,13 @@ namespace Neo.PluginWindowAvalonia
         }
 
         private const int VK_MENU = 0x12, GWL_EXSTYLE = -20, PW_RENDERFULLCONTENT = 2, SRCCOPY = 0x00CC0020;
-        private const uint GA_ROOT = 2, GW_HWNDPREV = 3, SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOACTIVATE = 0x10;
+        private const byte VK_NO_MEANING = 0xE8; // unassigned, the usual key to keep a lone Alt from opening a menu
+        private const uint GA_ROOT = 2, GW_HWNDPREV = 3, SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOACTIVATE = 0x10, KEYEVENTF_KEYUP = 0x2;
         private const long WS_EX_TOOLWINDOW = 0x80, WS_EX_NOACTIVATE = 0x08000000;
         private static readonly IntPtr HWND_TOP = IntPtr.Zero;
 
         [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
+        [DllImport("user32.dll")] private static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
         [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point32 point);
         [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(Point32 point);
         [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr window, uint flags);

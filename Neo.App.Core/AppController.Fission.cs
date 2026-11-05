@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Neo.AssemblyForge;
 using Neo.IPC;
 using Newtonsoft.Json;
@@ -16,8 +15,6 @@ namespace Neo.App
     {
         // What the part is and how it looked, added to what the model reads and kept out of the history.
         private string _fissionForTheModel = string.Empty;
-
-        private static readonly TimeSpan NewProgramPatience = TimeSpan.FromSeconds(60);
 
         private Task<string?> TornOutAsync(string? payload)
         {
@@ -89,10 +86,9 @@ namespace Neo.App
 
             // 3. A program of its own: a living app, where the part was let go.
             var project = SaveNewProgram(newName, code, packages);
-            var started = StartNewProgram(project, tear);
+            StartNewProgram(project, tear);
             Logger.LogMessage($"\"{newName}\" is a program of its own now, saved as {project}. It gets its data from {sourceName} while that runs; Ctrl+Shift+N in it changes it.", BubbleType.Info);
             await ChildProcessService.SetAppWindowAsync(new AppWindowMessage(Banner: $"\"{newName}\" is a program of its own now.", BannerColor: BannerGreen, BannerSeconds: 6));
-            _ = PlaceNewProgramAsync(started, tear);
             return null;
         }
 
@@ -104,15 +100,18 @@ namespace Neo.App
             if (string.IsNullOrWhiteSpace(before)) return "there is no interface yet.";
 
             var interfaceName = FusionName(tear.SourceName, before);
-            var newName = FissionGuidance.NameFor(tear.Name, null, $"Small {program}");
-            if (string.Equals(newName, interfaceName, StringComparison.OrdinalIgnoreCase) || string.Equals(newName, program, StringComparison.OrdinalIgnoreCase))
+            // The model goes by the process; the person reads the name the program's title bar shows ("Word", not "WINWORD").
+            var shown = string.IsNullOrWhiteSpace(tear.ProgramName) ? program : tear.ProgramName;
+            var newName = FissionGuidance.NameFor(tear.Name, null, $"Small {shown}");
+            if (string.Equals(newName, interfaceName, StringComparison.OrdinalIgnoreCase) || string.Equals(newName, program, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(newName, shown, StringComparison.OrdinalIgnoreCase))
                 newName += " (torn out)";
             var part = $"the {tear.Type}" + (tear.Name != null ? $" \"{tear.Name}\"" : "") + (tear.Address.Length > 0 ? $" at the address \"{tear.Address}\"" : "")
                 + $", {Math.Round(tear.Width)} × {Math.Round(tear.Height)} px";
             var map = tear.Map ?? "";
 
             // 1. The interface offers what the part needs. It may have all of that already: no change is an answer too.
-            Logger.LogMessage($"Tearing \"{newName}\" out of {program}: the AI sees the part's controls (what they show only as its shape) and the source of this interface.", BubbleType.Info);
+            Logger.LogMessage($"Tearing \"{newName}\" out of {shown}: the AI sees the part's controls (what they show only as its shape) and the source of this interface.", BubbleType.Info);
             _fissionForTheModel = FissionGuidance.ForTheInterface(interfaceName, program, newName, part, map);
             bool ran;
             try
@@ -132,10 +131,9 @@ namespace Neo.App
 
             // 3. As for a part of an app: a living app, where the part was let go.
             var project = SaveNewProgram(newName, code, packages);
-            var started = StartNewProgram(project, tear);
-            Logger.LogMessage($"\"{newName}\" is a program of its own now, saved as {project}. It uses {program} through {interfaceName} while both run; Ctrl+Shift+N in it changes it.", BubbleType.Info);
+            StartNewProgram(project, tear);
+            Logger.LogMessage($"\"{newName}\" is a program of its own now, saved as {project}. It uses {shown} through {interfaceName} while both run; Ctrl+Shift+N in it changes it.", BubbleType.Info);
             await ChildProcessService.SetAppWindowAsync(new AppWindowMessage(Banner: $"\"{newName}\" is a program of its own now.", BannerColor: BannerGreen, BannerSeconds: 6));
-            _ = PlaceNewProgramAsync(started, tear);
             return null;
         }
 
@@ -195,67 +193,15 @@ namespace Neo.App
             return path;
         }
 
-        // The same N.E.O., playing the new project: its window is the program, its N.E.O. hides behind it.
-        private static Process StartNewProgram(string project, FissionTearMessage tear)
+        // The same N.E.O., playing the new project: its window is the program, its N.E.O. hides behind it. The window opens
+        // where the part was let go, at least as big as the part was, and as big as what the program shows (placed from
+        // outside once it showed, it went back to its first size as soon as the program in it laid itself out).
+        private static void StartNewProgram(string project, FissionTearMessage tear)
         {
             var host = Environment.ProcessPath ?? throw new InvalidOperationException("N.E.O. does not know where it was started from.");
-            var start = new ProcessStartInfo(host, $"--play \"{project}\"") { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(host)! };
-            return Process.Start(start) ?? throw new InvalidOperationException("The new program did not start.");
+            var place = new PlayerPlace(tear.X - 20, tear.Y - 20, Math.Max(320, tear.Width + 40), Math.Max(200, tear.Height + 60));
+            var start = new ProcessStartInfo(host, $"--play \"{project}\" --place {place.ToArgument()}") { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(host)! };
+            using var started = Process.Start(start) ?? throw new InvalidOperationException("The new program did not start.");
         }
-
-        // Where the part was let go, as big as the part was. The new program's window is that of the app in it.
-        private static async Task PlaceNewProgramAsync(Process host, FissionTearMessage tear)
-        {
-            var until = DateTime.UtcNow + NewProgramPatience;
-            while (DateTime.UtcNow < until && !host.HasExited)
-            {
-                await Task.Delay(300);
-                var window = AppWindowOf(host.Id);
-                if (window == IntPtr.Zero) continue;
-                var scale = GetDpiForWindow(window) is var dpi and > 0 ? dpi / 96.0 : 1.0;
-                const double Frame = 60; // room for the title bar and a margin
-                SetWindowPos(window, IntPtr.Zero, tear.X - 20, tear.Y - 20,
-                    (int)Math.Round(Math.Max(320, tear.Width + 40) * scale), (int)Math.Round(Math.Max(200, tear.Height + Frame) * scale), SWP_NOZORDER);
-                return;
-            }
-        }
-
-        private static IntPtr AppWindowOf(int hostProcessId)
-        {
-            foreach (var child in Process.GetProcessesByName("Neo.PluginWindowAvalonia"))
-            {
-                using (child)
-                {
-                    if (ParentOf(child.Id) != hostProcessId) continue;
-                    child.Refresh();
-                    if (child.MainWindowHandle != IntPtr.Zero && IsWindowVisible(child.MainWindowHandle)) return child.MainWindowHandle;
-                }
-            }
-            return IntPtr.Zero;
-        }
-
-        private static int ParentOf(int processId)
-        {
-            try
-            {
-                using var process = Process.GetProcessById(processId);
-                var info = new ProcessBasicInformation();
-                return NtQueryInformationProcess(process.Handle, 0, ref info, Marshal.SizeOf(info), out _) == 0 ? info.InheritedFromUniqueProcessId.ToInt32() : -1;
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { return -1; }
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct ProcessBasicInformation
-        {
-            public IntPtr Reserved1, PebBaseAddress, Reserved2a, Reserved2b, UniqueProcessId, InheritedFromUniqueProcessId;
-        }
-
-        private const uint SWP_NOZORDER = 0x4;
-
-        [DllImport("ntdll.dll")] private static extern int NtQueryInformationProcess(IntPtr process, int infoClass, ref ProcessBasicInformation info, int size, out int returned);
-        [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
-        [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
-        [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr window);
     }
 }

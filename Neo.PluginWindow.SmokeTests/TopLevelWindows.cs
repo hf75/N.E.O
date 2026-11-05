@@ -82,11 +82,13 @@ internal static class TopLevelWindows
 
     /// <summary>
     /// A real drag with the mouse, from a point of <paramref name="window"/>: only if that point really is on it.
-    /// <paramref name="whileHeld"/> runs at the end of the way, with the button still down.
+    /// <paramref name="whileHeld"/> runs at the end of the way, with the button still down. <paramref name="inFront"/> false:
+    /// the window is one that takes no activation (N.E.O.'s frame over another program); a person's press leaves the
+    /// window in front where it is, and so does this one.
     /// </summary>
-    public static async Task DragAsync(AutomationElement window, int fromX, int fromY, int toX, int toY, Func<Task>? whileHeld = null)
+    public static async Task DragAsync(AutomationElement window, int fromX, int fromY, int toX, int toY, Func<Task>? whileHeld = null, bool inFront = true)
     {
-        Foreground(window);
+        if (inFront) Foreground(window);
         var under = AutomationElement.FromPoint(new System.Windows.Point(fromX, fromY));
         if (under == null || under.Current.ProcessId != window.Current.ProcessId)
             throw new InvalidOperationException($"Another window lies at {fromX},{fromY} (process {under?.Current.ProcessId}); not dragging.");
@@ -112,6 +114,8 @@ internal static class TopLevelWindows
             mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
         }
     }
+
+    public static bool IsForeground(AutomationElement window) => GetForegroundWindow() == (IntPtr)window.Current.NativeWindowHandle;
 
     /// <summary>The pointer onto a point of <paramref name="window"/>, no button: only if that point really is on it.</summary>
     public static void Hover(AutomationElement window, int x, int y)

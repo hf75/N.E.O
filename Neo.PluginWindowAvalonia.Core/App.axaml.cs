@@ -107,6 +107,9 @@ namespace Neo.PluginWindowAvalonia
                 MainWin.WindowDecorations = WindowDecorations.Full;
                 MainWin.CanResize = true;
                 MainWin.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                // Placed by the one who started it (Fission: where the part was let go).
+                if (Place(GetArgValue(args, "--place")) is { } place)
+                    MainWin.StartAt(place.X, place.Y, place.Width, place.Height);
 
                 // Docked beside N.E.O.: the keyboard stays in its prompt box.
                 _stayInactive = args.Any(a => string.Equals(a, "--no-activate", StringComparison.OrdinalIgnoreCase));
@@ -997,6 +1000,20 @@ namespace Neo.PluginWindowAvalonia
             return null;
         }
 
+        // "--place x,y,width,height": the position in screen pixels, the size in device-independent pixels.
+        private static (int X, int Y, double Width, double Height)? Place(string? argument)
+        {
+            var parts = argument?.Split(',');
+            var invariant = System.Globalization.CultureInfo.InvariantCulture;
+            return parts is { Length: 4 }
+                && int.TryParse(parts[0], System.Globalization.NumberStyles.Integer, invariant, out var x)
+                && int.TryParse(parts[1], System.Globalization.NumberStyles.Integer, invariant, out var y)
+                && double.TryParse(parts[2], System.Globalization.NumberStyles.Float, invariant, out var width) && width > 0
+                && double.TryParse(parts[3], System.Globalization.NumberStyles.Float, invariant, out var height) && height > 0
+                ? (x, y, width, height)
+                : null;
+        }
+
         // ── Fusion: this window is dragged onto another app, or another app onto this one ──
 
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<string?>> _pendingAppMessages = new();
@@ -1026,11 +1043,13 @@ namespace Neo.PluginWindowAvalonia
         {
             try
             {
-                MainWin.ShowBanner($"Tearing it out of {program}: it becomes a small program of its own…", "#D07B1FA2", 0);
+                // The program as its title bar names it ("Word", not "WINWORD"); the interface goes by the process.
+                var shown = Neo.Shared.ForeignWindows.ProgramPart(Neo.Shared.ForeignWindows.TitleOf(window)) is { Length: > 0 } title ? title : program;
+                MainWin.ShowBanner($"Tearing it out of {shown}: it becomes a small program of its own…", "#D07B1FA2", 0);
                 var (address, map) = await Task.Run(() => Neo.Shared.ForeignWindows.DescribePart(window, part, 80));
                 var scaling = MainWin.RenderScaling;
                 var tear = new FissionTearMessage(Neo.App.AppNetwork.Published?.Name ?? MainWin.Title ?? "", address, part.Type, part.Name.Length > 0 ? part.Name : null, null,
-                    at.X, at.Y, part.Width / scaling, part.Height / scaling, Program: program, Map: map);
+                    at.X, at.Y, part.Width / scaling, part.Height / scaling, Program: program, Map: map, ProgramName: shown);
                 await AskHostAsync(FissionMessages.TearOut, Json.ToJson(tear));
             }
             catch (Exception ex)

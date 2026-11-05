@@ -275,6 +275,7 @@ namespace Neo.App
             svc.ChildWindowTitle = player.Title;
             svc.ChildWindowIcon = player.IconFile;
             svc.ChildWindowHint = PlayerProject.HintText;
+            svc.ChildWindowPlace = player.Place;
             svc.HostToggleRequested += () => Dispatcher.UIThread.Post(ToggleHostWindow);
             svc.ChildWindowBoundsChanged += _ => Dispatcher.UIThread.Post(() => { if (IsVisible) PlaceBesideApp(); });
             svc.ChildExited += () => Dispatcher.UIThread.Post(ShutdownPlayer);

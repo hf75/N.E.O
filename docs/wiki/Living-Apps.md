@@ -36,7 +36,7 @@ Notes\
 
 No separate executable is compiled for a living export; the standalone `.exe` export is the other option in the same dialog. Size is about 85 MB on Windows: the host without debug symbols (`.pdb`), documentation and the native libraries of the other operating systems, which are most of the host's 620 MB. The .NET runtime is not included.
 
-Trying a project as its users will see it, without exporting: `Neo.App.Avalonia.exe --play C:\path\Notes.resx` or `Neo.App.exe --play …` (a `Notes.original.resx` next to it enables Reset). Without a manifest the framework is read from the project's code (`using Avalonia` / `using System.Windows`) — the two hosts share one settings file, and the last host used must not decide which child runs the code.
+Trying a project as its users will see it, without exporting: `Neo.App.Avalonia.exe --play C:\path\Notes.resx` or `Neo.App.exe --play …` (a `Notes.original.resx` next to it enables Reset). The Avalonia host also takes `--place x,y,width,height`: the app window opens at that screen position, at least that big (device-independent pixels), and grows once to what the app shows; [Fission](Fission) starts the programs it makes so. Without a manifest the framework is read from the project's code (`using Avalonia` / `using System.Windows`) — the two hosts share one settings file, and the last host used must not decide which child runs the code.
 
 ## How it works
 

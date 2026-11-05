@@ -68,6 +68,51 @@ namespace Neo.PluginWindowAvalonia
             ShowBanner(Hint, "#D0202020", 10);
         }
 
+        // Started at a place: the size it starts with, which the first app it shows may make bigger.
+        private Size? _fitFirstApp;
+
+        /// <summary>
+        /// Opens the window at <paramref name="x"/>, <paramref name="y"/> (screen pixels), <paramref name="width"/> ×
+        /// <paramref name="height"/> big at least: the first app it shows makes it as big as that app wants to be, within
+        /// the screen. Set before the window shows. Fission opens the new program like this, where the part was let go.
+        /// </summary>
+        public void StartAt(int x, int y, double width, double height)
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Position = new PixelPoint(x, y);
+            Width = width;
+            Height = height;
+            _fitFirstApp = new Size(width, height);
+        }
+
+        private void FitFirstApp()
+        {
+            if (_fitFirstApp is not { } least) return;
+            _fitFirstApp = null;
+            if (Screens.ScreenFromPoint(Position) is { } screen)
+            {
+                var area = screen.WorkingArea;
+                var frame = FrameSize is { } outer ? outer - ClientSize : default;
+                MaxWidth = Math.Max(least.Width, (area.Right - Position.X) / screen.Scaling - frame.Width);
+                MaxHeight = Math.Max(least.Height, (area.Bottom - Position.Y) / screen.Scaling - frame.Height);
+            }
+            MinWidth = least.Width;
+            MinHeight = least.Height;
+            SizeToContent = SizeToContent.WidthAndHeight;
+            // Once it has its size it is an ordinary window again, as big or as small as the person makes it.
+            Dispatcher.UIThread.Post(() =>
+            {
+                var size = ClientSize;
+                SizeToContent = SizeToContent.Manual;
+                MinWidth = 0;
+                MinHeight = 0;
+                MaxWidth = double.PositiveInfinity;
+                MaxHeight = double.PositiveInfinity;
+                Width = size.Width;
+                Height = size.Height;
+            }, DispatcherPriority.Background);
+        }
+
         /// <summary>One line over the app: a hint, "repairing", "fixed". Goes away by itself or on click; 0 seconds: stays.</summary>
         public void ShowBanner(string text, string background, int seconds)
         {
@@ -509,6 +554,7 @@ namespace Neo.PluginWindowAvalonia
                     WaitOverlay.IsVisible = false;
                     StopWaitTimer();
                     ShowHintOnce();
+                    FitFirstApp();
                 }
                 else
                 {
@@ -519,6 +565,7 @@ namespace Neo.PluginWindowAvalonia
                         WaitOverlay.IsVisible = false;
                         StopWaitTimer();
                         ShowHintOnce();
+                        FitFirstApp();
                     });
                 }
             }

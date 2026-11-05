@@ -45,6 +45,38 @@ public class PlayerModeTests : IDisposable
     }
 
     [Fact]
+    public void A_place_on_the_command_line_says_where_the_app_window_opens()
+    {
+        var project = Path.Combine(_dir, "Font.resx");
+        File.WriteAllText(project, "{\"Code\":\"using Avalonia;\"}");
+
+        PlayerProject.Detect(["--play", project], _dir)!.Place.Should().BeNull("the window opens where it likes");
+        PlayerProject.Detect(["--play", project, "--place", "740,-20,320.4,200"], _dir)!.Place
+            .Should().Be(new PlayerPlace(740, -20, 320.4, 200), "a second screen left of or above the first has negative positions");
+        PlayerProject.Detect(["--place", "740,780,320,200", "--play", project], _dir)!.Place.Should().NotBeNull("the order does not matter");
+
+        foreach (var broken in new[] { "740,780,320", "740,780,0,200", "a,780,320,200", "740;780;320;200" })
+            PlayerProject.Detect(["--play", project, "--place", broken], _dir)!.Place.Should().BeNull($"\"{broken}\" is no place");
+    }
+
+    [Fact]
+    public void A_place_goes_onto_the_command_line_the_way_it_is_read_whatever_the_culture()
+    {
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
+            var place = new PlayerPlace(740, 780, 320.4, 199.6);
+            place.ToArgument().Should().Be("740,780,320,200", "a German decimal comma would split the size in two");
+            PlayerPlace.Parse(place.ToArgument()).Should().Be(new PlayerPlace(740, 780, 320, 200));
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = culture;
+        }
+    }
+
+    [Fact]
     public void The_manifest_next_to_the_executable_turns_the_host_into_a_player()
     {
         File.WriteAllText(Path.Combine(_dir, "Notes.resx"), "{}");

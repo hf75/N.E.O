@@ -28,12 +28,37 @@ namespace Neo.App
     }
 
     /// <summary>
+    /// Where the app window opens and how big it is at least (<c>--place x,y,width,height</c>): the position in screen
+    /// pixels, the size in device-independent pixels. The window grows to what the app shows, within the screen.
+    /// </summary>
+    public sealed record PlayerPlace(int X, int Y, double Width, double Height)
+    {
+        public string ToArgument() => FormattableString.Invariant($"{X},{Y},{Math.Round(Width)},{Math.Round(Height)}");
+
+        public static PlayerPlace? Parse(string? argument)
+        {
+            var parts = argument?.Split(',');
+            if (parts is not { Length: 4 }) return null;
+            var invariant = System.Globalization.CultureInfo.InvariantCulture;
+            return int.TryParse(parts[0], System.Globalization.NumberStyles.Integer, invariant, out var x)
+                && int.TryParse(parts[1], System.Globalization.NumberStyles.Integer, invariant, out var y)
+                && double.TryParse(parts[2], System.Globalization.NumberStyles.Float, invariant, out var width) && width > 0
+                && double.TryParse(parts[3], System.Globalization.NumberStyles.Float, invariant, out var height) && height > 0
+                ? new PlayerPlace(x, y, width, height)
+                : null;
+        }
+    }
+
+    /// <summary>
     /// A living app: the exported app is N.E.O. itself, running with its own window hidden behind
     /// the app window. The user works with the app; Ctrl+Shift+N calls N.E.O. up beside it, and
     /// every change is saved back to the project the app was started from.
     /// </summary>
     public sealed record PlayerProject(string ProjectFile, string? OriginalFile, string Title, string? IconFile, string? Framework = null)
     {
+        /// <summary>Where the app window opens (Fission: where the part was let go); null: where the window likes.</summary>
+        public PlayerPlace? Place { get; init; }
+
         /// <summary>The name the app carries in titles and folder names.</summary>
         public string Name => Title;
 
@@ -52,7 +77,7 @@ namespace Neo.App
         /// <summary>
         /// Player mode is entered when <see cref="PlayerManifest.FileName"/> lies next to the
         /// executable (an exported living app) or the command line says <c>--play &lt;project.resx&gt;</c>
-        /// (trying a project as its users will see it).
+        /// (trying a project as its users will see it), with <c>--place x,y,width,height</c> where its window opens.
         /// </summary>
         public static PlayerProject? Detect(string[] args, string baseDirectory)
         {
@@ -62,7 +87,10 @@ namespace Neo.App
                 var project = Path.GetFullPath(args[i + 1]);
                 var name = Path.GetFileNameWithoutExtension(project);
                 var original = Path.Combine(Path.GetDirectoryName(project)!, name + ".original.resx");
-                return new PlayerProject(project, File.Exists(original) ? original : null, name, null, FrameworkOf(project));
+                var place = Array.FindIndex(args, a => string.Equals(a, "--place", StringComparison.OrdinalIgnoreCase)) is var at and >= 0 && at + 1 < args.Length
+                    ? PlayerPlace.Parse(args[at + 1])
+                    : null;
+                return new PlayerProject(project, File.Exists(original) ? original : null, name, null, FrameworkOf(project)) { Place = place };
             }
 
             var manifestPath = Path.Combine(baseDirectory, PlayerManifest.FileName);
