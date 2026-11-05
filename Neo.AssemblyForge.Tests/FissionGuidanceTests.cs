@@ -80,6 +80,17 @@ public class FissionGuidanceTests
     }
 
     [Fact]
+    public void The_small_program_shows_on_each_button_what_it_does_though_the_model_never_sees_the_part()
+    {
+        // In Word the font colour button is an "A" with a red bar; the model sees only "Button "Schriftfarbe Rot"".
+        var text = FissionGuidance.ForTheProgramPart("Word", "WINWORD", "Schriftart", "the Group \"Schriftart\"", "  Button \"Schriftfarbe Rot\"");
+
+        text.Should().Contain("You see the part only as the list below, not how it looks");
+        text.Should().Contain("make every button show what it does as plainly as it does in \"WINWORD\"");
+        text.Should().Contain("a button for a color shows that color");
+    }
+
+    [Fact]
     public void The_chat_of_the_interface_names_the_part_and_the_program()
     {
         FissionGuidance.ChatPromptForProgram("Booking", "Stockroom 2003")
