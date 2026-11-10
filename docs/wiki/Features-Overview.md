@@ -202,6 +202,10 @@ In a shared session, the running app moves to another person with everything in 
 
 With an Anthropic key, generated apps can answer from the current web with their sources, as text or as typed data for tables; the AI uses this where it knows no free API. If you switch it on in the settings, Claude also looks things up while it builds. See **[[Web Search]]**.
 
+## Claude Code
+
+With `NEO_CLAUDE_CODE` set, a tool built with N.E.O. can hand a task that is too big for it (a larger program, a whole project folder) to Claude Code, which works on it in the background and reports what it does. The task goes on when the tool closes, and N.E.O.'s chat says when it is done, with the result and the folder. See **[[Claude Code]]**.
+
 ## Other surfaces
 
 The desktop host is one of three ways to use Neo. The same prompt → compile → run loop is also available:

@@ -39,6 +39,7 @@ N.E.O. comes in three flavours that share the same core: a **desktop host** (WPF
 - [[App Link]] — Or link them: both keep running as they are, the AI wires them together, nothing is saved, and it ends when one of them does
 - [[Teleport]] — In a shared session, the running app moves to another person's PC with everything in it
 - [[Web Search]] — Apps that answer from the current web with their sources; Claude looks things up while it builds, if you want
+- [[Claude Code]] — Tasks too big for a small tool go to Claude Code, which works on them in the background; N.E.O. says when it is done
 - [[Export and Import]] — Save, share, and export as `.exe`
 - [[Live-MCP]] — Every generated app is an MCP server (Claude calls into it, reads state, subscribes)
 - [[Frozen-Mode]] — Export a Live-MCP app as a standalone MCP-server executable

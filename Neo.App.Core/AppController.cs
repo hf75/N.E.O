@@ -167,6 +167,7 @@ namespace Neo.App
 
             // Auto-discover plugin agents (ImageGen, STT, etc.)
             PluginAgents = DiscoverPluginAgents();
+            WatchClaudeCodeJobs();
 
             AdditionalDlls.Add(ResolveAppDll("Neo.Agents.Core.dll"));
             // The app network and Live-MCP attributes ([AppInfo], [McpCallable], Apps.CallAsync …).

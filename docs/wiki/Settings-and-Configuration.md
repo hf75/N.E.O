@@ -60,6 +60,8 @@ Models are fetched dynamically from each provider's API.
 
 **Web Search Model** (default `claude-sonnet-5-5`, only with an Anthropic key) is the model generated apps use for `AIWebSearch`; see [[Web Search]].
 
+**Claude Code Model** (default `default`, only when the user environment variable `NEO_CLAUDE_CODE` is set) is the model Claude Code uses for the tasks generated apps hand it with `AIClaudeCode`: `default` keeps the one set in Claude Code itself; see [[Claude Code]].
+
 ### AI Query Provider (Embedded)
 
 Choose which AI provider is used for `AIQuery` calls inside your generated apps. This lets your created applications make their own AI requests.

@@ -23,6 +23,7 @@
     <ProjectReference Include="..\Neo.AssemblyForge\Neo.AssemblyForge.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Core\Neo.Agents.Core.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Claude\Neo.Agents.Claude.csproj" />
+    <ProjectReference Include="..\Neo.Agents\Neo.Agents.ClaudeCode\Neo.Agents.ClaudeCode.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.OpenAI\Neo.Agents.OpenAI.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Gemini\Neo.Agents.Gemini.csproj" />
     <ProjectReference Include="..\Neo.Agents\Neo.Agents.Ollama\Neo.Agents.Ollama.csproj" />
