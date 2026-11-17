@@ -263,6 +263,11 @@ internal sealed class SurfacingRewriter : CSharpSyntaxRewriter
         => expression is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Expression: var runtime } }
            && runtime.ToString() == Runtime;
 
+    /// <summary>The <c>Guard&lt;T&gt;(handler)</c> this rewriter puts where a handler stood.</summary>
+    internal static bool IsGuard(InvocationExpressionSyntax invocation)
+        => invocation.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax { Identifier.ValueText: "Guard" }, Expression: var runtime }
+           && runtime.ToString() == Runtime;
+
     private static string LastName(ExpressionSyntax expression) => expression switch
     {
         SimpleNameSyntax name => name.Identifier.ValueText,

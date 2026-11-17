@@ -93,6 +93,55 @@ public class LostExceptionsHotReloadTests
         ((Delegate)app.Call("ElapsedHandlers")!).GetInvocationList().Should().HaveCount(2);
     }
 
+    // No UI method: what the constructor wires up must not count as code that builds the UI.
+    private const string TimerApp = """
+        using System;
+        using System.Linq;
+        using System.Timers;
+
+        public class DynamicUserControl
+        {
+            private readonly string _instance = Guid.NewGuid().ToString("N");
+            private readonly Timer _timer = new Timer(60_000);
+            public string Last = "";
+
+            public DynamicUserControl()
+            {
+                _timer.Elapsed += (_, _) => Last = Version() + " " + _instance;
+                _timer.Elapsed += OnElapsed;
+            }
+
+            private string Version() => "v1";
+
+            private void OnElapsed(object? sender, ElapsedEventArgs e) => Last += " handled v1";
+
+            public void Elapse() => ElapsedHandlers()?.Invoke(_timer, null!);
+
+            public ElapsedEventHandler? ElapsedHandlers()
+                => (ElapsedEventHandler?)typeof(Timer).GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    .Single(f => f.FieldType == typeof(ElapsedEventHandler)).GetValue(_timer);
+        }
+        """;
+
+    [Fact]
+    public async Task What_a_guarded_handler_runs_is_patched_in_place_without_a_UI_method()
+    {
+        // The guard stands where the handler stood: a lambda or a method subscribed in the constructor runs
+        // when the timer ticks, not while the object is built. Before, a change to what it runs counted as
+        // a change of the UI, and an app without a UI method was reloaded and lost its state.
+        using var app = await HotReloadHarness.StartAsync(TimerApp);
+        var instance = app.Get<string>("_instance");
+
+        var (update, _) = await app.UpdateAsync(TimerApp
+            .Replace("\"v1\"", "\"v2\"")
+            .Replace("\" handled v1\"", "\" handled v2\""));
+
+        update.Status.Should().Be(HotReloadStatus.Ready, update.Reason);
+        update.Request!.RebuildUi.Should().BeFalse("nothing that runs while the object is built changed");
+        app.Call("Elapse");
+        app.Get<string>("Last").Should().Be("v2 " + instance + " handled v2");
+    }
+
     private static async Task WaitUntil(Func<bool> condition)
     {
         for (var i = 0; i < 100 && !condition(); i++) await Task.Delay(20);

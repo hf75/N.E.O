@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Neo.ErrorSurfacing;
 using Neo.IPC;
 
 namespace Neo.HotReload;
@@ -350,16 +351,32 @@ internal static class StateMigrationAnalyzer
     /// </summary>
     private static bool IsDeferred(AnonymousFunctionExpressionSyntax lambda)
     {
-        SyntaxNode node = lambda;
-        while (node.Parent is ParenthesizedExpressionSyntax or CastExpressionSyntax)
-            node = node.Parent;
-
+        var node = HandlerPlace(lambda);
         return node.Parent switch
         {
             AssignmentExpressionSyntax assignment => assignment.Right == node,
             EqualsValueClauseSyntax => true,
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// Where a handler stands, past parentheses and casts. The compile agent and the session rewrite the
+    /// app so that no exception vanishes (Neo.ErrorSurfacing): a timer's handler is then wrapped,
+    /// <c>timer.Tick += Guard&lt;T&gt;(handler)</c>. The guard only keeps the handler, so the handler
+    /// stands where the guard stands, and a subscription stays a subscription.
+    /// </summary>
+    private static SyntaxNode HandlerPlace(SyntaxNode node)
+    {
+        while (true)
+        {
+            while (node.Parent is ParenthesizedExpressionSyntax or CastExpressionSyntax)
+                node = node.Parent;
+            if (node.Parent is ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax guard } } && LostExceptions.IsGuard(guard))
+                node = guard;
+            else
+                return node;
+        }
     }
 
     private static Dictionary<string, (ISymbol Symbol, SyntaxNode Node)> MemberIndex(Compilation compilation, Func<SyntaxTree, SemanticModel> model)
@@ -423,10 +440,10 @@ internal static class StateMigrationAnalyzer
                 foreach (var node in root.DescendantNodes(descendIntoChildren: n => n is not AnonymousFunctionExpressionSyntax lambda || !IsDeferred(lambda)))
                 {
                     if (node is not (SimpleNameSyntax or BaseObjectCreationExpressionSyntax or ConstructorInitializerSyntax)) continue;
-                    if (node.Parent is AssignmentExpressionSyntax { Right: var right } subscription && right == node &&
+                    if (HandlerPlace(node) is { Parent: AssignmentExpressionSyntax { Right: var right } subscription } place && right == place &&
                         (subscription.IsKind(SyntaxKind.AddAssignmentExpression) || subscription.IsKind(SyntaxKind.SubtractAssignmentExpression)) &&
                         semantics.GetSymbolInfo(node).Symbol is IMethodSymbol)
-                        continue; // "x.Click += OnClick": wired now, runs later
+                        continue; // "x.Click += OnClick", also "x.Tick += Guard<T>(OnTick)": wired now, runs later
 
                     var info = semantics.GetSymbolInfo(node);
                     Enqueue(info.Symbol ?? info.CandidateSymbols.FirstOrDefault());

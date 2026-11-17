@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
 namespace Neo.ErrorSurfacing;
@@ -78,4 +79,12 @@ public static class LostExceptions
 
     /// <summary>Whether <paramref name="tree"/> is the runtime class (the rewriter leaves it alone).</summary>
     public static bool IsRuntime(SyntaxTree tree) => Path.GetFileName(tree.FilePath) == RuntimeFileName;
+
+    /// <summary>
+    /// Whether <paramref name="invocation"/> is the guard the rewriter puts where a handler stood
+    /// (<c>timer.Tick += Guard&lt;T&gt;(handler)</c>). The guard keeps the handler and hands back a
+    /// wrapper that runs it when the event fires, never right away; code that asks when a handler runs
+    /// (hot reload) reads a guarded subscription as the subscription it was written as.
+    /// </summary>
+    public static bool IsGuard(InvocationExpressionSyntax invocation) => SurfacingRewriter.IsGuard(invocation);
 }
