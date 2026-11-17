@@ -134,6 +134,17 @@ public partial class App : Application
                 AddTrayIcon(desktop);
                 Dispatcher.UIThread.Post(() =>
                 {
+                    // Two stages would both answer aloud at once: a newer one ends this one.
+                    if (!OneStage.Take(() => Dispatcher.UIThread.Post(() =>
+                        {
+                            Log("a newer stage took over");
+                            desktop.Shutdown();
+                        })))
+                    {
+                        Log("the stage before did not end; this one does");
+                        desktop.Shutdown();
+                        return;
+                    }
                     _stage ??= new StageOverlay(PrimaryScreen());
                     // The brain starts now, so the first question does not wait for Claude Code; the voice needs the ElevenLabs key.
                     _brain = new Brain();
@@ -141,7 +152,7 @@ public partial class App : Application
                     var mouth = Ears.Key() is { } key ? new Mouth(key) : null;
                     _live = new LiveStage(_stage, brain: _brain, mouth: mouth);
                     _live.Start();
-                    Log($"live: hold the right Ctrl key and point{(mouth == null ? $" (no voice without {Ears.KeyVariable})" : "")}");
+                    Log($"live (process {Environment.ProcessId}): hold the right Ctrl key and point{(mouth == null ? $" (no voice without {Ears.KeyVariable})" : "")}");
                 });
             }
         }

@@ -43,6 +43,8 @@ internal sealed class Mouth
         _speaking = speaking;
         var sound = new BufferedWaveProvider(new WaveFormat(SampleRate, 16, 1)) { BufferDuration = TimeSpan.FromMinutes(2) };
         var output = new WaveOutEvent { DesiredLatency = 120 };
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var playing = false;
         try
         {
             output.Init(sound);
@@ -57,7 +59,6 @@ internal sealed class Mouth
             }
             await using var stream = await response.Content.ReadAsStreamAsync(speaking.Token).ConfigureAwait(false);
             var chunk = new byte[8192];
-            var playing = false;
             int read;
             while ((read = await stream.ReadAsync(chunk, speaking.Token).ConfigureAwait(false)) > 0)
             {
@@ -66,6 +67,7 @@ internal sealed class Mouth
                 {
                     output.Play();
                     playing = true;
+                    App.Log($"voice: first sound after {clock.Elapsed.TotalSeconds:0.00} s");
                 }
             }
             if (!playing)
@@ -74,8 +76,12 @@ internal sealed class Mouth
                 await Task.Delay(40, speaking.Token).ConfigureAwait(false);
             await Task.Delay(120, speaking.Token).ConfigureAwait(false); // the device's own buffer
             Problem = null;
+            App.Log($"voice: done after {clock.Elapsed.TotalSeconds:0.0} s");
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            App.Log($"voice: {(cancellationToken.IsCancellationRequested || speaking.IsCancellationRequested ? "stopped" : "timed out")} after {clock.Elapsed.TotalSeconds:0.0} s{(playing ? "" : ", before any sound")}");
+        }
         catch (HttpRequestException exception)
         {
             Problem = "text to speech: " + exception.Message;
