@@ -32,6 +32,9 @@ internal sealed class Utterance
 /// rest is still being written; the ring breathes with the stage's own voice, and every window the brain arranges, shows
 /// or looks at is outlined and followed. Then everything fades. Pressing the key again silences the answer and listens
 /// anew. A shortcut with the right Ctrl (Ctrl+C) never starts it; the microphone is open only while the key is held.
+/// When the brain wants to do something that lasts, the stage asks aloud and waits: the person holds the key and says yes
+/// or no, and the brain goes on with that. Something that takes a while (N.E.O. building an app) shows as a pill with its
+/// seconds beside the ring.
 /// <para>
 /// With pointing on, the ring sits at the mouse pointer instead, its trail follows it, what it rests on is outlined and
 /// pointing words ("das hier", "da") become chips in the colour of what was pointed at when they were said; without a
@@ -62,12 +65,18 @@ internal sealed class LiveStage
     private double _thinkingFrom, _answeringFrom, _fadeFrom = double.NaN, _speaking, _spoken, _looked;
     private bool _speakingNow;
     private Utterance? _utterance;
+    private Utterance? _turn; // the utterance the brain is answering; a reply to its question does not replace it
+    private TaskCompletionSource<string?>? _question;
+    private bool _replying, _wroteAny;
+    private double _askedAt;
+    private string? _working;
+    private double _workingFrom;
     private Ears? _ears;
     private bool _probing, _looping;
     private Point _probedAt = new(double.NaN, double.NaN);
     private Point _captionAt;
 
-    private enum Phase { Idle, Armed, Blocked, Listening, Releasing, Thinking, Answering }
+    private enum Phase { Idle, Armed, Blocked, Listening, Releasing, Thinking, Answering, Asking }
 
     /// <summary>A window the brain arranged, showed or looked at, and where it is seen now (stage coordinates).</summary>
     private sealed class Touch(AppWindow window, double at, Color color)
@@ -107,6 +116,12 @@ internal sealed class LiveStage
                     Dispatcher.UIThread.Post(() => Written(text.Text, finished: true));
             };
             brain.Touched += window => Dispatcher.UIThread.Post(() => Touched(window));
+            brain.Working += what => Dispatcher.UIThread.Post(() =>
+            {
+                _working = what;
+                _workingFrom = Now;
+            });
+            brain.AskPerson = AskPersonAsync;
         }
     }
 
@@ -116,7 +131,10 @@ internal sealed class LiveStage
     /// <summary>Off while something else uses the stage (the dry run).</summary>
     public bool Enabled { get; set; } = true;
 
-    public bool Busy => _phase is Phase.Listening or Phase.Releasing or Phase.Thinking or Phase.Answering;
+    public bool Busy => _phase is Phase.Listening or Phase.Releasing or Phase.Thinking or Phase.Answering or Phase.Asking;
+
+    /// <summary>The brain asked the person something and waits for the answer.</summary>
+    public bool Asking => _phase == Phase.Asking;
 
     public void Start() => _watch.Start();
 
@@ -133,11 +151,22 @@ internal sealed class LiveStage
         var down = KeyHeld();
         switch (_phase)
         {
-            case Phase.Idle or Phase.Thinking or Phase.Answering when down && Enabled:
-                if (_phase != Phase.Idle)
+            case Phase.Idle or Phase.Thinking or Phase.Answering or Phase.Asking when down && Enabled:
+                if (_phase == Phase.Asking)
+                {
+                    _replying = true; // the person answers the question; the brain waits for it
+                    _mouth?.Stop();
+                }
+                else if (_phase != Phase.Idle)
+                {
                     Silence();
+                }
                 _phase = Chord() ? Phase.Blocked : Phase.Armed;
                 _keyDown = Now;
+                break;
+            case Phase.Armed or Phase.Blocked when !down && _replying:
+                _replying = false;
+                _phase = Phase.Asking; // only a tap: the question still stands
                 break;
             case Phase.Armed or Phase.Blocked when !down:
                 // A tap: what was still on the stage fades out to its end, or the stage goes away at once.
@@ -187,7 +216,8 @@ internal sealed class LiveStage
         _written.Clear();
         _writing = "";
         _wordShown.Clear();
-        _touched.Clear();
+        if (!_replying)
+            _touched.Clear();
         var utterance = _utterance = new Utterance { Started = _listening };
         _probedAt = new Point(double.NaN, double.NaN);
 
@@ -319,15 +349,31 @@ internal sealed class LiveStage
         });
     }
 
-    // The words are in: ask the brain, or show the plan.
+    // The words are in: the answer to the brain's question, or a new question for it, or the plan.
     private void Heard(Utterance utterance)
     {
         _heard = Now;
+        if (_replying && _question is { } question)
+        {
+            _replying = false;
+            _question = null;
+            _phase = Phase.Thinking;
+            _thinkingFrom = Now;
+            _written.Clear();
+            _writing = "";
+            _mouth?.Begin(); // what it says after the answer is a new speech
+            var reply = utterance.Text.Trim();
+            App.Log($"replied: '{reply}'");
+            question.TrySetResult(reply.Length > 0 ? reply : null);
+            return;
+        }
         if (_brain == null || utterance.Text.Trim().Length == 0)
         {
             _planFrom = Now;
             return;
         }
+        _turn = utterance;
+        _wroteAny = false;
         _phase = Phase.Thinking;
         _thinkingFrom = Now;
         _written.Clear();
@@ -357,10 +403,11 @@ internal sealed class LiveStage
 
         Dispatcher.UIThread.Post(() =>
         {
-            if (_utterance != utterance || _phase is not (Phase.Thinking or Phase.Answering))
+            _working = null;
+            if (_turn != utterance || _phase is not (Phase.Thinking or Phase.Answering))
                 return;
             // Nothing came while it was written (it failed, say): the voice gets all of it now.
-            if (_written.Count == 0 && _writing.Length == 0)
+            if (!_wroteAny)
                 _mouth?.Add(text);
             _written.Clear();
             _written.Add(text);
@@ -376,6 +423,7 @@ internal sealed class LiveStage
     {
         if (_phase is not (Phase.Thinking or Phase.Answering))
             return;
+        _wroteAny = true;
         if (finished)
         {
             if (text.StartsWith(_writing, StringComparison.Ordinal))
@@ -417,16 +465,51 @@ internal sealed class LiveStage
         }
         Dispatcher.UIThread.Post(() =>
         {
-            if (_utterance == utterance && _phase == Phase.Answering)
+            if (_turn == utterance && _phase == Phase.Answering)
                 _fadeFrom = Now + HoldAfter;
         });
+    }
+
+    // The brain wants to do something that lasts: the stage asks aloud and waits for the person's answer, at most half a
+    // minute. The answer is what they say next with the key held.
+    private Task<string?> AskPersonAsync(string question, CancellationToken cancellationToken)
+    {
+        var answer = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_phase is not (Phase.Thinking or Phase.Answering))
+            {
+                answer.TrySetResult(null);
+                return;
+            }
+            _question = answer;
+            _phase = Phase.Asking;
+            _askedAt = Now;
+            if (_answeringFrom < _thinkingFrom)
+                _answeringFrom = Now;
+            _written.Add(question);
+            _writing = "";
+            _mouth?.Add(" " + question);
+            _mouth?.Flush();
+            App.Log($"asking: '{question}'");
+        });
+        _ = Task.Delay(TimeSpan.FromSeconds(30), CancellationToken.None).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
+        {
+            if (_question != answer || _replying)
+                return;
+            _question = null;
+            _phase = Phase.Thinking;
+            answer.TrySetResult(null);
+        }), TaskScheduler.Default);
+        cancellationToken.Register(() => answer.TrySetResult(null));
+        return answer.Task;
     }
 
     // ── Windows the brain touched ──
 
     private void Touched(AppWindow window)
     {
-        if (_phase is not (Phase.Thinking or Phase.Answering))
+        if (_phase is not (Phase.Thinking or Phase.Answering or Phase.Asking))
             return;
         if (_touched.FirstOrDefault(touch => touch.Window.Handle == window.Handle) is { } known)
         {
@@ -476,7 +559,7 @@ internal sealed class LiveStage
     private StageFrame VoiceFrame(Utterance utterance, double time, double fadeFrom)
     {
         var leaving = Motion.EaseInOutCubic(Motion.Progress(time, fadeFrom, FadeOut));
-        var afterwards = _phase is Phase.Thinking or Phase.Answering or Phase.Armed or Phase.Blocked;
+        var afterwards = _phase is Phase.Thinking or Phase.Answering or Phase.Asking or Phase.Armed or Phase.Blocked;
         var work = _stage.WorkArea;
         var presence = new Point(work.Center.X, work.Bottom - 70);
 
@@ -516,13 +599,29 @@ internal sealed class LiveStage
 
         AnswerView? answer = null;
         var said = Answer;
-        if (_phase is Phase.Thinking or Phase.Answering || (_phase is Phase.Armed or Phase.Blocked && leaving < 1 && said.Length > 0))
+        if (_phase is Phase.Thinking or Phase.Answering or Phase.Asking || (_phase is Phase.Armed or Phase.Blocked && leaving < 1 && said.Length > 0))
         {
             answer = new AnswerView(new Point(presence.X, captionBottom - 44 - 14), said,
                 Motion.EaseOutCubic(Motion.Progress(time, _thinkingFrom, 0.25)) * (1 - leaving), said.Length == 0, _speaking, time, Above: true);
         }
 
-        return new StageFrame(ring, [], [.. TouchedTargets(time, leaving)], captions, null, null, [], answer);
+        // Beside the ring: what is waiting for the person, or what takes a while.
+        var pills = new List<PillView>();
+        if (_phase == Phase.Asking)
+        {
+            var shown = Motion.EaseOutCubic(Motion.Progress(time, _askedAt, 0.3));
+            pills.Add(new PillView(new Point(presence.X + 64, presence.Y), [new PillPart("Taste halten: Ja oder Nein", Palette.Yes, Dot: true, Strong: true)],
+                shown * (0.75 + 0.25 * Math.Sin(2 * Math.PI * time / 1.4)), 6 * (1 - shown), PillAlign.Left, 13));
+        }
+        else if (_working is { } doing && _phase is Phase.Thinking or Phase.Answering)
+        {
+            var begun = Motion.EaseOutCubic(Motion.Progress(time, _workingFrom, 0.3));
+            var seconds = (int)(time - _workingFrom);
+            pills.Add(new PillView(new Point(presence.X + 64, presence.Y),
+                [new PillPart(doing, Palette.There, Dot: true, Strong: true), new PillPart($"{seconds} s", Palette.TextDim)], begun * (1 - leaving), 6 * (1 - begun), PillAlign.Left, 13));
+        }
+
+        return new StageFrame(ring, [], [.. TouchedTargets(time, leaving)], captions, null, null, pills, answer);
     }
 
     // ── Pointing (Put That There) ──
@@ -650,7 +749,7 @@ internal sealed class LiveStage
 
         AnswerView? answer = null;
         var said = Answer;
-        if (_phase is Phase.Thinking or Phase.Answering || (_phase is Phase.Armed or Phase.Blocked && leaving < 1 && said.Length > 0))
+        if (_phase is Phase.Thinking or Phase.Answering or Phase.Asking || (_phase is Phase.Armed or Phase.Blocked && leaving < 1 && said.Length > 0))
         {
             var size = _stage.StageSize;
             var anchor = new Point(Math.Clamp(_captionAt.X, 24, Math.Max(24, size.Width - 470)), Math.Clamp(_captionAt.Y + 58, 24, Math.Max(24, size.Height - 200)));

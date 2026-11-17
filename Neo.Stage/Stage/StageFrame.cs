@@ -52,7 +52,7 @@ internal sealed record GhostView(Rect Bounds, IImage? Picture, string Label, dou
 /// <summary>A piece of a pill: text, or a coloured dot before it.</summary>
 internal sealed record PillPart(string Text, Color Color, bool Dot = false, bool Strong = false);
 
-internal enum PillAlign { Center, TopLeft, BottomLeft, TopCenter }
+internal enum PillAlign { Center, TopLeft, BottomLeft, TopCenter, Left }
 
 /// <summary>A small glass label.</summary>
 internal sealed record PillView(Point Anchor, IReadOnlyList<PillPart> Parts, double Opacity, double Rise = 0, PillAlign Align = PillAlign.Center, double FontSize = 14);

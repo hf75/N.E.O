@@ -17,10 +17,11 @@ namespace Neo.Stage;
 ///   <item>no arguments: the icon, and the dry run once after start (again from the icon);</item>
 ///   <item>--once: the dry run once, then the program ends;</item>
 ///   <item>--frames &lt;folder&gt;: moments of the dry run and of an answer as pictures, nothing on the screen;</item>
-///   <item>--brain-check "sentence" [--at x,y;x,y] [--then "sentence"] [--windows word] [--for-real]: the brain alone, its hands only
-///   pretending unless --for-real; --windows lets it see only windows whose title or program holds the word;</item>
-///   <item>--live-check seconds [--sound pcm] [--brain] [--windows word] [--pointing [--at x,y]]: the live stage as if the key were held,
-///   never the microphone or a loudspeaker;</item>
+///   <item>--brain-check "sentence" [--at x,y;x,y] [--then "sentence"] [--windows word] [--for-real] [--yes]: the brain alone, its hands only
+///   pretending unless --for-real (scripts that only read still run); --windows lets it see only windows whose title or program holds
+///   the word; --yes answers its questions with yes;</item>
+///   <item>--live-check seconds [--sound pcm] [--reply pcm] [--brain [--for-real]] [--windows word] [--pointing [--at x,y]]: the live
+///   stage as if the key were held (and held again with --reply when the brain asks), never the microphone or a loudspeaker;</item>
 ///   <item>--mouth-check "text": the voice as an answer streams in, without a loudspeaker: when the first sound would come.</item>
 /// </list>
 /// </summary>
@@ -90,15 +91,33 @@ public partial class App : Application
                     var hold = double.Parse(seconds, System.Globalization.CultureInfo.InvariantCulture);
                     var clock = Stopwatch.StartNew();
                     _stage ??= new StageOverlay(PrimaryScreen());
-                    // A recorded sentence instead of the microphone (--sound), or no ears at all: a check never opens the microphone.
-                    var sound = Argument(arguments, "--sound") is { } file ? File.ReadAllBytes(file) : null;
-                    // --brain: the brain answers on the stage, its hands only pretending and without a voice.
-                    _brain = arguments.Contains("--brain") ? new Brain(pretend: true, only: Only(Argument(arguments, "--windows"))) : null;
+                    // Recorded sentences instead of the microphone (--sound, and --reply for the answer to a question the
+                    // brain asks), or no ears at all: a check never opens the microphone.
+                    var sounds = new Queue<byte[]>();
+                    if (Argument(arguments, "--sound") is { } file)
+                        sounds.Enqueue(File.ReadAllBytes(file));
+                    var reply = Argument(arguments, "--reply") is { } replyFile ? File.ReadAllBytes(replyFile) : null;
+                    if (reply != null)
+                        sounds.Enqueue(reply);
+                    // --brain: the brain answers on the stage, without a voice; its hands only pretend unless --for-real.
+                    _brain = arguments.Contains("--brain") ? new Brain(pretend: !arguments.Contains("--for-real"), only: Only(Argument(arguments, "--windows"))) : null;
                     if (_brain != null)
                         _ = _brain.WarmAsync();
                     // --at x,y: the pointer rests there (the mouse is left alone).
                     var at = Argument(arguments, "--at") is { } point ? ScreenPoint(point) : (PixelPoint?)null;
-                    _live = new LiveStage(_stage, () => clock.Elapsed.TotalSeconds < hold, key => sound != null ? Ears.Hear(key, sound) : null, _brain,
+                    // The key: held at the start, and again half a second after the brain asks, as long as the reply lasts.
+                    double? replyFrom = null;
+                    var replyFor = reply != null ? reply.Length / 32000.0 + 0.5 : 0;
+                    bool KeyHeld()
+                    {
+                        var now = clock.Elapsed.TotalSeconds;
+                        if (now < hold)
+                            return true;
+                        if (reply != null && replyFrom == null && _live?.Asking == true)
+                            replyFrom = now + 0.5;
+                        return replyFrom is { } from && now >= from && now < from + replyFor;
+                    }
+                    _live = new LiveStage(_stage, KeyHeld, key => sounds.Count > 0 ? Ears.Hear(key, sounds.Dequeue()) : null, _brain,
                         pointer: at is { } rest ? () => rest : null, pointing: arguments.Contains("--pointing"));
                     _live.Spoken += utterance =>
                     {
@@ -120,7 +139,7 @@ public partial class App : Application
                     try
                     {
                         await BrainCheckAsync(sentence, Argument(arguments, "--at"), Argument(arguments, "--then"), arguments.Contains("--for-real"),
-                            Only(Argument(arguments, "--windows")));
+                            Only(Argument(arguments, "--windows")), arguments.Contains("--yes"));
                     }
                     catch (Exception exception) { Log("brain check failed: " + exception); }
                     desktop.Shutdown();
@@ -237,10 +256,16 @@ public partial class App : Application
     private static Func<string, string, bool>? Only(string? word)
         => word == null ? null : (title, program) => title.Contains(word, StringComparison.OrdinalIgnoreCase) || program.Contains(word, StringComparison.OrdinalIgnoreCase);
 
-    private static async Task BrainCheckAsync(string sentence, string? at, string? then, bool forReal, Func<string, string, bool>? only)
+    private static async Task BrainCheckAsync(string sentence, string? at, string? then, bool forReal, Func<string, string, bool>? only, bool yes)
     {
         var clock = Stopwatch.StartNew();
         await using var brain = new Brain(pretend: !forReal, only: only);
+        // Nobody is there to answer a question: --yes answers it with yes, else it stays unanswered.
+        brain.AskPerson = (question, _) =>
+        {
+            Log($"  asked: '{question}', answered {(yes ? "'Ja'" : "nothing")}");
+            return Task.FromResult<string?>(yes ? "Ja" : null);
+        };
         brain.Event += agentEvent =>
         {
             switch (agentEvent)

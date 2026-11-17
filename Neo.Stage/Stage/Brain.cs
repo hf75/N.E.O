@@ -9,9 +9,10 @@ namespace Neo.Stage;
 
 /// <summary>
 /// The stage's brain: one Claude Code session that stays open (Neo.ClaudeAgent), so a follow-up ("und jetzt den anderen")
-/// knows what came before. With every question it gets the open windows, numbered, the top one first; when the person
-/// also pointed, what was pointed at, with a picture of each. It answers in one or two spoken sentences and has hands:
-/// it arranges windows, shows them, looks at one, opens programs, folders, websites and files, and finds files.
+/// knows what came before. With every question it gets the open windows, the apps N.E.O. built for it and the skills it
+/// has learned; when the person also pointed, what was pointed at, with a picture of each. It answers in one or two
+/// spoken sentences. Its hands: fast ones for windows (arrange, show, look) and for opening things, the web, N.E.O. for
+/// small apps, and PowerShell for everything nobody foresaw; what lasts only after the person said yes.
 /// </summary>
 internal sealed class Brain : IAsyncDisposable
 {
@@ -20,31 +21,41 @@ internal sealed class Brain : IAsyncDisposable
     private const string SystemPrompt = """
         Du bist N.E.O. Stage, die Stimme eines Windows-Rechners. Ein Mensch hält eine Taste, spricht mit dir und lässt los; deine Antwort wird
         vorgelesen. Mit jeder Frage bekommst du die offenen Fenster, nummeriert, das oberste zuerst. „Im Vordergrund“ ist das, mit dem er gerade
-        arbeitet; meint er ein Fenster, ohne es zu nennen („mach das groß“), ist das im Vordergrund gemeint. Zeigt er dabei mit der Maus auf etwas,
-        steht das unter „Gezeigt“, mit einem Bild.
+        arbeitet; meint er ein Fenster, ohne es zu nennen („mach das groß“), ist das im Vordergrund gemeint. Die Spracherkennung verhört sich
+        manchmal („Wort“ statt „Word“); deute das Gesagte mit Blick auf die offenen Fenster, und frag nur, wenn es wirklich unklar ist, dann
+        mit einer kurzen Ja-oder-Nein-Frage.
 
-        Sprich, wie man spricht: Deutsch, ein oder zwei kurze Sätze, keine Aufzählungen, kein Markdown, keine Links, keine Fensternummern.
-        Nenne Fenster so, wie ein Mensch sie nennt („Word“, „der Browser“, „die Einkaufsliste“). Wenn du etwas tust, sag es in einem kurzen Satz,
-        bevor du das Werkzeug benutzt; danach brauchst du nichts mehr zu sagen, außer etwas ging schief.
+        Sprich, wie man spricht: Deutsch, so kurz wie möglich, meist ein Satz, höchstens zwei. Keine Aufzählungen, kein Markdown, keine Links,
+        keine Fensternummern, keine Tipps, um die niemand gebeten hat. Nenne Fenster so, wie ein Mensch sie nennt („Word“, „der Browser“).
+        Wenn du etwas tust, das einen Moment dauert, sag es in einem kurzen Satz, bevor du das Werkzeug benutzt; danach brauchst du nichts mehr
+        zu sagen, außer etwas ging schief.
 
-        Deine Werkzeuge: arrange ordnet Fenster, auch mehrere auf einmal. show hebt Fenster auf dem Bildschirm hervor, wenn du über sie sprichst.
-        look gibt dir ein Bild eines Fensters; benutze es nur, wenn die Frage es braucht („Was steht da?“). open öffnet Programme, Ordner, Webseiten
-        und Dateien. find_files sucht Dateien im Benutzerordner nach Namen und Inhalt.
+        Deine Hände:
+        - arrange ordnet Fenster (auch mehrere auf einmal), show hebt sie hervor, look zeigt dir ein Bild eines Fensters, wenn die Frage es
+          braucht. open öffnet Programme, Ordner, Webseiten und Dateien, find_files sucht Dateien. Diese sind schnell; nimm sie zuerst.
+        - WebSearch und WebFetch für Fragen an das Internet (Wetter, Nachrichten, Fakten).
+        - build_app lässt N.E.O. in Sekunden ein kleines Programm bauen (einen Timer, einen Rechner für etwas, eine Liste, ein kleines Spiel);
+          change_app ändert eine solche App, während sie läuft.
+        - run führt ein PowerShell-Skript aus (Windows PowerShell 5.1) für alles andere: Fenster schließen (mit CloseMainWindow, nie mit
+          Stop-Process), Text in ein Programm schreiben, Lautstärke, Dateien, Systeminfos. Gib ehrlich an, was es verändert: nothing (liest nur),
+          undoable (lässt sich rückgängig machen oder das Programm fragt selbst nach, etwa beim Schließen) oder lasting (löscht, überschreibt,
+          sendet, installiert). Bei lasting fragt die Bühne den Menschen und führt es erst nach seinem Ja aus; formuliere dafür die Frage.
+          Hat ein neues Skript geklappt und wird man es wohl wieder brauchen, gib ihm mit learn einen Namen; schreibe es dann mit param(...)
+          für das, was sich ändert. Gelernte Fähigkeiten rufst du mit run und skill auf.
 
-        Mehr kannst du noch nicht, zum Beispiel keine Fenster schließen, nichts tippen, keine Mails lesen. Sag das ehrlich und kurz. Behaupte nie,
-        etwas getan zu haben, das ein Werkzeug nicht bestätigt hat; meldet es eine Probe, sag, dass es nur eine Probe war. Ist unklar, was gemeint
-        ist, frag kurz nach.
+        Behaupte nie, etwas getan zu haben, das ein Werkzeug nicht bestätigt hat; meldet es eine Probe, sag, dass es nur eine Probe war.
         """;
 
     private readonly SemaphoreSlim _starting = new(1, 1);
     private readonly string _work;
     private readonly Func<string, string, bool>? _only;
     private readonly List<string> _said = [];
+    private readonly NeoApps _apps = new();
     private ClaudeAgentSession? _session;
     private IReadOnlyList<AppWindow> _windows = [];
     private Task? _last;
 
-    /// <param name="pretend">A check: the hands say what they would do and do nothing.</param>
+    /// <param name="pretend">A check: the hands say what they would do and do nothing (reading scripts still run).</param>
     /// <param name="only">Which windows it may see (title, program); a check passes its own. Null: all of them.</param>
     public Brain(bool pretend = false, Func<string, string, bool>? only = null)
     {
@@ -61,6 +72,15 @@ internal sealed class Brain : IAsyncDisposable
 
     /// <summary>A window was arranged, shown or looked at: the stage outlines it. Raised on the session's thread.</summary>
     public event Action<AppWindow>? Touched;
+
+    /// <summary>Something that takes a while has begun ("N.E.O. baut …"), or ended (null). Raised on the session's thread.</summary>
+    public event Action<string?>? Working;
+
+    /// <summary>
+    /// Asks the person a question aloud and returns what they answered, or null when nobody did. Without it, nothing
+    /// that lasts is ever done.
+    /// </summary>
+    public Func<string, CancellationToken, Task<string?>>? AskPerson { get; set; }
 
     /// <summary>Starts the session ahead of the first question, so that it does not wait for Claude Code to start.</summary>
     public async Task WarmAsync()
@@ -88,7 +108,7 @@ internal sealed class Brain : IAsyncDisposable
         var pictures = utterance.Pointings.Where(pointing => pointing.Picture != null).Select(pointing => new ClaudeAgentImage(pointing.Picture!)).ToList();
         lock (_said)
             _said.Clear();
-        var turn = session.SendAsync(Describe(utterance, _windows), pictures, cancellationToken);
+        var turn = session.SendAsync(Describe(utterance, _windows, _apps.Names), pictures, cancellationToken);
         _last = turn;
         var result = await turn.ConfigureAwait(false);
         string said;
@@ -144,13 +164,14 @@ internal sealed class Brain : IAsyncDisposable
         WorkingDirectory = _work,
         Restricted = true,
         ToolSearch = false,
-        BuiltInTools = [],
+        BuiltInTools = ["WebSearch", "WebFetch"],
+        AllowedTools = ["WebSearch", "WebFetch"],
         ToolServerName = "stage",
-        Tools = [ArrangeTool(), ShowTool(), LookTool(), OpenTool(), FindFilesTool()],
+        Tools = [ArrangeTool(), ShowTool(), LookTool(), OpenTool(), FindFilesTool(), BuildAppTool(), ChangeAppTool(), RunTool()],
         MaxBudgetUsd = 5m,
     };
 
-    // ── The hands ──
+    // ── The fast hands: windows, opening, files ──
 
     private ClaudeAgentTool ArrangeTool() => new(
         "arrange",
@@ -182,7 +203,7 @@ internal sealed class Brain : IAsyncDisposable
             var results = new List<string>();
             foreach (var step in steps.EnumerateArray())
             {
-                var action = step.TryGetProperty("action", out var what) ? what.GetString() ?? "" : "";
+                var action = Text(step, "action");
                 if (Window(step, "window") is not { } window)
                 {
                     results.Add($"Fenster {Number(step, "window")} gibt es nicht.");
@@ -260,7 +281,7 @@ internal sealed class Brain : IAsyncDisposable
             return picture == null
                 ? new ClaudeAgentToolResult($"Von „{window.Label}“ ließ sich kein Bild machen.", IsError: true)
                 : new ClaudeAgentToolResult($"So sieht „{window.Label}“ gerade aus.", Image: new ClaudeAgentImage(picture));
-        }));
+        }, cancellation));
 
     private ClaudeAgentTool OpenTool() => new(
         "open",
@@ -275,11 +296,7 @@ internal sealed class Brain : IAsyncDisposable
               "required": ["what"]
             }
             """),
-        (input, _) => Task.Run(() =>
-        {
-            var what = input.TryGetProperty("what", out var value) ? value.GetString() ?? "" : "";
-            return new ClaudeAgentToolResult(Opener.Open(what, Pretend));
-        }));
+        (input, cancellation) => Task.Run(() => new ClaudeAgentToolResult(Opener.Open(Text(input, "what"), Pretend)), cancellation));
 
     private ClaudeAgentTool FindFilesTool() => new(
         "find_files",
@@ -293,9 +310,9 @@ internal sealed class Brain : IAsyncDisposable
               "required": ["words"]
             }
             """),
-        (input, _) => Task.Run(() =>
+        (input, cancellation) => Task.Run(() =>
         {
-            var words = input.TryGetProperty("words", out var value) ? value.GetString() ?? "" : "";
+            var words = Text(input, "words");
             try
             {
                 var found = FileSearch.Find(words);
@@ -309,7 +326,168 @@ internal sealed class Brain : IAsyncDisposable
             {
                 return new ClaudeAgentToolResult("Die Windows-Suche antwortet nicht: " + exception.Message, IsError: true);
             }
-        }));
+        }, cancellation));
+
+    // ── N.E.O.: small apps in seconds ──
+
+    private ClaudeAgentTool BuildAppTool() => new(
+        "build_app",
+        "Lässt N.E.O. ein kleines Programm bauen, das danach in einem eigenen Fenster läuft. Dauert meist 10 bis 30 Sekunden.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string", "description": "Kurzer Name für das Fenster, etwa „Timer“ oder „Vokabeltrainer“" },
+                "description": { "type": "string", "description": "Was das Programm tun und wie es aussehen soll, so genau wie der Mensch es sagte, auf Deutsch" }
+              },
+              "required": ["name", "description"]
+            }
+            """),
+        async (input, cancellation) =>
+        {
+            var name = Text(input, "name");
+            var description = Text(input, "description");
+            if (name.Length == 0 || description.Length == 0)
+                return new ClaudeAgentToolResult("name und description fehlen.", IsError: true);
+            if (Pretend)
+                return new ClaudeAgentToolResult($"Nur eine Probe, nichts wurde gebaut. N.E.O. hätte „{name}“ gebaut: {description}");
+            Working?.Invoke($"N.E.O. baut „{name}“");
+            try { return new ClaudeAgentToolResult(await _apps.BuildAsync(name, description, cancellation)); }
+            catch (Exception exception) when (exception is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                return new ClaudeAgentToolResult("N.E.O. ließ sich nicht fragen: " + exception.Message, IsError: true);
+            }
+            finally { Working?.Invoke(null); }
+        });
+
+    private ClaudeAgentTool ChangeAppTool() => new(
+        "change_app",
+        "Lässt N.E.O. eine App ändern, die es für dich gebaut hat, während sie läuft.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "app": { "type": "string", "description": "Name der App; leer für die zuletzt gebaute" },
+                "change": { "type": "string", "description": "Was sich ändern soll, auf Deutsch" }
+              },
+              "required": ["change"]
+            }
+            """),
+        async (input, cancellation) =>
+        {
+            var name = Text(input, "app");
+            var change = Text(input, "change");
+            if (Pretend)
+                return new ClaudeAgentToolResult($"Nur eine Probe, nichts wurde geändert: {change}");
+            Working?.Invoke($"N.E.O. ändert {(name.Length > 0 ? $"„{name}“" : "die App")}");
+            try { return new ClaudeAgentToolResult(await _apps.ChangeAsync(name, change, cancellation)); }
+            catch (Exception exception) when (exception is IOException or InvalidOperationException)
+            {
+                return new ClaudeAgentToolResult("N.E.O. ließ sich nicht fragen: " + exception.Message, IsError: true);
+            }
+            finally { Working?.Invoke(null); }
+        });
+
+    // ── PowerShell: everything nobody foresaw ──
+
+    private ClaudeAgentTool RunTool() => new(
+        "run",
+        "Führt ein Windows-PowerShell-Skript aus, oder eine gelernte Fähigkeit (skill), und gibt seine Ausgabe zurück.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "script": { "type": "string", "description": "Das Skript (Windows PowerShell 5.1); weglassen, wenn skill benutzt wird" },
+                "skill": { "type": "string", "description": "Name einer gelernten Fähigkeit statt eines Skripts" },
+                "with": { "type": "object", "description": "Werte für die param(...) der Fähigkeit, Name: Wert", "additionalProperties": { "type": "string" } },
+                "says": { "type": "string", "description": "In wenigen Worten, was es tut, für den Menschen, etwa „Word schließen“" },
+                "changes": { "type": "string", "enum": ["nothing", "undoable", "lasting"] },
+                "question": { "type": "string", "description": "Nur bei lasting: die Frage an den Menschen, etwa „Soll ich die drei Dateien in Downloads löschen?“" },
+                "learn": {
+                  "type": "object",
+                  "description": "Nur wenn das Skript als Fähigkeit behalten werden soll",
+                  "properties": { "name": { "type": "string" }, "description": { "type": "string" } },
+                  "required": ["name", "description"]
+                }
+              },
+              "required": ["says", "changes"]
+            }
+            """),
+        async (input, cancellation) =>
+        {
+            var says = Text(input, "says");
+            var script = Text(input, "script");
+            var changes = Parse(Text(input, "changes"));
+            var parameters = new Dictionary<string, string>();
+            if (Text(input, "skill") is { Length: > 0 } skillName)
+            {
+                if (Skills.Find(skillName) is not { } skill)
+                    return new ClaudeAgentToolResult($"Eine Fähigkeit „{skillName}“ gibt es nicht.", IsError: true);
+                script = skill.Script;
+                changes = (Changes)Math.Max((int)changes, (int)skill.Changes);
+                if (input.TryGetProperty("with", out var with) && with.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var value in with.EnumerateObject())
+                        parameters[value.Name] = value.Value.ValueKind == JsonValueKind.String ? value.Value.GetString() ?? "" : value.Value.GetRawText();
+                }
+            }
+            if (script.Trim().Length == 0)
+                return new ClaudeAgentToolResult("Es fehlt das Skript.", IsError: true);
+            if (Shell.Refusal(script) is { } refusal)
+            {
+                App.Log($"run: refused '{says}'");
+                return new ClaudeAgentToolResult(refusal, IsError: true);
+            }
+            changes = Shell.AtLeast(script, changes);
+            App.Log($"run: '{says}' ({changes})");
+
+            if (changes != Changes.Nothing && Pretend)
+                return new ClaudeAgentToolResult($"Nur eine Probe, nichts wurde ausgeführt: {says}" + (changes == Changes.Lasting ? " (hätte vorher gefragt)." : "."));
+            if (changes == Changes.Lasting)
+            {
+                var question = Text(input, "question") is { Length: > 0 } asked ? asked : $"Soll ich das tun: {says}?";
+                var reply = AskPerson == null ? null : await AskPerson(question, cancellation);
+                App.Log($"run: asked '{question}', heard '{reply}'");
+                if (reply == null)
+                    return new ClaudeAgentToolResult("Niemand hat geantwortet; nicht ausgeführt.");
+                if (!Yes(reply))
+                    return new ClaudeAgentToolResult($"Nicht ausgeführt. Der Mensch sagte: „{reply}“.");
+            }
+
+            Working?.Invoke(says);
+            string result;
+            try { result = await Shell.RunAsync(script, parameters, cancellation); }
+            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
+            {
+                return new ClaudeAgentToolResult("PowerShell ließ sich nicht starten: " + exception.Message, IsError: true);
+            }
+            finally { Working?.Invoke(null); }
+            App.Log($"run: {result[..Math.Min(result.Length, 160)]}");
+
+            if (input.TryGetProperty("learn", out var learn) && learn.ValueKind == JsonValueKind.Object && result.StartsWith("Fertig", StringComparison.Ordinal)
+                && Text(learn, "name") is { Length: > 0 } learnName)
+            {
+                Skills.Keep(new Skill(learnName, Text(learn, "description"), changes, script));
+                result += $" Als Fähigkeit „{learnName}“ behalten.";
+            }
+            return new ClaudeAgentToolResult(result);
+        });
+
+    private static Changes Parse(string changes) => changes switch
+    {
+        "nothing" => Changes.Nothing,
+        "undoable" => Changes.Undoable,
+        _ => Changes.Lasting,
+    };
+
+    /// <summary>Whether a spoken answer is a yes: "Ja", "Ja, mach", "Okay", "Klar", "Genau"… and no "nein" or "nicht" in it.</summary>
+    internal static bool Yes(string reply)
+    {
+        var words = reply.ToLowerInvariant().Split([' ', ',', '.', '!', '?', ';'], StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0 || words.Any(word => word is "nein" or "nicht" or "nö" or "nee" or "stopp" or "warte" or "abbrechen"))
+            return false;
+        return words[0] is "ja" or "jawohl" or "jap" or "jo" or "yes" or "okay" or "ok" or "klar" or "genau" or "gerne" or "gern" or "bitte" or "mach" or "los" or "tu" or "natürlich" or "sicher";
+    }
 
     private AppWindow? Window(JsonElement input, string property)
         => Number(input, property) is var number && number >= 1 && number <= _windows.Count ? _windows[number - 1] : null;
@@ -317,16 +495,26 @@ internal sealed class Brain : IAsyncDisposable
     private static int Number(JsonElement input, string property)
         => input.TryGetProperty(property, out var value) && value.TryGetInt32(out var number) ? number : 0;
 
+    private static string Text(JsonElement input, string property)
+        => input.ValueKind == JsonValueKind.Object && input.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? (value.GetString() ?? "").Trim() : "";
+
     private static JsonElement Schema(string json) => JsonDocument.Parse(json).RootElement;
 
     // ── What the brain reads ──
 
-    /// <summary>The utterance as the brain reads it: what was said, the open windows, and what was pointed at, if anything.</summary>
-    internal static string Describe(Utterance utterance, IReadOnlyList<AppWindow> windows)
+    /// <summary>
+    /// The utterance as the brain reads it: what was said, the open windows, the apps N.E.O. built and the skills it
+    /// learned, and what was pointed at, if anything.
+    /// </summary>
+    internal static string Describe(Utterance utterance, IReadOnlyList<AppWindow> windows, IReadOnlyList<string>? apps = null)
     {
         var text = new StringBuilder();
         text.AppendLine($"Gesagt: „{utterance.Text}“");
         text.AppendLine(OpenWindows.Describe(windows));
+        if (apps is { Count: > 0 })
+            text.AppendLine("Von N.E.O. gebaute Apps, die noch offen sind: " + string.Join(", ", apps.Select(app => $"„{app}“")));
+        if (Skills.Describe() is { Length: > 0 } skills)
+            text.AppendLine(skills);
         if (utterance.Pointings.Count == 0)
             return text.ToString();
 

@@ -482,6 +482,7 @@ internal static class StageRenderer
             PillAlign.TopLeft => pill.Anchor,
             PillAlign.BottomLeft => new Point(pill.Anchor.X, pill.Anchor.Y - height),
             PillAlign.TopCenter => new Point(pill.Anchor.X - width / 2, pill.Anchor.Y),
+            PillAlign.Left => new Point(pill.Anchor.X, pill.Anchor.Y - height / 2),
             _ => new Point(pill.Anchor.X - width / 2, pill.Anchor.Y - height / 2),
         };
         var box = new Rect(origin.X, origin.Y + pill.Rise, width, height);
