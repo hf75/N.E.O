@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using Neo.ClaudeAgent;
 
 namespace Neo.Stage;
 
@@ -15,13 +16,16 @@ namespace Neo.Stage;
 /// <list type="bullet">
 ///   <item>no arguments: the icon, and the dry run once after start (again from the icon);</item>
 ///   <item>--once: the dry run once, then the program ends;</item>
-///   <item>--frames &lt;folder&gt;: moments of the dry run as pictures, nothing on the screen.</item>
+///   <item>--frames &lt;folder&gt;: moments of the dry run and of an answer as pictures, nothing on the screen;</item>
+///   <item>--brain-check "sentence" [--at x,y;x,y] [--then "sentence"] [--for-real]: the brain alone, its hands only pretending unless --for-real;</item>
+///   <item>--live-check seconds [--sound pcm] [--brain] [--at x,y]: the live stage as if the key were held, never the microphone or a loudspeaker.</item>
 /// </list>
 /// </summary>
 public partial class App : Application
 {
     private StageOverlay? _stage;
     private LiveStage? _live;
+    private Brain? _brain;
     private bool _playing;
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -85,7 +89,14 @@ public partial class App : Application
                     _stage ??= new StageOverlay(PrimaryScreen());
                     // A recorded sentence instead of the microphone (--sound), or no ears at all: a check never opens the microphone.
                     var sound = Argument(arguments, "--sound") is { } file ? File.ReadAllBytes(file) : null;
-                    _live = new LiveStage(_stage, () => clock.Elapsed.TotalSeconds < hold, key => sound != null ? Ears.Hear(key, sound) : null);
+                    // --brain: the brain answers on the stage, its hands only pretending and without a voice.
+                    _brain = arguments.Contains("--brain") ? new Brain(pretend: true) : null;
+                    if (_brain != null)
+                        _ = _brain.WarmAsync();
+                    // --at x,y: the pointer rests there (the mouse is left alone).
+                    var at = Argument(arguments, "--at") is { } point ? ScreenPoint(point) : (PixelPoint?)null;
+                    _live = new LiveStage(_stage, () => clock.Elapsed.TotalSeconds < hold, key => sound != null ? Ears.Hear(key, sound) : null, _brain,
+                        pointer: at is { } rest ? () => rest : null);
                     _live.Spoken += utterance =>
                     {
                         Log($"spoken: {utterance.Ended - utterance.Started:0.0} s, {utterance.Trail.Count} trail points, " +
@@ -95,6 +106,17 @@ public partial class App : Application
                         desktop.Shutdown();
                     };
                     _live.Start();
+                });
+            }
+            else if (Argument(arguments, "--brain-check") is { } sentence)
+            {
+                // The brain without microphone, voice or hands: a sentence, and what lies at the screen points after --at as
+                // if it was pointed at while the sentence's pointing words were said. Windows stay as they are.
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try { await BrainCheckAsync(sentence, Argument(arguments, "--at"), Argument(arguments, "--then"), arguments.Contains("--for-real")); }
+                    catch (Exception exception) { Log("brain check failed: " + exception); }
+                    desktop.Shutdown();
                 });
             }
             else if (arguments.Contains("--once"))
@@ -113,14 +135,89 @@ public partial class App : Application
                 Dispatcher.UIThread.Post(() =>
                 {
                     _stage ??= new StageOverlay(PrimaryScreen());
-                    _live = new LiveStage(_stage);
+                    // The brain starts now, so the first question does not wait for Claude Code; the voice needs the ElevenLabs key.
+                    _brain = new Brain();
+                    _ = _brain.WarmAsync();
+                    var mouth = Ears.Key() is { } key ? new Mouth(key) : null;
+                    _live = new LiveStage(_stage, brain: _brain, mouth: mouth);
                     _live.Start();
-                    Log("live: hold the right Ctrl key and point");
+                    Log($"live: hold the right Ctrl key and point{(mouth == null ? $" (no voice without {Ears.KeyVariable})" : "")}");
                 });
             }
         }
 
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
+        {
+            // Claude Code ends with the stage.
+            lifetime.Exit += (_, _) =>
+            {
+                if (_brain != null)
+                    Task.Run(() => _brain.DisposeAsync().AsTask()).Wait(TimeSpan.FromSeconds(3));
+            };
+        }
+
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static async Task BrainCheckAsync(string sentence, string? at, string? then, bool forReal)
+    {
+        var clock = Stopwatch.StartNew();
+        await using var brain = new Brain(pretend: !forReal);
+        brain.Event += agentEvent =>
+        {
+            switch (agentEvent)
+            {
+                case ClaudeAgentToolStarted tool:
+                    Log($"  tool {tool.Name} {tool.Input}");
+                    break;
+                case ClaudeAgentToolFinished done:
+                    Log($"  tool result: {done.Output}");
+                    break;
+            }
+        };
+        var warming = brain.WarmAsync();
+        var utterance = await PretendAsync(sentence, at);
+        await warming;
+        Log($"brain ready after {clock.Elapsed.TotalSeconds:0.0} s; it reads:{Environment.NewLine}{Brain.Describe(utterance).TrimEnd()}");
+        await AskAsync(brain, utterance);
+        if (then != null)
+            await AskAsync(brain, await PretendAsync(then, null));
+
+        static async Task AskAsync(Brain brain, Utterance utterance)
+        {
+            var asked = Stopwatch.StartNew();
+            var answer = await brain.AskAsync(utterance);
+            var turn = answer.Turn;
+            Log($"asked '{utterance.Text}', {(turn.Succeeded ? "answered" : "stopped: " + turn.Subtype)} after {asked.Elapsed.TotalSeconds:0.0} s " +
+                $"({turn.Rounds} rounds, {turn.Usage.InputTokens + turn.Usage.CacheReadInputTokens + turn.Usage.CacheCreationInputTokens} tokens in, " +
+                $"{turn.Usage.OutputTokens} out, {turn.CostUsd * 100:0.00} ct): '{answer.Text}'");
+        }
+    }
+
+    // An utterance as the ears would have heard it, at a calm pace, with the things at the given points pointed at from
+    // just before the pointing words; without pointing words they are spread over the sentence.
+    private static async Task<Utterance> PretendAsync(string sentence, string? at)
+    {
+        var words = sentence.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var heard = words.Select((word, i) => new HeardWord(word, 0.4 + 0.33 * i, 0.4 + 0.33 * i + 0.28)).ToList();
+        var utterance = new Utterance { Started = 0, Ended = 0.4 + 0.33 * words.Length + 0.3, Text = sentence, Heard = heard };
+        var pointingWords = Deixis.Read(words, [.. heard.Select(word => word.Start)]).Where(word => word.Points).ToList();
+        var points = (at ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries).Select(ScreenPoint).ToList();
+        for (var i = 0; i < points.Count; i++)
+        {
+            var point = points[i];
+            var thing = await Task.Run(() => Uia.At(point));
+            if (thing == null)
+            {
+                Log($"nothing at {point}");
+                continue;
+            }
+            var picture = await Task.Run(() => Hands.Picture(thing)); // off the UI thread, as the live stage takes it
+            var time = i < pointingWords.Count ? pointingWords[i].Time - 0.15 : utterance.Ended * (i + 1) / (points.Count + 1);
+            utterance.Pointings.Add(new Pointing(time, new Point(point.X, point.Y), thing, picture));
+            Log($"at {point}: {thing.Kind} '{thing.Name}' in {thing.Program}, {thing.Bounds}, picture {(picture == null ? "none" : $"{picture.Length / 1024} KB")}");
+        }
+        return utterance;
     }
 
     /// <summary>What the stage does, into the file NEO_STAGE_LOG names (nothing when it is not set).</summary>
@@ -130,6 +227,12 @@ public partial class App : Application
             return;
         try { File.AppendAllText(path, $"{DateTime.Now:HH:mm:ss.fff} {line}{Environment.NewLine}"); }
         catch (IOException) { }
+    }
+
+    private static PixelPoint ScreenPoint(string xy)
+    {
+        var parts = xy.Split(',');
+        return new PixelPoint(int.Parse(parts[0]), int.Parse(parts[1]));
     }
 
     private static string? Argument(string[] arguments, string name)

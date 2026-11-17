@@ -32,6 +32,29 @@ internal static class KeyFrames
             using var file = File.Create(Path.Combine(folder, $"stage-{time.ToString("00.00", CultureInfo.InvariantCulture)}.png"));
             bitmap.Save(file, PngBitmapEncoderOptions.Default);
         }
+        RenderAnswer(folder, size, first, second);
+    }
+
+    // An answer after "Was ist das hier?": thinking, being written, spoken.
+    private static void RenderAnswer(string folder, Size size, Rect first, Rect second)
+    {
+        const string text = "Das ist ein Word-Dokument mit dem Titel Unterricht Netzwerke. Es ist gerade geöffnet, und darin steht deine Gliederung zur ersten Stunde.";
+        var states = new (string Name, string Text, double Speaking)[] { ("thinking", "", 0), ("writing", text[..52], 0), ("speaking", text, 1) };
+        foreach (var (name, said, speaking) in states)
+        {
+            using var bitmap = new RenderTargetBitmap(new PixelSize((int)size.Width, (int)size.Height), new Vector(96, 96));
+            using (var context = bitmap.CreateDrawingContext())
+            {
+                Desktop(context, size, first, "Unterricht Netzwerke.docx – Word", second, "Unterlagen – Explorer");
+                var target = new TargetView(first, "Unterricht Netzwerke.docx · Dokument", Palette.That, 0.85, 6, 0.15, 1);
+                var caption = new CaptionView(new Point(first.Center.X + 30, first.Center.Y + 30),
+                    [new WordView("Was", 1), new WordView("ist", 1), new WordView("das", 1, Palette.That, 1, 1, 0, 1), new WordView("hier?", 1)], 0.75);
+                var answer = new AnswerView(new Point(caption.Anchor.X, caption.Anchor.Y + 58), said, 1, said.Length == 0, speaking, 0.2);
+                StageRenderer.Draw(context, new StageFrame(null, [], [target], [caption], null, null, [], answer));
+            }
+            using var file = File.Create(Path.Combine(folder, $"answer-{name}.png"));
+            bitmap.Save(file, PngBitmapEncoderOptions.Default);
+        }
     }
 
     // A calm wallpaper and two windows where the dry run points.

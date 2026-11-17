@@ -34,6 +34,52 @@ internal static class StageRenderer
             DrawLabel(context, target);
         foreach (var pill in frame.Pills)
             DrawPill(context, pill);
+        if (frame.Answer is { } answer)
+            DrawAnswer(context, answer);
+    }
+
+    // ── The answer ──
+
+    private const double AnswerWidth = 440, AnswerPadding = 18;
+
+    private static void DrawAnswer(DrawingContext context, AnswerView answer)
+    {
+        if (answer.Opacity <= 0.001)
+            return;
+        var text = answer.Text.Length > 0 && !answer.Thinking
+            ? new FormattedText(answer.Text, s_culture, FlowDirection.LeftToRight, Palette.Regular, 16.5, new ImmutableSolidColorBrush(Palette.Text))
+            {
+                MaxTextWidth = AnswerWidth - 2 * AnswerPadding - 22,
+                LineHeight = 24,
+            }
+            : null;
+        var width = text != null ? Math.Min(AnswerWidth, text.WidthIncludingTrailingWhitespace + 2 * AnswerPadding + 22) : 92;
+        var height = text != null ? text.Height + 2 * AnswerPadding - 4 : 46;
+        var box = new Rect(answer.Anchor.X, answer.Anchor.Y, Math.Max(width, 92), height);
+
+        using (context.PushOpacity(answer.Opacity))
+        {
+            var glow = new BoxShadows(new BoxShadow { OffsetY = 10, Blur = 30, Color = Color.FromArgb(0x80, 0, 0, 0) },
+                [new BoxShadow { Blur = 18 + 14 * answer.Speaking, Color = Palette.Listen.WithAlpha(0.18 + 0.32 * answer.Speaking) }]);
+            context.DrawRectangle(s_ink, s_inkEdge, new RoundedRect(box, 18), glow);
+            // The stage's own mark: a small ring at the start, lit while it speaks.
+            var mark = new Point(box.Left + AnswerPadding + 4, box.Top + (text != null ? AnswerPadding + 9 : box.Height / 2));
+            context.DrawEllipse(new ImmutableSolidColorBrush(Palette.Listen.WithAlpha(0.25 + 0.45 * answer.Speaking)), null, mark, 8, 8);
+            context.DrawEllipse(null, new ImmutablePen(new ImmutableSolidColorBrush(Palette.Listen), 2), mark, 5.5 + 1.5 * answer.Speaking, 5.5 + 1.5 * answer.Speaking);
+
+            if (text != null)
+                context.DrawText(text, new Point(box.Left + AnswerPadding + 22, box.Top + AnswerPadding - 2));
+            else
+            {
+                // Thinking: three dots that rise in turn.
+                for (var i = 0; i < 3; i++)
+                {
+                    var phase = Math.Sin(2 * Math.PI * (answer.Time * 1.4 - i * 0.18));
+                    var dot = new Point(box.Left + 44 + i * 13, box.Center.Y - 2.5 * Math.Max(0, phase));
+                    context.DrawEllipse(new ImmutableSolidColorBrush(Palette.Text.WithAlpha(0.45 + 0.5 * Math.Max(0, phase))), null, dot, 3.2, 3.2);
+                }
+            }
+        }
     }
 
     // ── What is pointed at ──

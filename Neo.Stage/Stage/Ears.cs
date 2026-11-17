@@ -67,6 +67,27 @@ internal sealed class Ears : IAsyncDisposable
     /// <summary>What went wrong, if anything: no connection, a refusal, no final text in time.</summary>
     public string? Problem { get; private set; }
 
+    /// <summary>For the log: how much sound went out, how loud it was at most, and which answers came when (no text).</summary>
+    public string Trace
+    {
+        get
+        {
+            lock (_trace)
+                return $"{_sentBytes / (SampleRate * 2.0):0.0} s of sound, loudest {_loudest:0.00}; " + string.Join(", ", _trace);
+        }
+    }
+
+    private readonly List<string> _trace = [];
+    private readonly System.Diagnostics.Stopwatch _since = System.Diagnostics.Stopwatch.StartNew();
+    private long _sentBytes;
+    private double _loudest;
+
+    private void Note(string what)
+    {
+        lock (_trace)
+            _trace.Add($"{what}@{_since.Elapsed.TotalSeconds:0.00}");
+    }
+
     /// <summary>The API key: the process's own, else the user's variable.</summary>
     public static string? Key()
         => Environment.GetEnvironmentVariable(KeyVariable) is { Length: > 0 } own ? own
@@ -123,11 +144,16 @@ internal sealed class Ears : IAsyncDisposable
             var url = $"wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id={_model}&audio_format=pcm_{SampleRate}" +
                       $"&commit_strategy=manual&include_timestamps=true&language_code={_language}";
             await _socket.ConnectAsync(new Uri(url), _stop.Token).ConfigureAwait(false);
+            Note("connected");
             _ = Task.Run(ReceiveAsync);
             await foreach (var chunk in _audio.Reader.ReadAllAsync(_stop.Token).ConfigureAwait(false))
+            {
                 await SendAsync(chunk, commit: false).ConfigureAwait(false);
+                _sentBytes += chunk.Length;
+            }
             _committing = true;
             await SendAsync([], commit: true).ConfigureAwait(false);
+            Note("commit");
         }
         catch (Exception exception) when (exception is WebSocketException or OperationCanceledException or IOException or InvalidOperationException)
         {
@@ -168,9 +194,13 @@ internal sealed class Ears : IAsyncDisposable
                     Handle(json);
             }
         }
-        catch (Exception exception) when (exception is WebSocketException or OperationCanceledException or IOException or System.Text.Json.JsonException) { }
+        catch (Exception exception) when (exception is WebSocketException or OperationCanceledException or IOException or System.Text.Json.JsonException)
+        {
+            Note("receive ended: " + exception.GetType().Name);
+        }
         finally
         {
+            Note($"closed({_socket.CloseStatus})");
             _final.TrySetResult(Snapshot(final: _committing));
         }
     }
@@ -178,6 +208,8 @@ internal sealed class Ears : IAsyncDisposable
     private void Handle(JsonObject message)
     {
         var type = (string?)message["message_type"];
+        if (type != "partial_transcript")
+            Note(type == "committed_transcript_with_timestamps" ? $"timestamps({(message["words"] as JsonArray)?.Count ?? 0})" : type ?? "?");
         switch (type)
         {
             case "session_started":
@@ -235,7 +267,10 @@ internal sealed class Ears : IAsyncDisposable
             sum += sample * sample;
         }
         var rms = Math.Sqrt(sum / (chunk.Length / 2));
-        Volatile.Write(ref _level, Math.Clamp(Math.Sqrt(rms) * 1.8, 0, 1));
+        var level = Math.Clamp(Math.Sqrt(rms) * 1.8, 0, 1);
+        Volatile.Write(ref _level, level);
+        if (level > _loudest)
+            _loudest = level;
     }
 
     public async ValueTask DisposeAsync()

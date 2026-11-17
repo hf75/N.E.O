@@ -16,4 +16,9 @@
     <!-- The microphone (waveIn), 16 kHz mono for the speech recognition. -->
     <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- The brain: a live Claude Code session. -->
+    <ProjectReference Include="..\Neo.ClaudeAgent\Neo.ClaudeAgent.csproj" />
+  </ItemGroup>
 </Project>

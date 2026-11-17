@@ -11,10 +11,17 @@ internal sealed record StageFrame(
     IReadOnlyList<CaptionView> Captions,
     ArcView? Arc,
     GhostView? Ghost,
-    IReadOnlyList<PillView> Pills)
+    IReadOnlyList<PillView> Pills,
+    AnswerView? Answer = null)
 {
     public static readonly StageFrame Empty = new(null, [], [], [], null, null, []);
 }
+
+/// <summary>
+/// The stage's answer: a glass card with the text as it comes, near what was talked about. While it thinks, three dots;
+/// while it speaks, a soft light at its edge.
+/// </summary>
+internal sealed record AnswerView(Point Anchor, string Text, double Opacity, bool Thinking, double Speaking, double Time);
 
 /// <summary>Where the pointer is. <see cref="RingScale"/> 1 is listening, smaller is waiting.</summary>
 internal sealed record PointerView(Point Position, double Opacity, double RingScale, double Breath, double Spin, bool ShowArrow);
