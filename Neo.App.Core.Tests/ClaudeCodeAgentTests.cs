@@ -436,6 +436,17 @@ public sealed class ClaudeCodeAgentTests : IDisposable
         plugin.TemplatePlaceholders.Keys.Should().ContainSingle().Which.Should().Match(p => plugin.HelperTemplateCode!.Contains(p));
     }
 
+    [Fact]
+    public void An_app_gets_what_the_plugin_builds_on_beside_the_plugin()
+    {
+        // Finding Claude Code lives in Neo.ClaudeAgent now; an app that loads the plugin from what it is sent needs that DLL too.
+        var dependencies = Neo.App.AppController.PluginDependencies(typeof(ClaudeCodeAgent).Assembly).ToList();
+
+        dependencies.Should().Contain(["Neo.ClaudeAgent.dll", "Neo.Agents.Core.dll"]);
+        dependencies.Should().OnlyContain(name => name.StartsWith("Neo.", StringComparison.Ordinal), "framework and NuGet assemblies reach the app their own way");
+        File.Exists(Path.Combine(AppContext.BaseDirectory, "Neo.ClaudeAgent.dll")).Should().BeTrue("the host has it beside the plugin to send");
+    }
+
     private const string AppCode = """
         using System;
         using System.Collections.Generic;

@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Neo.Agents.Core\Neo.Agents.Core.csproj" />
+    <ProjectReference Include="..\..\Neo.ClaudeAgent\Neo.ClaudeAgent.csproj" />
   </ItemGroup>
 
   <ItemGroup>

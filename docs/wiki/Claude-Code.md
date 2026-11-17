@@ -10,9 +10,9 @@ Claude Code works with files and programs on your computer on its own, for minut
 setx NEO_CLAUDE_CODE 1
 ```
 
-Then restart N.E.O. Any value uses the `claude` command on the PATH. The path of `claude.exe`, of the `claude.cmd` that npm installs, of Claude Code's `cli.js` or of a `.ps1` script uses that file.
+Then restart N.E.O. Any value uses the newest Claude Code N.E.O. finds: the `claude` command on the PATH, or a copy the Claude desktop app keeps. The path of `claude.exe`, of the `claude.cmd` that npm installs, of Claude Code's `cli.js` or of a `.ps1` script uses that file.
 
-Claude Code has to be installed (`npm install -g @anthropic-ai/claude-code`). It runs on your `ANTHROPIC_API_KEY`, which N.E.O. passes on, or else on Claude Code's own sign-in.
+Claude Code has to be installed (`npm install -g @anthropic-ai/claude-code`, or the Claude desktop app). Old builds fail with the current models: 2.1.111 sends a thinking setting the 5.5 models refuse. It runs on your `ANTHROPIC_API_KEY`, which N.E.O. passes on, or else on Claude Code's own sign-in.
 
 ## In generated apps
 
@@ -73,7 +73,7 @@ In our measurements (2026-11-10, Claude Code 2.1.111 with Haiku), Claude Code wr
 - Its output goes into the job's files.
 - A note tells it that it runs unattended.
 
-The progress lines are read from those files, and the end from the last one. An npm install is started as `node cli.js` directly, so no command shell can misread a quote in a task.
+The progress lines are read from those files, and the end from the last one. An npm install is started without its launcher: as `bin\claude.exe` since Claude Code is built natively, as `node cli.js` before. That way no command shell can misread a quote in a task. Finding Claude Code is shared with the live sessions of [[Claude Agent]] (`ClaudeCli` in `Neo.ClaudeAgent`). An app that uses the helper is sent `Neo.ClaudeAgent.dll` along with the agent's DLL.
 
 When N.E.O. itself was started from a Claude Code session, the variables of that session are not passed on. Above all, that includes the address its API calls go to.
 

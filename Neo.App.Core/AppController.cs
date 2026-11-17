@@ -180,6 +180,15 @@ namespace Neo.App
                 if (!AdditionalDlls.Contains(pluginDll, StringComparer.OrdinalIgnoreCase))
                     AdditionalDlls.Add(pluginDll);
 
+                // An app loads a plugin from the DLLs it is sent, so what the plugin builds on among N.E.O.'s own
+                // assemblies has to go along (Claude Code: Neo.ClaudeAgent).
+                foreach (var dependency in PluginDependencies(plugin.GetType().Assembly))
+                {
+                    var dependencyDll = ResolveAppDll(dependency);
+                    if (File.Exists(dependencyDll) && !AdditionalDlls.Contains(dependencyDll, StringComparer.OrdinalIgnoreCase))
+                        AdditionalDlls.Add(dependencyDll);
+                }
+
                 // Ensure default model is in settings
                 if (!Settings.PluginAgentModels.ContainsKey(plugin.SettingsKey))
                     Settings.PluginAgentModels[plugin.SettingsKey] = plugin.DefaultModel;

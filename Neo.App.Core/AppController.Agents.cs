@@ -21,6 +21,16 @@ namespace Neo.App
 {
     public partial class AppController
     {
+        /// <summary>
+        /// The file names of N.E.O.'s own assemblies a plugin references (Neo.*), which an app needs beside the plugin's
+        /// DLL. Framework and NuGet assemblies are left out: the app gets those its own way.
+        /// </summary>
+        internal static IEnumerable<string> PluginDependencies(Assembly plugin)
+            => plugin.GetReferencedAssemblies()
+                .Select(reference => reference.Name)
+                .Where(name => name != null && name.StartsWith("Neo.", StringComparison.Ordinal))
+                .Select(name => name + ".dll");
+
         private static List<IAppIntegratedAgent> DiscoverPluginAgents()
         {
             // .NET loads assemblies lazily — agent assemblies may not be in the AppDomain yet.
