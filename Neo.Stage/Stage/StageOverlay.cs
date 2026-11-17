@@ -39,11 +39,15 @@ internal sealed class StageOverlay : Window
         Position = screen.Bounds.Position;
         Width = screen.Bounds.Width / screen.Scaling;
         Height = screen.Bounds.Height / screen.Scaling;
+        WorkArea = FromScreen(screen.WorkingArea);
         Opened += (_, _) => LetInputThrough();
     }
 
     /// <summary>The screen this stage covers, in screen pixels.</summary>
     public PixelRect ScreenBounds { get; }
+
+    /// <summary>The screen without the taskbar, in the stage's own coordinates.</summary>
+    public Rect WorkArea { get; }
 
     public double Scaling { get; }
 

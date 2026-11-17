@@ -55,7 +55,10 @@ internal static class StageRenderer
             : null;
         var width = text != null ? Math.Min(AnswerWidth, text.WidthIncludingTrailingWhitespace + 2 * AnswerPadding + 22) : 92;
         var height = text != null ? text.Height + 2 * AnswerPadding - 4 : 46;
-        var box = new Rect(answer.Anchor.X, answer.Anchor.Y, Math.Max(width, 92), height);
+        width = Math.Max(width, 92);
+        var box = answer.Above
+            ? new Rect(answer.Anchor.X - width / 2, answer.Anchor.Y - height, width, height)
+            : new Rect(answer.Anchor.X, answer.Anchor.Y, width, height);
 
         using (context.PushOpacity(answer.Opacity))
         {
@@ -267,7 +270,10 @@ internal static class StageRenderer
         if (items.Count == 0)
             return;
 
-        var pill = new Rect(caption.Anchor.X, caption.Anchor.Y, Math.Max(x - WordGap + CaptionPadding, 2 * CaptionPadding), CaptionHeight);
+        var pillWidth = Math.Max(x - WordGap + CaptionPadding, 2 * CaptionPadding);
+        var pill = caption.Centered
+            ? new Rect(caption.Anchor.X - pillWidth / 2, caption.Anchor.Y - CaptionHeight, pillWidth, CaptionHeight)
+            : new Rect(caption.Anchor.X, caption.Anchor.Y, pillWidth, CaptionHeight);
 
         // The lines first, so the glass lies over their start.
         foreach (var item in items.Where(item => item.Word is { Chip: not null, Target: not null, Link: > 0 }))

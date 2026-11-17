@@ -19,9 +19,10 @@ internal sealed record StageFrame(
 
 /// <summary>
 /// The stage's answer: a glass card with the text as it comes, near what was talked about. While it thinks, three dots;
-/// while it speaks, a soft light at its edge.
+/// while it speaks, a soft light at its edge. <see cref="Anchor"/> is its top left corner, or with <see cref="Above"/> the
+/// middle of its lower edge, so that it grows upwards.
 /// </summary>
-internal sealed record AnswerView(Point Anchor, string Text, double Opacity, bool Thinking, double Speaking, double Time);
+internal sealed record AnswerView(Point Anchor, string Text, double Opacity, bool Thinking, double Speaking, double Time, bool Above = false);
 
 /// <summary>Where the pointer is. <see cref="RingScale"/> 1 is listening, smaller is waiting.</summary>
 internal sealed record PointerView(Point Position, double Opacity, double RingScale, double Breath, double Spin, bool ShowArrow);
@@ -36,8 +37,11 @@ internal sealed record TargetView(Rect Bounds, string Label, Color Color, double
 internal sealed record WordView(string Text, double Appear, Color? Chip = null, double ChipProgress = 0, double Pop = 0, int? Target = null, double Link = 0,
     double LinkOpacity = 1);
 
-/// <summary>The words as they are spoken, beside the pointer. <see cref="Anchor"/> is the top left corner.</summary>
-internal sealed record CaptionView(Point Anchor, IReadOnlyList<WordView> Words, double Opacity);
+/// <summary>
+/// The words as they are spoken. <see cref="Anchor"/> is the top left corner (beside the pointer), or with
+/// <see cref="Centered"/> the middle of the lower edge, so that it widens to both sides.
+/// </summary>
+internal sealed record CaptionView(Point Anchor, IReadOnlyList<WordView> Words, double Opacity, bool Centered = false);
 
 /// <summary>The bow from what was meant to where it goes; <see cref="Spark"/> is a light running along it.</summary>
 internal sealed record ArcView(Point From, Point Control1, Point Control2, Point To, double Progress, double Opacity, double? Spark);

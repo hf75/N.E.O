@@ -15,6 +15,8 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="$(NeoAvaloniaVersion)" />
     <!-- The microphone (waveIn), 16 kHz mono for the speech recognition. -->
     <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
+    <!-- Files by name and content: the Windows Search index. -->
+    <PackageReference Include="System.Data.OleDb" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>

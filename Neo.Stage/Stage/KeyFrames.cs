@@ -35,24 +35,30 @@ internal static class KeyFrames
         RenderAnswer(folder, size, first, second);
     }
 
-    // An answer after "Was ist das hier?": thinking, being written, spoken.
+    // The voice alone, "Leg Word nach links": listening, thinking, answering while Word is outlined.
     private static void RenderAnswer(string folder, Size size, Rect first, Rect second)
     {
-        const string text = "Das ist ein Word-Dokument mit dem Titel Unterricht Netzwerke. Es ist gerade geöffnet, und darin steht deine Gliederung zur ersten Stunde.";
-        var states = new (string Name, string Text, double Speaking)[] { ("thinking", "", 0), ("writing", text[..52], 0), ("speaking", text, 1) };
-        foreach (var (name, said, speaking) in states)
+        var presence = new Point(size.Width / 2, size.Height - 48 - 70);
+        var captionBottom = presence.Y - 50;
+        WordView[] words = [new("Leg", 1), new("Word", 1), new("nach", 1), new("links.", 1)];
+        var states = new (string Name, double Ring, double Spin, double Caption, string? Said, double Speaking, bool Outline)[]
+        {
+            ("listening", 1.18, 40, 1, null, 0, false),
+            ("thinking", 0.62, 200, 0.75, "", 0, false),
+            ("answering", 1.0, 90, 0.75, "Ich lege Word auf die linke Hälfte.", 1, true),
+        };
+        foreach (var (name, ring, spin, caption, said, speaking, outline) in states)
         {
             using var bitmap = new RenderTargetBitmap(new PixelSize((int)size.Width, (int)size.Height), new Vector(96, 96));
             using (var context = bitmap.CreateDrawingContext())
             {
                 Desktop(context, size, first, "Unterricht Netzwerke.docx – Word", second, "Unterlagen – Explorer");
-                var target = new TargetView(first, "Unterricht Netzwerke.docx · Dokument", Palette.That, 0.85, 6, 0.15, 1);
-                var caption = new CaptionView(new Point(first.Center.X + 30, first.Center.Y + 30),
-                    [new WordView("Was", 1), new WordView("ist", 1), new WordView("das", 1, Palette.That, 1, 1, 0, 1), new WordView("hier?", 1)], 0.75);
-                var answer = new AnswerView(new Point(caption.Anchor.X, caption.Anchor.Y + 58), said, 1, said.Length == 0, speaking, 0.2);
-                StageRenderer.Draw(context, new StageFrame(null, [], [target], [caption], null, null, [], answer));
+                TargetView[] targets = outline ? [new TargetView(first, "Unterricht Netzwerke.docx – Word", Palette.That, 1, 6, 0.7, 1)] : [];
+                var answer = said == null ? null : new AnswerView(new Point(presence.X, captionBottom - 44 - 14), said, 1, said.Length == 0, speaking, 0.2, Above: true);
+                StageRenderer.Draw(context, new StageFrame(new PointerView(presence, 1, ring, 0.3, spin, ShowArrow: false), [], targets,
+                    [new CaptionView(new Point(presence.X, captionBottom), words, caption, Centered: true)], null, null, [], answer));
             }
-            using var file = File.Create(Path.Combine(folder, $"answer-{name}.png"));
+            using var file = File.Create(Path.Combine(folder, $"voice-{name}.png"));
             bitmap.Save(file, PngBitmapEncoderOptions.Default);
         }
     }

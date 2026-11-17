@@ -17,8 +17,11 @@ namespace Neo.Stage;
 ///   <item>no arguments: the icon, and the dry run once after start (again from the icon);</item>
 ///   <item>--once: the dry run once, then the program ends;</item>
 ///   <item>--frames &lt;folder&gt;: moments of the dry run and of an answer as pictures, nothing on the screen;</item>
-///   <item>--brain-check "sentence" [--at x,y;x,y] [--then "sentence"] [--for-real]: the brain alone, its hands only pretending unless --for-real;</item>
-///   <item>--live-check seconds [--sound pcm] [--brain] [--at x,y]: the live stage as if the key were held, never the microphone or a loudspeaker.</item>
+///   <item>--brain-check "sentence" [--at x,y;x,y] [--then "sentence"] [--windows word] [--for-real]: the brain alone, its hands only
+///   pretending unless --for-real; --windows lets it see only windows whose title or program holds the word;</item>
+///   <item>--live-check seconds [--sound pcm] [--brain] [--windows word] [--pointing [--at x,y]]: the live stage as if the key were held,
+///   never the microphone or a loudspeaker;</item>
+///   <item>--mouth-check "text": the voice as an answer streams in, without a loudspeaker: when the first sound would come.</item>
 /// </list>
 /// </summary>
 public partial class App : Application
@@ -90,13 +93,13 @@ public partial class App : Application
                     // A recorded sentence instead of the microphone (--sound), or no ears at all: a check never opens the microphone.
                     var sound = Argument(arguments, "--sound") is { } file ? File.ReadAllBytes(file) : null;
                     // --brain: the brain answers on the stage, its hands only pretending and without a voice.
-                    _brain = arguments.Contains("--brain") ? new Brain(pretend: true) : null;
+                    _brain = arguments.Contains("--brain") ? new Brain(pretend: true, only: Only(Argument(arguments, "--windows"))) : null;
                     if (_brain != null)
                         _ = _brain.WarmAsync();
                     // --at x,y: the pointer rests there (the mouse is left alone).
                     var at = Argument(arguments, "--at") is { } point ? ScreenPoint(point) : (PixelPoint?)null;
                     _live = new LiveStage(_stage, () => clock.Elapsed.TotalSeconds < hold, key => sound != null ? Ears.Hear(key, sound) : null, _brain,
-                        pointer: at is { } rest ? () => rest : null);
+                        pointer: at is { } rest ? () => rest : null, pointing: arguments.Contains("--pointing"));
                     _live.Spoken += utterance =>
                     {
                         Log($"spoken: {utterance.Ended - utterance.Started:0.0} s, {utterance.Trail.Count} trail points, " +
@@ -114,8 +117,67 @@ public partial class App : Application
                 // if it was pointed at while the sentence's pointing words were said. Windows stay as they are.
                 Dispatcher.UIThread.Post(async () =>
                 {
-                    try { await BrainCheckAsync(sentence, Argument(arguments, "--at"), Argument(arguments, "--then"), arguments.Contains("--for-real")); }
+                    try
+                    {
+                        await BrainCheckAsync(sentence, Argument(arguments, "--at"), Argument(arguments, "--then"), arguments.Contains("--for-real"),
+                            Only(Argument(arguments, "--windows")));
+                    }
                     catch (Exception exception) { Log("brain check failed: " + exception); }
+                    desktop.Shutdown();
+                });
+            }
+            else if (Argument(arguments, "--open-check") is { } name)
+            {
+                // What "open" would do with a name, without opening anything; and the programs that came into question.
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    var clock = Stopwatch.StartNew();
+                    var matches = await Task.Run(() => Apps.Matching(name));
+                    Log($"open '{name}': {Apps.All().Count} programs read in {clock.Elapsed.TotalSeconds:0.00} s; best: " +
+                        string.Join(" | ", matches.Take(5).Select(match => $"{match.Name} ({match.Score})")));
+                    Log("  " + await Task.Run(() => Opener.Open(name, pretend: true)));
+                    desktop.Shutdown();
+                });
+            }
+            else if (Argument(arguments, "--find-check") is { } words)
+            {
+                // The file search, with only how many were found and of which kinds in the log, not their names.
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    var clock = Stopwatch.StartNew();
+                    try
+                    {
+                        var found = await Task.Run(() => FileSearch.Find(words));
+                        Log($"find '{words}': {found.Count} files in {clock.Elapsed.TotalSeconds:0.00} s, kinds " +
+                            string.Join(", ", found.Select(file => Path.GetExtension(file.Path)).GroupBy(kind => kind).Select(kind => $"{kind.Key} ×{kind.Count()}")) +
+                            $", in AppData: {found.Count(file => file.Path.Contains(@"\AppData\", StringComparison.OrdinalIgnoreCase))}");
+                    }
+                    catch (Exception exception) { Log("find failed: " + exception.Message); }
+                    desktop.Shutdown();
+                });
+            }
+            else if (Argument(arguments, "--mouth-check") is { } text)
+            {
+                // The voice without a loudspeaker: the text streams in as an answer would, a few letters at a time.
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    if (Ears.Key() is not { } key)
+                    {
+                        Log($"mouth: no {Ears.KeyVariable}");
+                        desktop.Shutdown();
+                        return;
+                    }
+                    var mouth = new Mouth(key, player: _ => null);
+                    var clock = Stopwatch.StartNew();
+                    mouth.Begin();
+                    for (var i = 0; i < text.Length; i += 6)
+                    {
+                        mouth.Add(text.Substring(i, Math.Min(6, text.Length - i)));
+                        await Task.Delay(25);
+                    }
+                    Log($"mouth: all of it written after {clock.Elapsed.TotalSeconds:0.00} s");
+                    await mouth.FinishAsync();
+                    Log($"mouth: finished after {clock.Elapsed.TotalSeconds:0.00} s{(mouth.Problem != null ? ", " + mouth.Problem : "")}");
                     desktop.Shutdown();
                 });
             }
@@ -130,7 +192,7 @@ public partial class App : Application
             }
             else
             {
-                // The stage at work: hold the right Ctrl key and point. The dry run stays in the icon's menu.
+                // The stage at work: hold the right Ctrl key and speak. The dry run stays in the icon's menu.
                 AddTrayIcon(desktop);
                 Dispatcher.UIThread.Post(() =>
                 {
@@ -150,9 +212,10 @@ public partial class App : Application
                     _brain = new Brain();
                     _ = _brain.WarmAsync();
                     var mouth = Ears.Key() is { } key ? new Mouth(key) : null;
-                    _live = new LiveStage(_stage, brain: _brain, mouth: mouth);
+                    // Pointing with the mouse while speaking is off unless NEO_STAGE_POINTING=1: the voice alone comes first.
+                    _live = new LiveStage(_stage, brain: _brain, mouth: mouth, pointing: Environment.GetEnvironmentVariable("NEO_STAGE_POINTING") == "1");
                     _live.Start();
-                    Log($"live (process {Environment.ProcessId}): hold the right Ctrl key and point{(mouth == null ? $" (no voice without {Ears.KeyVariable})" : "")}");
+                    Log($"live (process {Environment.ProcessId}): hold the right Ctrl key and speak{(mouth == null ? $" (no voice without {Ears.KeyVariable})" : "")}");
                 });
             }
         }
@@ -170,10 +233,14 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    private static async Task BrainCheckAsync(string sentence, string? at, string? then, bool forReal)
+    // Which windows a check may show the brain: those whose title or program holds the word, so the person's own stay out.
+    private static Func<string, string, bool>? Only(string? word)
+        => word == null ? null : (title, program) => title.Contains(word, StringComparison.OrdinalIgnoreCase) || program.Contains(word, StringComparison.OrdinalIgnoreCase);
+
+    private static async Task BrainCheckAsync(string sentence, string? at, string? then, bool forReal, Func<string, string, bool>? only)
     {
         var clock = Stopwatch.StartNew();
-        await using var brain = new Brain(pretend: !forReal);
+        await using var brain = new Brain(pretend: !forReal, only: only);
         brain.Event += agentEvent =>
         {
             switch (agentEvent)
@@ -189,7 +256,7 @@ public partial class App : Application
         var warming = brain.WarmAsync();
         var utterance = await PretendAsync(sentence, at);
         await warming;
-        Log($"brain ready after {clock.Elapsed.TotalSeconds:0.0} s; it reads:{Environment.NewLine}{Brain.Describe(utterance).TrimEnd()}");
+        Log($"brain ready after {clock.Elapsed.TotalSeconds:0.0} s; it reads:{Environment.NewLine}{Brain.Describe(utterance, OpenWindows.List(only)).TrimEnd()}");
         await AskAsync(brain, utterance);
         if (then != null)
             await AskAsync(brain, await PretendAsync(then, null));

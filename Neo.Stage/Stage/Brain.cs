@@ -1,44 +1,55 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using Avalonia.Threading;
 using Neo.ClaudeAgent;
 
 namespace Neo.Stage;
 
 /// <summary>
-/// The stage's brain: one Claude Code session that stays open (Neo.ClaudeAgent), so a follow-up ("und das da?") knows
-/// what came before. It gets what was said with the time of each word, what was pointed at with a picture of each, and
-/// which pointing word meant which thing; it answers in one or two spoken sentences and can arrange windows.
+/// The stage's brain: one Claude Code session that stays open (Neo.ClaudeAgent), so a follow-up ("und jetzt den anderen")
+/// knows what came before. With every question it gets the open windows, numbered, the top one first; when the person
+/// also pointed, what was pointed at, with a picture of each. It answers in one or two spoken sentences and has hands:
+/// it arranges windows, shows them, looks at one, opens programs, folders, websites and files, and finds files.
 /// </summary>
 internal sealed class Brain : IAsyncDisposable
 {
     public const string ModelVariable = "NEO_STAGE_MODEL";
 
     private const string SystemPrompt = """
-        Du bist das Gehirn von N.E.O. Stage. Ein Mensch hält eine Taste, spricht und zeigt dabei mit der Maus auf Dinge auf seinem Bildschirm.
-        Du bekommst, was er gesagt hat, wann er welches Wort sagte, und worauf er gezeigt hat: nummeriert als Ding 1, Ding 2 und so weiter,
-        jeweils mit einem Bildausschnitt. Zeigewörter wie „das hier“, „da“ oder „dahin“ sind schon dem Ding zugeordnet, auf das der Zeiger
-        in dem Moment zeigte; wo keins zugeordnet ist, nimm das naheliegende.
+        Du bist N.E.O. Stage, die Stimme eines Windows-Rechners. Ein Mensch hält eine Taste, spricht mit dir und lässt los; deine Antwort wird
+        vorgelesen. Mit jeder Frage bekommst du die offenen Fenster, nummeriert, das oberste zuerst. „Im Vordergrund“ ist das, mit dem er gerade
+        arbeitet; meint er ein Fenster, ohne es zu nennen („mach das groß“), ist das im Vordergrund gemeint. Zeigt er dabei mit der Maus auf etwas,
+        steht das unter „Gezeigt“, mit einem Bild.
 
-        Antworte so, wie man spricht: auf Deutsch, in einem oder zwei kurzen Sätzen, ohne Aufzählungen, ohne Markdown, ohne Links.
-        Deine Antwort wird vorgelesen.
+        Sprich, wie man spricht: Deutsch, ein oder zwei kurze Sätze, keine Aufzählungen, kein Markdown, keine Links, keine Fensternummern.
+        Nenne Fenster so, wie ein Mensch sie nennt („Word“, „der Browser“, „die Einkaufsliste“). Wenn du etwas tust, sag es in einem kurzen Satz,
+        bevor du das Werkzeug benutzt; danach brauchst du nichts mehr zu sagen, außer etwas ging schief.
 
-        Fenster ordnen kannst du mit dem Werkzeug window: minimieren, maximieren, wiederherstellen, auf die linke oder rechte Bildschirmhälfte.
-        Andere Dinge auf dem Rechner kannst du noch nicht tun. Sag das dann ehrlich und kurz. Behaupte nie, etwas getan zu haben, das du nicht
-        getan hast. Ist unklar, was gemeint ist, frag kurz nach.
+        Deine Werkzeuge: arrange ordnet Fenster, auch mehrere auf einmal. show hebt Fenster auf dem Bildschirm hervor, wenn du über sie sprichst.
+        look gibt dir ein Bild eines Fensters; benutze es nur, wenn die Frage es braucht („Was steht da?“). open öffnet Programme, Ordner, Webseiten
+        und Dateien. find_files sucht Dateien im Benutzerordner nach Namen und Inhalt.
+
+        Mehr kannst du noch nicht, zum Beispiel keine Fenster schließen, nichts tippen, keine Mails lesen. Sag das ehrlich und kurz. Behaupte nie,
+        etwas getan zu haben, das ein Werkzeug nicht bestätigt hat; meldet es eine Probe, sag, dass es nur eine Probe war. Ist unklar, was gemeint
+        ist, frag kurz nach.
         """;
 
     private readonly SemaphoreSlim _starting = new(1, 1);
     private readonly string _work;
+    private readonly Func<string, string, bool>? _only;
     private readonly List<string> _said = [];
     private ClaudeAgentSession? _session;
-    private Utterance? _current;
+    private IReadOnlyList<AppWindow> _windows = [];
     private Task? _last;
 
     /// <param name="pretend">A check: the hands say what they would do and do nothing.</param>
-    public Brain(bool pretend = false)
+    /// <param name="only">Which windows it may see (title, program); a check passes its own. Null: all of them.</param>
+    public Brain(bool pretend = false, Func<string, string, bool>? only = null)
     {
         Pretend = pretend;
+        _only = only;
         _work = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Neo", "Stage", "work");
         Directory.CreateDirectory(_work);
     }
@@ -48,8 +59,8 @@ internal sealed class Brain : IAsyncDisposable
     /// <summary>Everything the session reports. Raised on its reading thread.</summary>
     public event Action<ClaudeAgentEvent>? Event;
 
-    /// <summary>A window was arranged: which thing (0-based) and what was done.</summary>
-    public event Action<int, string>? Arranged;
+    /// <summary>A window was arranged, shown or looked at: the stage outlines it. Raised on the session's thread.</summary>
+    public event Action<AppWindow>? Touched;
 
     /// <summary>Starts the session ahead of the first question, so that it does not wait for Claude Code to start.</summary>
     public async Task WarmAsync()
@@ -72,12 +83,12 @@ internal sealed class Brain : IAsyncDisposable
             await InterruptAsync().ConfigureAwait(false);
             await Task.WhenAny(last, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken)).ConfigureAwait(false);
         }
-        _current = utterance;
+        _windows = OpenWindows.List(_only);
         var session = await SessionAsync().ConfigureAwait(false);
         var pictures = utterance.Pointings.Where(pointing => pointing.Picture != null).Select(pointing => new ClaudeAgentImage(pointing.Picture!)).ToList();
         lock (_said)
             _said.Clear();
-        var turn = session.SendAsync(Describe(utterance), pictures, cancellationToken);
+        var turn = session.SendAsync(Describe(utterance, _windows), pictures, cancellationToken);
         _last = turn;
         var result = await turn.ConfigureAwait(false);
         string said;
@@ -135,61 +146,200 @@ internal sealed class Brain : IAsyncDisposable
         ToolSearch = false,
         BuiltInTools = [],
         ToolServerName = "stage",
-        Tools = [WindowTool()],
+        Tools = [ArrangeTool(), ShowTool(), LookTool(), OpenTool(), FindFilesTool()],
         MaxBudgetUsd = 5m,
     };
 
-    private ClaudeAgentTool WindowTool() => new(
-        "window",
-        "Ordnet das Fenster eines gezeigten Dings: minimize (minimieren), maximize (maximieren), restore (wiederherstellen), " +
-        "left_half oder right_half (auf die linke oder rechte Hälfte seines Bildschirms).",
-        JsonDocument.Parse("""
+    // ── The hands ──
+
+    private ClaudeAgentTool ArrangeTool() => new(
+        "arrange",
+        "Ordnet Fenster, auch mehrere in einem Aufruf. Aktionen: minimize (minimieren), maximize (maximieren), restore (wiederherstellen), " +
+        "front (nach vorne holen), left_half oder right_half (linke oder rechte Hälfte seines Bildschirms).",
+        Schema("""
             {
               "type": "object",
               "properties": {
-                "thing": { "type": "integer", "description": "Nummer des Dings (1, 2, …), dessen Fenster gemeint ist" },
-                "action": { "type": "string", "enum": ["minimize", "maximize", "restore", "left_half", "right_half"] }
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "window": { "type": "integer", "description": "Nummer des Fensters aus der Liste der offenen Fenster" },
+                      "action": { "type": "string", "enum": ["minimize", "maximize", "restore", "front", "left_half", "right_half"] }
+                    },
+                    "required": ["window", "action"]
+                  }
+                }
               },
-              "required": ["thing", "action"]
+              "required": ["steps"]
             }
-            """).RootElement,
-        (input, _) =>
+            """),
+        async (input, _) =>
         {
-            var pointings = _current?.Pointings ?? [];
-            var number = input.TryGetProperty("thing", out var thing) && thing.TryGetInt32(out var value) ? value : 0;
-            var action = input.TryGetProperty("action", out var what) ? what.GetString() ?? "" : "";
-            if (number < 1 || number > pointings.Count)
-                return Task.FromResult(new ClaudeAgentToolResult($"Ding {number} gibt es nicht; gezeigt wurde auf {pointings.Count}.", IsError: true));
-            if (!Hands.Actions.Contains(action))
-                return Task.FromResult(new ClaudeAgentToolResult($"„{action}“ gibt es nicht.", IsError: true));
-            var result = Hands.Arrange(pointings[number - 1].Thing, action, Pretend);
-            Arranged?.Invoke(number - 1, action);
-            return Task.FromResult(new ClaudeAgentToolResult(result));
+            if (!input.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
+                return new ClaudeAgentToolResult("steps fehlt.", IsError: true);
+            var results = new List<string>();
+            foreach (var step in steps.EnumerateArray())
+            {
+                var action = step.TryGetProperty("action", out var what) ? what.GetString() ?? "" : "";
+                if (Window(step, "window") is not { } window)
+                {
+                    results.Add($"Fenster {Number(step, "window")} gibt es nicht.");
+                    continue;
+                }
+                if (!Hands.Actions.Contains(action))
+                {
+                    results.Add($"„{action}“ gibt es nicht.");
+                    continue;
+                }
+                Touched?.Invoke(window);
+                // Bringing a window to the front needs a thread with a message queue: the stage's own.
+                results.Add(action == "front"
+                    ? await Dispatcher.UIThread.InvokeAsync(() => Hands.Arrange(window.Handle, action, Pretend))
+                    : Hands.Arrange(window.Handle, action, Pretend));
+            }
+            return new ClaudeAgentToolResult(string.Join(" ", results));
         });
 
-    /// <summary>The utterance as the brain reads it.</summary>
-    internal static string Describe(Utterance utterance)
+    private ClaudeAgentTool ShowTool() => new(
+        "show",
+        "Hebt Fenster auf dem Bildschirm hervor, solange du über sie sprichst, etwa wenn gefragt wird, wo etwas ist.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "windows": { "type": "array", "items": { "type": "integer" }, "description": "Nummern der Fenster" }
+              },
+              "required": ["windows"]
+            }
+            """),
+        (input, _) =>
+        {
+            var shown = new List<string>();
+            if (input.TryGetProperty("windows", out var numbers) && numbers.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var number in numbers.EnumerateArray())
+                {
+                    if (number.TryGetInt32(out var value) && value >= 1 && value <= _windows.Count)
+                    {
+                        var window = _windows[value - 1];
+                        Touched?.Invoke(window);
+                        shown.Add(window.State == "minimiert" ? $"„{window.Label}“ ist minimiert und nur in der Taskleiste zu sehen." : $"„{window.Label}“ ist hervorgehoben.");
+                    }
+                }
+            }
+            return Task.FromResult(shown.Count > 0 ? new ClaudeAgentToolResult(string.Join(" ", shown)) : new ClaudeAgentToolResult("Keines dieser Fenster gibt es.", IsError: true));
+        });
+
+    private ClaudeAgentTool LookTool() => new(
+        "look",
+        "Gibt dir ein Bild eines Fensters, so wie es gerade aussieht. Ohne Nummer: das Fenster im Vordergrund.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "window": { "type": "integer", "description": "Nummer des Fensters" }
+              }
+            }
+            """),
+        (input, cancellation) => Task.Run(() =>
+        {
+            var window = input.TryGetProperty("window", out JsonElement _) ? Window(input, "window") : _windows.FirstOrDefault(candidate => candidate.Front) ?? _windows.FirstOrDefault();
+            if (window == null)
+                return new ClaudeAgentToolResult("Dieses Fenster gibt es nicht.", IsError: true);
+            if (window.State == "minimiert")
+                return new ClaudeAgentToolResult($"„{window.Label}“ ist minimiert; davon gibt es kein Bild.", IsError: true);
+            Touched?.Invoke(window);
+            byte[]? picture;
+            try { picture = Hands.Picture(window.Handle); }
+            catch (Exception exception) when (exception is InvalidOperationException or ExternalException)
+            {
+                return new ClaudeAgentToolResult("Das Bild ließ sich nicht machen: " + exception.Message, IsError: true);
+            }
+            return picture == null
+                ? new ClaudeAgentToolResult($"Von „{window.Label}“ ließ sich kein Bild machen.", IsError: true)
+                : new ClaudeAgentToolResult($"So sieht „{window.Label}“ gerade aus.", Image: new ClaudeAgentImage(picture));
+        }));
+
+    private ClaudeAgentTool OpenTool() => new(
+        "open",
+        "Öffnet ein Programm (so wie es im Startmenü heißt, etwa „Word“ oder „Rechner“), einen Ordner (Downloads, Dokumente, Bilder, Desktop, " +
+        "Musik, Videos oder ein Pfad), eine Webseite (Adresse wie spiegel.de) oder eine Datei (vollständiger Pfad, etwa von find_files).",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "what": { "type": "string", "description": "Programmname, Ordnername, Pfad oder Webadresse" }
+              },
+              "required": ["what"]
+            }
+            """),
+        (input, _) => Task.Run(() =>
+        {
+            var what = input.TryGetProperty("what", out var value) ? value.GetString() ?? "" : "";
+            return new ClaudeAgentToolResult(Opener.Open(what, Pretend));
+        }));
+
+    private ClaudeAgentTool FindFilesTool() => new(
+        "find_files",
+        "Sucht Dateien im Benutzerordner, deren Name oder Inhalt alle Wörter enthält, die passendsten zuerst. Gibt Pfade zurück, die open öffnen kann.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "words": { "type": "string", "description": "Ein bis drei Suchwörter, etwa „Netzwerkplan“ oder „Rechnung Strom“" }
+              },
+              "required": ["words"]
+            }
+            """),
+        (input, _) => Task.Run(() =>
+        {
+            var words = input.TryGetProperty("words", out var value) ? value.GetString() ?? "" : "";
+            try
+            {
+                var found = FileSearch.Find(words);
+                if (found.Count == 0)
+                    return new ClaudeAgentToolResult($"Nichts gefunden zu „{words}“.");
+                var german = CultureInfo.GetCultureInfo("de-DE");
+                return new ClaudeAgentToolResult(string.Join(Environment.NewLine,
+                    found.Select(file => $"{file.Path} (geändert {file.Modified.ToString("d. MMMM yyyy", german)})")));
+            }
+            catch (Exception exception) when (exception is System.Data.Common.DbException or InvalidOperationException)
+            {
+                return new ClaudeAgentToolResult("Die Windows-Suche antwortet nicht: " + exception.Message, IsError: true);
+            }
+        }));
+
+    private AppWindow? Window(JsonElement input, string property)
+        => Number(input, property) is var number && number >= 1 && number <= _windows.Count ? _windows[number - 1] : null;
+
+    private static int Number(JsonElement input, string property)
+        => input.TryGetProperty(property, out var value) && value.TryGetInt32(out var number) ? number : 0;
+
+    private static JsonElement Schema(string json) => JsonDocument.Parse(json).RootElement;
+
+    // ── What the brain reads ──
+
+    /// <summary>The utterance as the brain reads it: what was said, the open windows, and what was pointed at, if anything.</summary>
+    internal static string Describe(Utterance utterance, IReadOnlyList<AppWindow> windows)
     {
         var text = new StringBuilder();
         text.AppendLine($"Gesagt: „{utterance.Text}“");
+        text.AppendLine(OpenWindows.Describe(windows));
+        if (utterance.Pointings.Count == 0)
+            return text.ToString();
 
-        var words = utterance.Heard is { Count: > 0 } heard
-            ? Deixis.Read([.. heard.Select(word => word.Text)], [.. heard.Select(word => utterance.Started + word.Start)])
-            : Deixis.Read(utterance.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries), [.. utterance.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(_ => utterance.Ended)]);
-        if (utterance.Heard != null)
+        var german = CultureInfo.GetCultureInfo("de-DE");
+        if (utterance.Heard is { Count: > 0 } heard)
         {
+            var words = Deixis.Read([.. heard.Select(word => word.Text)], [.. heard.Select(word => utterance.Started + word.Start)]);
             text.Append("Wörter (Sekunden ab Tastendruck): ");
             text.AppendLine(string.Join(" · ", words.Select(word =>
             {
-                var at = (word.Time - utterance.Started).ToString("0.0", CultureInfo.GetCultureInfo("de-DE"));
+                var at = (word.Time - utterance.Started).ToString("0.0", german);
                 return word.Points && Deixis.Meant(word.Time, utterance.Pointings) is { } meant ? $"{word.Text} {at} → Ding {meant + 1}" : $"{word.Text} {at}";
             })));
-        }
-
-        if (utterance.Pointings.Count == 0)
-        {
-            text.AppendLine("Gezeigt wurde auf nichts Bestimmtes.");
-            return text.ToString();
         }
         text.AppendLine("Gezeigt:");
         var pictures = 0;
@@ -197,18 +347,17 @@ internal sealed class Brain : IAsyncDisposable
         {
             var pointing = utterance.Pointings[i];
             var thing = pointing.Thing;
-            var window = Hands.TopWindow(thing);
-            var title = window != IntPtr.Zero ? Hands.Title(window) : "";
             text.Append($"Ding {i + 1}: {(thing.Kind.Length > 0 ? thing.Kind : "Element")}");
             if (thing.Name.Length > 0)
                 text.Append($" „{thing.Name}“");
             if (thing.Value is { } value)
                 text.Append($", Inhalt „{value}“");
             text.Append($" in {(thing.Program.Length > 0 ? thing.Program : "einem Programm")}");
-            if (title.Length > 0 && title != thing.Name)
-                text.Append($", Fenster „{title}“");
-            text.Append($"; Lage x={thing.Bounds.X}, y={thing.Bounds.Y}, {thing.Bounds.Width}×{thing.Bounds.Height} Pixel");
-            text.AppendLine($"; gezeigt ab {(pointing.Time - utterance.Started).ToString("0.0", CultureInfo.GetCultureInfo("de-DE"))} s{(pointing.Picture != null ? $"; Bild {++pictures}" : "")}.");
+            var top = Hands.TopWindow(thing);
+            if (windows.FirstOrDefault(window => window.Handle == top) is { } window)
+                text.Append($", in Fenster {window.Number}");
+            text.Append($"; gezeigt ab {(pointing.Time - utterance.Started).ToString("0.0", german)} s");
+            text.AppendLine(pointing.Picture != null ? $"; Bild {++pictures}." : ".");
         }
         return text.ToString();
     }
