@@ -16,7 +16,8 @@ internal enum Changes { Nothing, Undoable, Lasting }
 /// </summary>
 internal static partial class Shell
 {
-    private static readonly TimeSpan s_timeout = TimeSpan.FromSeconds(90);
+    // A person is waiting for the answer: a script that takes longer has gone wrong (a search over a whole disk, say).
+    private static readonly TimeSpan s_timeout = TimeSpan.FromSeconds(30);
 
     /// <summary>A reason not to run the script at all, or null.</summary>
     public static string? Refusal(string script)

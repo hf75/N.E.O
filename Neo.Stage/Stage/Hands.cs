@@ -104,6 +104,25 @@ internal static class Hands
         return $"{tiled.Count} Fenster liegen jetzt nebeneinander, in {rows} {(rows == 1 ? "Reihe" : "Reihen")}.";
     }
 
+    /// <summary>
+    /// Brings a window to the front and has it drawn anew, all of it, at once and a moment later again: some programs
+    /// (Word among them) show a change made from outside only when something happens in their window.
+    /// </summary>
+    public static void Show(IntPtr window)
+    {
+        Front(window);
+        Redraw(window);
+        _ = Task.Delay(400).ContinueWith(_ => Redraw(window), TaskScheduler.Default);
+    }
+
+    private static void Redraw(IntPtr window)
+    {
+        if (!IsWindow(window))
+            return;
+        PostMessage(window, WM_NULL, IntPtr.Zero, IntPtr.Zero); // wakes its message loop, like any input would
+        RedrawWindow(window, IntPtr.Zero, IntPtr.Zero, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW);
+    }
+
     /// <summary>The window the person is using now.</summary>
     public static IntPtr Foreground() => GetForegroundWindow();
 
@@ -243,11 +262,14 @@ internal static class Hands
     [StructLayout(LayoutKind.Sequential)]
     private struct MonitorInfo { public int Size; public NativeRect Monitor, Work; public uint Flags; }
 
-    private const uint GA_ROOT = 2, MONITOR_DEFAULTTONEAREST = 2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10;
+    private const uint GA_ROOT = 2, MONITOR_DEFAULTTONEAREST = 2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10, WM_NULL = 0;
+    private const uint RDW_INVALIDATE = 0x1, RDW_ERASE = 0x4, RDW_ALLCHILDREN = 0x80, RDW_UPDATENOW = 0x100, RDW_FRAME = 0x400;
     private const int SW_MAXIMIZE = 3, SW_MINIMIZE = 6, SW_RESTORE = 9, DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 
     [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr window, uint flags);
     [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr window);
+    [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool RedrawWindow(IntPtr window, IntPtr update, IntPtr region, uint flags);
     [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr window);
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr window, int command);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);

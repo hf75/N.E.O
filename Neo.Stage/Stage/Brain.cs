@@ -37,11 +37,13 @@ internal sealed class Brain : IAsyncDisposable
         - build_app lässt N.E.O. in Sekunden ein kleines Programm bauen (einen Timer, einen Rechner für etwas, eine Liste, ein kleines Spiel);
           change_app ändert eine solche App, während sie läuft.
         - run führt ein PowerShell-Skript aus (Windows PowerShell 5.1) für alles andere: Fenster schließen (mit CloseMainWindow, nie mit
-          Stop-Process), Text in ein Programm schreiben, Lautstärke, Dateien, Systeminfos. Gib ehrlich an, was es verändert: nothing (liest nur),
+          Stop-Process), Text in ein Programm schreiben, Lautstärke, Dateien, Systeminfos. Ein Skript muss in wenigen Sekunden fertig sein
+          (nach 30 Sekunden wird es abgebrochen); durchsuche nie ganze Laufwerke, dafür gibt es find_files. Gib ehrlich an, was es verändert: nothing (liest nur),
           undoable (lässt sich rückgängig machen oder das Programm fragt selbst nach, etwa beim Schließen) oder lasting (löscht, überschreibt,
           sendet, installiert). Bei lasting fragt die Bühne den Menschen und führt es erst nach seinem Ja aus; formuliere dafür die Frage.
           Hat ein neues Skript geklappt und wird man es wohl wieder brauchen, gib ihm mit learn einen Namen; schreibe es dann mit param(...)
-          für das, was sich ändert. Gelernte Fähigkeiten rufst du mit run und skill auf.
+          für das, was sich ändert. Gelernte Fähigkeiten rufst du mit run und skill auf. Ändert ein Skript etwas in einem offenen Fenster
+          (Text in Word, eine Zelle in Excel), gib dessen Nummer mit window an: die Bühne holt es dann nach vorne und zeigt die Änderung.
 
         Behaupte nie, etwas getan zu haben, das ein Werkzeug nicht bestätigt hat; meldet es eine Probe, sag, dass es nur eine Probe war.
         """;
@@ -432,6 +434,7 @@ internal sealed class Brain : IAsyncDisposable
                 "skill": { "type": "string", "description": "Name einer gelernten Fähigkeit statt eines Skripts" },
                 "with": { "type": "object", "description": "Werte für die param(...) der Fähigkeit, Name: Wert", "additionalProperties": { "type": "string" } },
                 "says": { "type": "string", "description": "In wenigen Worten, was es tut, für den Menschen, etwa „Word schließen“" },
+                "window": { "type": "integer", "description": "Nummer des offenen Fensters, in dem das Skript etwas ändert, falls eins" },
                 "changes": { "type": "string", "enum": ["nothing", "undoable", "lasting"] },
                 "question": { "type": "string", "description": "Nur bei lasting: die Frage an den Menschen, etwa „Soll ich die drei Dateien in Downloads löschen?“" },
                 "learn": {
@@ -485,6 +488,7 @@ internal sealed class Brain : IAsyncDisposable
                     return new ClaudeAgentToolResult($"Nicht ausgeführt. Der Mensch sagte: „{reply}“.");
             }
 
+            App.Log("run script: " + (script.Length <= 1500 ? script : script[..1500] + " …").Replace("\r", "").Replace("\n", " ⏎ "));
             Working?.Invoke(says);
             string result;
             try { result = await Shell.RunAsync(script, parameters, cancellation); }
@@ -494,6 +498,14 @@ internal sealed class Brain : IAsyncDisposable
             }
             finally { Working?.Invoke(null); }
             App.Log($"run: {result[..Math.Min(result.Length, 160)]}");
+
+            // A program changed from outside often shows the change only when something happens in its window (a mouse
+            // move): the window comes to the front and is drawn anew, so the person sees what was done.
+            if (changes != Changes.Nothing && Window(input, "window") is { } changed && OpenWindows.Seen(changed.Handle) != null)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() => Hands.Show(changed.Handle));
+                Touched?.Invoke(changed);
+            }
 
             if (input.TryGetProperty("learn", out var learn) && learn.ValueKind == JsonValueKind.Object && result.StartsWith("Fertig", StringComparison.Ordinal)
                 && Text(learn, "name") is { Length: > 0 } learnName)
