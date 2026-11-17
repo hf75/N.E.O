@@ -40,6 +40,7 @@ N.E.O. comes in three flavours that share the same core: a **desktop host** (WPF
 - [[Teleport]] — In a shared session, the running app moves to another person's PC with everything in it
 - [[Web Search]] — Apps that answer from the current web with their sources; Claude looks things up while it builds, if you want
 - [[Claude Code]] — Tasks too big for a small tool go to Claude Code, which works on them in the background; N.E.O. says when it is done
+- [[Claude Agent]] — A live Claude Code session for .NET (`Neo.ClaudeAgent`): words as they come, tool steps, permission prompts and tools of the host, as Anthropic's Agent SDK does it
 - [[Export and Import]] — Save, share, and export as `.exe`
 - [[Live-MCP]] — Every generated app is an MCP server (Claude calls into it, reads state, subscribes)
 - [[Frozen-Mode]] — Export a Live-MCP app as a standalone MCP-server executable

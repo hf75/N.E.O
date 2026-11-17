@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(NeoTargetFramework)</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neo.ClaudeAgent.Tests" />
+    <InternalsVisibleTo Include="Neo.Agents.ClaudeCode" />
+    <InternalsVisibleTo Include="Neo.App.Core.Tests" />
+  </ItemGroup>
+
+</Project>
