@@ -105,6 +105,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.ErrorSurfacing", "Neo.E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.ErrorSurfacing.Tests", "Neo.ErrorSurfacing.Tests\Neo.ErrorSurfacing.Tests.csproj", "{CCE22F5F-A672-4DE4-8D50-471847608BC0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo.Stage", "Neo.Stage\Neo.Stage.csproj", "{561CA31C-0392-4300-AE45-1B826F081DD1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -691,6 +693,18 @@ Global
 		{CCE22F5F-A672-4DE4-8D50-471847608BC0}.Release|x64.Build.0 = Release|Any CPU
 		{CCE22F5F-A672-4DE4-8D50-471847608BC0}.Release|x86.ActiveCfg = Release|Any CPU
 		{CCE22F5F-A672-4DE4-8D50-471847608BC0}.Release|x86.Build.0 = Release|Any CPU
+		{561CA31C-0392-4300-AE45-1B826F081DD1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{561CA31C-0392-4300-AE45-1B826F081DD1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{561CA31C-0392-4300-AE45-1B826F081DD1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{561CA31C-0392-4300-AE45-1B826F081DD1}.Debug|x64.Build.0 = Debug|Any CPU
+		{561CA31C-0392-4300-AE45-1B826F081DD1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{561CA31C-0392-4300-AE45-1B826F081DD1}.Debug|x86.Build.0 = Debug|Any CPU
+		{561CA31C-0392-4300-AE45-1B826F081DD1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{561CA31C-0392-4300-AE45-1B826F081DD1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{561CA31C-0392-4300-AE45-1B826F081DD1}.Release|x64.ActiveCfg = Release|Any CPU
+		{561CA31C-0392-4300-AE45-1B826F081DD1}.Release|x64.Build.0 = Release|Any CPU
+		{561CA31C-0392-4300-AE45-1B826F081DD1}.Release|x86.ActiveCfg = Release|Any CPU
+		{561CA31C-0392-4300-AE45-1B826F081DD1}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

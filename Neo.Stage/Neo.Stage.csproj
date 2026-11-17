@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>$(NeoTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="$(NeoAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Desktop" Version="$(NeoAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="$(NeoAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="$(NeoAvaloniaVersion)" />
+  </ItemGroup>
+</Project>
