@@ -21,6 +21,7 @@ namespace Neo.Stage;
 public partial class App : Application
 {
     private StageOverlay? _stage;
+    private LiveStage? _live;
     private bool _playing;
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -39,17 +40,82 @@ public partial class App : Application
                     desktop.Shutdown();
                 });
             }
-            else
+            else if (Argument(arguments, "--probe") is { } where)
             {
-                var once = arguments.Contains("--once");
-                if (!once)
-                    AddTrayIcon(desktop);
+                // What UI Automation finds at a screen point (x,y), into the log: the eyes without the stage.
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    var parts = where.Split(',');
+                    var point = new PixelPoint(int.Parse(parts[0]), int.Parse(parts[1]));
+                    var thing = await Task.Run(() => Uia.At(point));
+                    Log(thing == null ? $"probe {point}: nothing" : $"probe {point}: {thing.Kind} '{thing.Name}' in {thing.Program}, {thing.Bounds}, value '{thing.Value}'");
+                    desktop.Shutdown();
+                });
+            }
+            else if (Argument(arguments, "--ears-check") is { } sound)
+            {
+                // The ears without a microphone: a recorded sentence (16 kHz, 16-bit, mono PCM) at speaking pace.
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    var clock = Stopwatch.StartNew();
+                    if (Ears.Key() is not { } key)
+                    {
+                        Log($"ears: no {Ears.KeyVariable}");
+                        desktop.Shutdown();
+                        return;
+                    }
+                    var model = Argument(arguments, "--model") ?? "scribe_v3_live";
+                    var language = Argument(arguments, "--language") ?? "de";
+                    await using var ears = Ears.Hear(key, await File.ReadAllBytesAsync(sound), language, model);
+                    ears.Partial += text => Log($"partial at {clock.Elapsed.TotalSeconds:0.00} s: {text}");
+                    var heard = await ears.FinishAsync(TimeSpan.FromSeconds(15));
+                    Log($"final at {clock.Elapsed.TotalSeconds:0.00} s ({model}, {language}): '{heard?.Text}' final={heard?.Final} problem={ears.Problem}");
+                    foreach (var word in heard?.Words ?? [])
+                        Log($"  {word.Start,5:0.00}-{word.End,5:0.00} {word.Text}");
+                    desktop.Shutdown();
+                });
+            }
+            else if (Argument(arguments, "--live-check") is { } seconds)
+            {
+                // The live stage as if the right Ctrl key were held for a few seconds, at wherever the pointer is.
+                Dispatcher.UIThread.Post(() =>
+                {
+                    var hold = double.Parse(seconds, System.Globalization.CultureInfo.InvariantCulture);
+                    var clock = Stopwatch.StartNew();
+                    _stage ??= new StageOverlay(PrimaryScreen());
+                    // A recorded sentence instead of the microphone (--sound), or no ears at all: a check never opens the microphone.
+                    var sound = Argument(arguments, "--sound") is { } file ? File.ReadAllBytes(file) : null;
+                    _live = new LiveStage(_stage, () => clock.Elapsed.TotalSeconds < hold, key => sound != null ? Ears.Hear(key, sound) : null);
+                    _live.Spoken += utterance =>
+                    {
+                        Log($"spoken: {utterance.Ended - utterance.Started:0.0} s, {utterance.Trail.Count} trail points, " +
+                            $"pointed at {string.Join(" / ", utterance.Pointings.Select(p => $"{p.Thing.Kind} '{p.Thing.Label}' at {p.Time - utterance.Started:0.00} s"))}");
+                        foreach (var word in utterance.Heard ?? [])
+                            Log($"  {word.Start,5:0.00} {word.Text}");
+                        desktop.Shutdown();
+                    };
+                    _live.Start();
+                });
+            }
+            else if (arguments.Contains("--once"))
+            {
                 Dispatcher.UIThread.Post(async () =>
                 {
                     await Task.Delay(1200);
                     await PlayAsync();
-                    if (once)
-                        desktop.Shutdown();
+                    desktop.Shutdown();
+                });
+            }
+            else
+            {
+                // The stage at work: hold the right Ctrl key and point. The dry run stays in the icon's menu.
+                AddTrayIcon(desktop);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _stage ??= new StageOverlay(PrimaryScreen());
+                    _live = new LiveStage(_stage);
+                    _live.Start();
+                    Log("live: hold the right Ctrl key and point");
                 });
             }
         }
@@ -75,9 +141,11 @@ public partial class App : Application
     /// <summary>The dry run on the primary screen, over the windows that are open there.</summary>
     private async Task PlayAsync()
     {
-        if (_playing)
+        if (_playing || _live?.Busy == true)
             return;
         _playing = true;
+        if (_live != null)
+            _live.Enabled = false;
         try
         {
             var stage = _stage ??= new StageOverlay(PrimaryScreen());
@@ -115,6 +183,8 @@ public partial class App : Application
         finally
         {
             _playing = false;
+            if (_live != null)
+                _live.Enabled = true;
         }
     }
 

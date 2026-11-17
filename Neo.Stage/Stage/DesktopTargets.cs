@@ -77,7 +77,7 @@ internal static class DesktopTargets
     }
 
     // "Microsoft Word", "Windows-Explorer": the description the program gives itself.
-    private static string? ProgramName(uint processId)
+    internal static string? ProgramName(uint processId)
     {
         var process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
         if (process == IntPtr.Zero)

@@ -13,5 +13,7 @@
     <PackageReference Include="Avalonia.Desktop" Version="$(NeoAvaloniaVersion)" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="$(NeoAvaloniaVersion)" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="$(NeoAvaloniaVersion)" />
+    <!-- The microphone (waveIn), 16 kHz mono for the speech recognition. -->
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
   </ItemGroup>
 </Project>
