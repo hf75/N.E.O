@@ -117,7 +117,7 @@ public partial class App : Application
                             replyFrom = now + 0.5;
                         return replyFrom is { } from && now >= from && now < from + replyFor;
                     }
-                    _live = new LiveStage(_stage, KeyHeld, key => sounds.Count > 0 ? Ears.Hear(key, sounds.Dequeue()) : null, _brain,
+                    _live = new LiveStage(_stage, KeyHeld, key => sounds.Count > 0 ? Ears.Hear(key, sounds.Dequeue(), Language.Code) : null, _brain,
                         pointer: at is { } rest ? () => rest : null, pointing: arguments.Contains("--pointing"));
                     _live.Spoken += utterance =>
                     {
@@ -139,7 +139,8 @@ public partial class App : Application
                     try
                     {
                         await BrainCheckAsync(sentence, Argument(arguments, "--at"), Argument(arguments, "--then"), arguments.Contains("--for-real"),
-                            Only(Argument(arguments, "--windows")), arguments.Contains("--yes"));
+                            Only(Argument(arguments, "--windows")), arguments.Contains("--yes"),
+                            double.Parse(Argument(arguments, "--pause") ?? "0", System.Globalization.CultureInfo.InvariantCulture), Argument(arguments, "--snap"));
                     }
                     catch (Exception exception) { Log("brain check failed: " + exception); }
                     desktop.Shutdown();
@@ -151,8 +152,8 @@ public partial class App : Application
                 Dispatcher.UIThread.Post(async () =>
                 {
                     var clock = Stopwatch.StartNew();
-                    var matches = await Task.Run(() => Apps.Matching(name));
-                    Log($"open '{name}': {Apps.All().Count} programs read in {clock.Elapsed.TotalSeconds:0.00} s; best: " +
+                    var matches = await Task.Run(() => StartMenuApps.Matching(name));
+                    Log($"open '{name}': {StartMenuApps.All().Count} programs read in {clock.Elapsed.TotalSeconds:0.00} s; best: " +
                         string.Join(" | ", matches.Take(5).Select(match => $"{match.Name} ({match.Score})")));
                     Log("  " + await Task.Run(() => Opener.Open(name, pretend: true, out _)));
                     desktop.Shutdown();
@@ -172,6 +173,16 @@ public partial class App : Application
                             $", in AppData: {found.Count(file => file.Path.Contains(@"\AppData\", StringComparison.OrdinalIgnoreCase))}");
                     }
                     catch (Exception exception) { Log("find failed: " + exception.Message); }
+                    desktop.Shutdown();
+                });
+            }
+            else if (Argument(arguments, "--demo") is { } demo)
+            {
+                // A demo nobody operates: lines spoken by a synthetic voice, the stage answering live, the screen recorded.
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try { await Director.RunAsync(demo, PrimaryScreen()); }
+                    catch (Exception exception) { Log("demo failed: " + exception); }
                     desktop.Shutdown();
                 });
             }
@@ -256,7 +267,8 @@ public partial class App : Application
     private static Func<string, string, bool>? Only(string? word)
         => word == null ? null : (title, program) => title.Contains(word, StringComparison.OrdinalIgnoreCase) || program.Contains(word, StringComparison.OrdinalIgnoreCase);
 
-    private static async Task BrainCheckAsync(string sentence, string? at, string? then, bool forReal, Func<string, string, bool>? only, bool yes)
+    private static async Task BrainCheckAsync(string sentence, string? at, string? then, bool forReal, Func<string, string, bool>? only, bool yes,
+        double pause = 0, string? snap = null)
     {
         var clock = Stopwatch.StartNew();
         await using var brain = new Brain(pretend: !forReal, only: only);
@@ -283,8 +295,29 @@ public partial class App : Application
         await warming;
         Log($"brain ready after {clock.Elapsed.TotalSeconds:0.0} s; it reads:{Environment.NewLine}{Brain.Describe(utterance, OpenWindows.List(only)).TrimEnd()}");
         await AskAsync(brain, utterance);
-        if (then != null)
-            await AskAsync(brain, await PretendAsync(then, null));
+        Snap(0);
+        // --then: one more sentence; or a file of sentences, one per line, with --pause seconds between them.
+        var more = then == null ? [] : File.Exists(then) ? File.ReadAllLines(then).Where(line => line.Trim().Length > 0).ToArray() : [then];
+        for (var i = 0; i < more.Length; i++)
+        {
+            if (pause > 0)
+                await Task.Delay(TimeSpan.FromSeconds(pause));
+            await AskAsync(brain, await PretendAsync(more[i], null));
+            Snap(i + 1);
+        }
+
+        // --snap folder: a picture of every N.E.O. app window after each sentence.
+        void Snap(int step)
+        {
+            if (snap == null)
+                return;
+            Directory.CreateDirectory(snap);
+            foreach (var window in OpenWindows.List(most: 64).Where(window => window.Program.Contains("PluginWindow", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (Hands.Picture(window.Handle) is { } png)
+                    File.WriteAllBytes(Path.Combine(snap, $"step{step}-{window.ProcessId}.png"), png);
+            }
+        }
         // What the hands started in the background (a window brought to the front when it appears) gets its time.
         if (forReal)
             await Task.Delay(TimeSpan.FromSeconds(8));

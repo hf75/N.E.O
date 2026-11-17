@@ -101,7 +101,7 @@ internal sealed class LiveStage
         _stage = stage;
         _keyHeld = keyHeld;
         _pointer = pointer;
-        _hearing = hearing ?? (key => Ears.Listen(key));
+        _hearing = hearing ?? (key => Ears.Listen(key, Language.Code));
         _brain = brain;
         _mouth = mouth;
         _pointing = pointing;
@@ -120,6 +120,10 @@ internal sealed class LiveStage
             {
                 _working = what;
                 _workingFrom = Now;
+                // Something takes a while and nothing has been said yet: the stage says what is happening, so that the
+                // person is not left waiting in silence.
+                if (what != null && !_wroteAny && _phase is Phase.Thinking or Phase.Answering)
+                    Written(what + ".", finished: true);
             });
             brain.AskPerson = AskPersonAsync;
         }
@@ -610,7 +614,7 @@ internal sealed class LiveStage
         if (_phase == Phase.Asking)
         {
             var shown = Motion.EaseOutCubic(Motion.Progress(time, _askedAt, 0.3));
-            pills.Add(new PillView(new Point(presence.X + 64, presence.Y), [new PillPart("Taste halten: Ja oder Nein", Palette.Yes, Dot: true, Strong: true)],
+            pills.Add(new PillView(new Point(presence.X + 64, presence.Y), [new PillPart(Language.Pick("Taste halten: Ja oder Nein", "Hold the key: yes or no"), Palette.Yes, Dot: true, Strong: true)],
                 shown * (0.75 + 0.25 * Math.Sin(2 * Math.PI * time / 1.4)), 6 * (1 - shown), PillAlign.Left, 13));
         }
         else if (_working is { } doing && _phase is Phase.Thinking or Phase.Answering)

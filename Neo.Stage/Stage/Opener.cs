@@ -48,7 +48,7 @@ internal static class Opener
             return $"Den Pfad {what} gibt es nicht.";
         }
 
-        var apps = Apps.Matching(what);
+        var apps = StartMenuApps.Matching(what);
         if (apps.Count == 0)
             return $"Ein Programm „{what}“ finde ich nicht im Startmenü.";
         if (apps.Count > 1 && apps[0].Score == apps[1].Score)
@@ -130,7 +130,7 @@ internal static class Opener
 /// The programs as the Start menu lists them (the Applications folder of the shell): desktop programs and store apps
 /// alike, by the names this Windows shows, read once and again after ten minutes.
 /// </summary>
-internal static class Apps
+internal static class StartMenuApps
 {
     private static readonly object s_gate = new();
     private static IReadOnlyList<(string Name, string Id)> s_all = [];

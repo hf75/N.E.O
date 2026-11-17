@@ -123,6 +123,29 @@ internal static class Hands
         RedrawWindow(window, IntPtr.Zero, IntPtr.Zero, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW);
     }
 
+    /// <summary>
+    /// Puts a window the stage made in the upper part of its screen, large and centred, so that what the stage shows at the
+    /// bottom (the ring, the words, the answer) does not cover it. Only when it would.
+    /// </summary>
+    public static void AboveStage(IntPtr window)
+    {
+        if (!GetWindowRect(window, out var frame))
+            return;
+        var monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(monitor, ref info))
+            return;
+        var area = info.Work;
+        const int strip = 300, margin = 60;
+        if (frame.Bottom <= area.Bottom - strip)
+            return;
+        var height = Math.Max(360, area.Bottom - strip - area.Top - margin);
+        var width = Math.Min(area.Right - area.Left - 2 * margin, (int)(height * 1.5));
+        var (l, t, r, b) = InvisibleBorder(window);
+        SetWindowPos(window, IntPtr.Zero, area.Left + (area.Right - area.Left - width) / 2 - l, area.Top + margin - t, width + l + r, height + t + b,
+            SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
     /// <summary>The window the person is using now.</summary>
     public static IntPtr Foreground() => GetForegroundWindow();
 
@@ -130,7 +153,8 @@ internal static class Hands
     /// A program started for the person comes to the front when its window appears: a new window, or one that took up
     /// <paramref name="hint"/> in its title (a new tab). Not when the person has gone on to another window meanwhile.
     /// </summary>
-    public static void FrontWhenItAppears(IReadOnlyList<AppWindow> before, string? hint, TimeSpan within, Action<AppWindow>? shown = null)
+    /// <param name="place">An app the stage had built: it goes above the strip at the bottom where the stage speaks.</param>
+    public static void FrontWhenItAppears(IReadOnlyList<AppWindow> before, string? hint, TimeSpan within, Action<AppWindow>? shown = null, bool place = false)
     {
         var foreground = GetForegroundWindow();
         _ = Task.Run(async () =>
@@ -148,6 +172,8 @@ internal static class Hands
                 return;
             }
             var front = await Dispatcher.UIThread.InvokeAsync(() => Front(window.Handle));
+            if (place)
+                AboveStage(window.Handle);
             shown?.Invoke(window);
             App.Log($"front: '{window.Title}' {(front ? "is in front" : "could not be brought to the front")}");
         });

@@ -9,7 +9,7 @@ namespace Neo.Stage;
 /// A window a person could mean by name: its title, its program and how it lies. <see cref="Number"/> is its place in
 /// the list the brain got, the front one first.
 /// </summary>
-internal sealed record AppWindow(int Number, IntPtr Handle, string Title, string Program, string State, bool Front)
+internal sealed record AppWindow(int Number, IntPtr Handle, string Title, string Program, string State, bool Front, uint ProcessId = 0)
 {
     /// <summary>What a person would call it: the title, cut short.</summary>
     public string Label => Title.Length <= 48 ? Title : Title[..47] + "…";
@@ -22,6 +22,9 @@ internal sealed record AppWindow(int Number, IntPtr Handle, string Title, string
 /// </summary>
 internal static class OpenWindows
 {
+    /// <summary>The state of a minimized window, as the list says it.</summary>
+    public static string Minimized => Language.Pick("minimiert", "minimized");
+
     /// <summary>The windows from the top of the screen down; the one in front is marked.</summary>
     /// <param name="only">Keeps only some (a check that must not see the person's windows).</param>
     public static IReadOnlyList<AppWindow> List(Func<string, string, bool>? only = null, int most = 24)
@@ -32,7 +35,7 @@ internal static class OpenWindows
         EnumWindows((window, _) =>
         {
             if (found.Count < most && Candidate(window, own) is { } candidate && (only == null || only(candidate.Title, candidate.Program)))
-                found.Add(new AppWindow(found.Count + 1, window, candidate.Title, candidate.Program, State(window), window == front));
+                found.Add(new AppWindow(found.Count + 1, window, candidate.Title, candidate.Program, State(window), window == front, candidate.ProcessId));
             return true;
         }, IntPtr.Zero);
         return found;
@@ -54,7 +57,7 @@ internal static class OpenWindows
             {
                 if (!known.TryGetValue(window.Handle, out var title))
                 {
-                    if (window.State != "minimiert")
+                    if (window.State != Minimized)
                         return window;
                 }
                 else if (hint is { Length: > 1 } && title != window.Title && window.Title.Contains(hint, StringComparison.OrdinalIgnoreCase))
@@ -70,14 +73,14 @@ internal static class OpenWindows
     public static string Describe(IReadOnlyList<AppWindow> windows)
     {
         if (windows.Count == 0)
-            return "Offene Fenster: keine.";
-        var text = new StringBuilder("Offene Fenster (das oberste zuerst):");
+            return Language.Pick("Offene Fenster: keine.", "Open windows: none.");
+        var text = new StringBuilder(Language.Pick("Offene Fenster (das oberste zuerst):", "Open windows (the top one first):"));
         foreach (var window in windows)
         {
             text.AppendLine();
             text.Append($"{window.Number}. „{window.Title}“ – {window.Program}, {window.State}");
             if (window.Front)
-                text.Append(", im Vordergrund");
+                text.Append(Language.Pick(", im Vordergrund", ", in front"));
         }
         return text.ToString();
     }
@@ -92,7 +95,7 @@ internal static class OpenWindows
         return frame.Right > frame.Left && frame.Bottom > frame.Top ? new PixelRect(frame.Left, frame.Top, frame.Right - frame.Left, frame.Bottom - frame.Top) : null;
     }
 
-    private static (string Title, string Program)? Candidate(IntPtr window, uint own)
+    private static (string Title, string Program, uint ProcessId)? Candidate(IntPtr window, uint own)
     {
         if (!IsWindowVisible(window) || GetWindowTextLength(window) == 0)
             return null;
@@ -117,33 +120,33 @@ internal static class OpenWindows
             processId = InnerProcess(window, processId);
         var title = Title(window);
         var program = DesktopTargets.ProgramName(processId) ?? className;
-        return (title.Length <= 140 ? title : title[..139] + "…", program);
+        return (title.Length <= 140 ? title : title[..139] + "…", program, processId);
     }
 
     // minimiert, maximiert, linke or rechte Bildschirmhälfte, else where it lies; and the screen when there are several.
     private static string State(IntPtr window)
     {
         if (IsIconic(window))
-            return "minimiert";
+            return Minimized;
         var monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
         var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-        var screen = GetMonitorInfo(monitor, ref info) && (info.Flags & MONITORINFOF_PRIMARY) == 0 ? ", auf dem zweiten Bildschirm" : "";
+        var screen = GetMonitorInfo(monitor, ref info) && (info.Flags & MONITORINFOF_PRIMARY) == 0 ? Language.Pick(", auf dem zweiten Bildschirm", ", on the second screen") : "";
         if (IsZoomed(window))
-            return "maximiert" + screen;
+            return Language.Pick("maximiert", "maximized") + screen;
         if (Seen(window) is not { } seen)
-            return "unsichtbar";
+            return Language.Pick("unsichtbar", "not visible");
         var work = info.Work;
         var half = (work.Right - work.Left) / 2;
         bool Near(int a, int b) => Math.Abs(a - b) <= 16;
         if (Near(seen.Y, work.Top) && Near(seen.Bottom, work.Bottom) && Near(seen.Width, half))
         {
             if (Near(seen.X, work.Left))
-                return "linke Bildschirmhälfte" + screen;
+                return Language.Pick("linke Bildschirmhälfte", "left half of the screen") + screen;
             if (Near(seen.Right, work.Right))
-                return "rechte Bildschirmhälfte" + screen;
+                return Language.Pick("rechte Bildschirmhälfte", "right half of the screen") + screen;
         }
         var invariant = CultureInfo.InvariantCulture;
-        return string.Create(invariant, $"bei x={seen.X - work.Left}, y={seen.Y - work.Top}, {seen.Width}×{seen.Height} Pixel von {work.Right - work.Left}×{work.Bottom - work.Top}{screen}");
+        return string.Create(invariant, $"{Language.Pick("bei", "at")} x={seen.X - work.Left}, y={seen.Y - work.Top}, {seen.Width}×{seen.Height} {Language.Pick("Pixel von", "pixels of")} {work.Right - work.Left}×{work.Bottom - work.Top}{screen}");
     }
 
     private static uint InnerProcess(IntPtr frame, uint frameProcess)

@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using Avalonia.Threading;
+using Neo.App;
 using Neo.ClaudeAgent;
 
 namespace Neo.Stage;
@@ -18,7 +19,7 @@ internal sealed class Brain : IAsyncDisposable
 {
     public const string ModelVariable = "NEO_STAGE_MODEL";
 
-    private const string SystemPrompt = """
+    private const string SystemPromptGerman = """
         Du bist N.E.O. Stage, die Stimme eines Windows-Rechners. Ein Mensch hält eine Taste, spricht mit dir und lässt los; deine Antwort wird
         vorgelesen. Mit jeder Frage bekommst du die offenen Fenster, nummeriert, das oberste zuerst. „Im Vordergrund“ ist das, mit dem er gerade
         arbeitet; meint er ein Fenster, ohne es zu nennen („mach das groß“), ist das im Vordergrund gemeint. Die Spracherkennung verhört sich
@@ -35,7 +36,9 @@ internal sealed class Brain : IAsyncDisposable
           braucht. open öffnet Programme, Ordner, Webseiten und Dateien, find_files sucht Dateien. Diese sind schnell; nimm sie zuerst.
         - WebSearch und WebFetch für Fragen an das Internet (Wetter, Nachrichten, Fakten).
         - build_app lässt N.E.O. in Sekunden ein kleines Programm bauen (einen Timer, einen Rechner für etwas, eine Liste, ein kleines Spiel);
-          change_app ändert eine solche App, während sie läuft.
+          change_app ändert eine solche App, während sie läuft. Laufende N.E.O.-Apps bieten Funktionen und Werte an (unter „Apps im
+          App-Netzwerk“): call_app ruft eine Funktion auf, read_app liest einen Wert. Das geht sofort und genau; nimm es vor change_app und look,
+          wenn die App etwas schon kann.
         - run führt ein PowerShell-Skript aus (Windows PowerShell 5.1) für alles andere: Fenster schließen (mit CloseMainWindow, nie mit
           Stop-Process), Text in ein Programm schreiben, Lautstärke, Dateien, Systeminfos. Ein Skript muss in wenigen Sekunden fertig sein
           (nach 30 Sekunden wird es abgebrochen); durchsuche nie ganze Laufwerke, dafür gibt es find_files. Gib ehrlich an, was es verändert: nothing (liest nur),
@@ -46,6 +49,38 @@ internal sealed class Brain : IAsyncDisposable
           (Text in Word, eine Zelle in Excel), gib dessen Nummer mit window an: die Bühne holt es dann nach vorne und zeigt die Änderung.
 
         Behaupte nie, etwas getan zu haben, das ein Werkzeug nicht bestätigt hat; meldet es eine Probe, sag, dass es nur eine Probe war.
+        """;
+
+    private const string SystemPromptEnglish = """
+        You are N.E.O. Stage, the voice of a Windows computer. A person holds a key, speaks to you and lets go; your answer is read
+        aloud. With every question you get the open windows, numbered, the top one first. "In front" is the one they are working in;
+        when they mean a window without naming it ("make that bigger"), they mean the one in front. Speech recognition sometimes
+        mishears; read what was said in the light of the open windows, and ask only when it is really unclear, then with a short
+        yes-or-no question.
+
+        Speak the way people speak: English, as short as possible, usually one sentence, two at most. No lists, no Markdown, no links,
+        no window numbers, no tips nobody asked for. Call windows what a person calls them ("Word", "the browser"). When you do something
+        that takes a moment, say so in one short sentence before you use the tool; after that you need not say anything, unless
+        something went wrong.
+
+        Your hands:
+        - arrange arranges windows (several at once), show highlights them, look gives you a picture of a window when the question needs
+          it. open opens programs, folders, websites and files, find_files finds files. These are fast; use them first.
+        - WebSearch and WebFetch for questions to the internet (weather, news, facts).
+        - build_app has N.E.O. build a small program in seconds (a timer, a calculator for something, a list, a little game, a
+          simulation); change_app changes such an app while it runs. Running N.E.O. apps offer functions and values (under "Apps on the
+          app network"): call_app calls a function, read_app reads a value. That is instant and exact; prefer it to change_app and look
+          when the app can already do it. Write what N.E.O. should build or change in English, so the app speaks English.
+        - run runs a PowerShell script (Windows PowerShell 5.1) for everything else: closing windows (with CloseMainWindow, never
+          Stop-Process), writing text into a program, volume, files, system information. A script must finish in a few seconds (it is
+          stopped after 30 seconds); never search whole drives, find_files is there for that. State honestly what it changes: nothing
+          (only reads), undoable (can be undone, or the program asks itself, as when closing) or lasting (deletes, overwrites, sends,
+          installs). For lasting, the stage asks the person and runs it only after their yes; write the question for that. If a new
+          script worked and will likely be needed again, give it a name with learn, written with param(...) for what changes. Learned
+          skills you run with run and skill. If a script changes something in an open window, give its number with window: the stage
+          then brings it to the front and shows the change.
+
+        Never claim to have done something a tool did not confirm; if it reports a rehearsal, say it was only a rehearsal.
         """;
 
     private readonly SemaphoreSlim _starting = new(1, 1);
@@ -61,6 +96,7 @@ internal sealed class Brain : IAsyncDisposable
     /// <param name="only">Which windows it may see (title, program); a check passes its own. Null: all of them.</param>
     public Brain(bool pretend = false, Func<string, string, bool>? only = null)
     {
+        Apps.CallerName = "N.E.O. Stage"; // the person sees it when a call wants to change something
         Pretend = pretend;
         _only = only;
         _work = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Neo", "Stage", "work");
@@ -106,6 +142,9 @@ internal sealed class Brain : IAsyncDisposable
             await Task.WhenAny(last, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken)).ConfigureAwait(false);
         }
         _windows = OpenWindows.List(_only);
+        // An app N.E.O. just changed may still be putting itself back on the network: at most two seconds for that.
+        for (var waited = 0; waited < 10 && _apps.Names.Any(built => Apps.Find(built) == null); waited++)
+            await Task.Delay(200, cancellationToken).ConfigureAwait(false);
         var session = await SessionAsync().ConfigureAwait(false);
         var pictures = utterance.Pointings.Where(pointing => pointing.Picture != null).Select(pointing => new ClaudeAgentImage(pointing.Picture!)).ToList();
         lock (_said)
@@ -162,14 +201,14 @@ internal sealed class Brain : IAsyncDisposable
     {
         Model = Environment.GetEnvironmentVariable(ModelVariable) ?? Environment.GetEnvironmentVariable(ModelVariable, EnvironmentVariableTarget.User) ?? "claude-haiku-5-5",
         Effort = "low",
-        SystemPrompt = SystemPrompt,
+        SystemPrompt = Language.Pick(SystemPromptGerman, SystemPromptEnglish),
         WorkingDirectory = _work,
         Restricted = true,
         ToolSearch = false,
         BuiltInTools = ["WebSearch", "WebFetch"],
         AllowedTools = ["WebSearch", "WebFetch"],
         ToolServerName = "stage",
-        Tools = [ArrangeTool(), ShowTool(), LookTool(), OpenTool(), FindFilesTool(), BuildAppTool(), ChangeAppTool(), RunTool()],
+        Tools = [ArrangeTool(), ShowTool(), LookTool(), OpenTool(), FindFilesTool(), BuildAppTool(), ChangeAppTool(), CallAppTool(), ReadAppTool(), RunTool()],
         MaxBudgetUsd = 5m,
     };
 
@@ -258,7 +297,7 @@ internal sealed class Brain : IAsyncDisposable
                     {
                         var window = _windows[value - 1];
                         Touched?.Invoke(window);
-                        shown.Add(window.State == "minimiert" ? $"„{window.Label}“ ist minimiert und nur in der Taskleiste zu sehen." : $"„{window.Label}“ ist hervorgehoben.");
+                        shown.Add(window.State == OpenWindows.Minimized ? $"„{window.Label}“ ist minimiert und nur in der Taskleiste zu sehen." : $"„{window.Label}“ ist hervorgehoben.");
                     }
                 }
             }
@@ -281,7 +320,7 @@ internal sealed class Brain : IAsyncDisposable
             var window = input.TryGetProperty("window", out JsonElement _) ? Window(input, "window") : _windows.FirstOrDefault(candidate => candidate.Front) ?? _windows.FirstOrDefault();
             if (window == null)
                 return new ClaudeAgentToolResult("Dieses Fenster gibt es nicht.", IsError: true);
-            if (window.State == "minimiert")
+            if (window.State == OpenWindows.Minimized)
                 return new ClaudeAgentToolResult($"„{window.Label}“ ist minimiert; davon gibt es kein Bild.", IsError: true);
             Touched?.Invoke(window);
             byte[]? picture;
@@ -352,13 +391,14 @@ internal sealed class Brain : IAsyncDisposable
 
     private ClaudeAgentTool BuildAppTool() => new(
         "build_app",
-        "Lässt N.E.O. ein kleines Programm bauen, das danach in einem eigenen Fenster läuft. Dauert meist 10 bis 30 Sekunden.",
+        "Lässt N.E.O. ein kleines Programm bauen, das danach in einem eigenen Fenster läuft. Dauert meist 10 bis 30 Sekunden. " +
+        "Beschreibe auch, was man später an der laufenden App per Sprache einstellen oder abfragen möchte: N.E.O. gibt ihr dafür Funktionen.",
         Schema("""
             {
               "type": "object",
               "properties": {
                 "name": { "type": "string", "description": "Kurzer Name für das Fenster, etwa „Timer“ oder „Vokabeltrainer“" },
-                "description": { "type": "string", "description": "Was das Programm tun und wie es aussehen soll, so genau wie der Mensch es sagte, auf Deutsch" }
+                "description": { "type": "string", "description": "Was das Programm tun und wie es aussehen soll, so genau wie der Mensch es sagte, in seiner Sprache" }
               },
               "required": ["name", "description"]
             }
@@ -371,16 +411,34 @@ internal sealed class Brain : IAsyncDisposable
                 return new ClaudeAgentToolResult("name und description fehlen.", IsError: true);
             if (Pretend)
                 return new ClaudeAgentToolResult($"Nur eine Probe, nichts wurde gebaut. N.E.O. hätte „{name}“ gebaut: {description}");
-            Working?.Invoke($"N.E.O. baut „{name}“");
+            Working?.Invoke(Language.Pick($"N.E.O. baut „{name}“", $"N.E.O. is building “{name}”"));
             // The app window appears a few seconds after N.E.O. starts, with N.E.O. at work in it: to the front with it.
-            Hands.FrontWhenItAppears(OpenWindows.List(most: 64), name, TimeSpan.FromSeconds(60), window => Touched?.Invoke(window));
-            try { return new ClaudeAgentToolResult(await _apps.BuildAsync(name, description, cancellation)); }
+            Hands.FrontWhenItAppears(OpenWindows.List(most: 64), name, TimeSpan.FromSeconds(60), window => Touched?.Invoke(window), place: true);
+            try { return new ClaudeAgentToolResult(await _apps.BuildAsync(name, Voiceable(name, description), cancellation)); }
             catch (Exception exception) when (exception is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
             {
                 return new ClaudeAgentToolResult("N.E.O. ließ sich nicht fragen: " + exception.Message, IsError: true);
             }
             finally { Working?.Invoke(null); }
         });
+
+    /// <summary>
+    /// What the stage asks of every app it has built: the person talks to it later, so it offers its settings and its
+    /// state on the app network, under the name its window has.
+    /// </summary>
+    internal static string Voiceable(string name, string description) => Language.English
+        ? description + Environment.NewLine + Environment.NewLine +
+          $"This app will be used by voice later. Give it [AppInfo(\"{name}\", \"…\")], public [McpCallable] methods for everything one would " +
+          "want to set or trigger in it (with plain parameters such as a name and a number; in an animation or simulation, for instance the speed " +
+          "of each thing that moves), and public [McpObservable] properties for " +
+          "everything one would want to ask about (counters, states, results); every setting that can be set can also be read. They change " +
+          "only the app itself and need no Changes = true. All text in the app is in English."
+        : description + Environment.NewLine + Environment.NewLine +
+        $"Diese App wird später per Sprache bedient. Gib ihr [AppInfo(\"{name}\", \"…\")], öffentliche [McpCallable]-Methoden für alles, was man " +
+        "an ihr einstellen oder auslösen möchte (mit einfachen Parametern wie Name und Zahl; in einer Animation oder Simulation etwa das Tempo von allem, " +
+        "was sich bewegt), und öffentliche [McpObservable]-Eigenschaften für alles, " +
+        "was man abfragen möchte (Zähler, Zustände, Ergebnisse); jede Einstellung, die man setzen kann, soll man auch abfragen können. " +
+        "Sie ändern nur die App selbst und brauchen kein Changes = true.";
 
     private ClaudeAgentTool ChangeAppTool() => new(
         "change_app",
@@ -390,7 +448,7 @@ internal sealed class Brain : IAsyncDisposable
               "type": "object",
               "properties": {
                 "app": { "type": "string", "description": "Name der App; leer für die zuletzt gebaute" },
-                "change": { "type": "string", "description": "Was sich ändern soll, auf Deutsch" }
+                "change": { "type": "string", "description": "Was sich ändern soll, in der Sprache des Menschen" }
               },
               "required": ["change"]
             }
@@ -401,7 +459,7 @@ internal sealed class Brain : IAsyncDisposable
             var change = Text(input, "change");
             if (Pretend)
                 return new ClaudeAgentToolResult($"Nur eine Probe, nichts wurde geändert: {change}");
-            Working?.Invoke($"N.E.O. ändert {(name.Length > 0 ? $"„{name}“" : "die App")}");
+            Working?.Invoke(Language.Pick($"N.E.O. ändert {(name.Length > 0 ? $"„{name}“" : "die App")}", $"N.E.O. is changing {(name.Length > 0 ? $"“{name}”" : "the app")}"));
             try
             {
                 var said = await _apps.ChangeAsync(name, change, cancellation);
@@ -420,6 +478,120 @@ internal sealed class Brain : IAsyncDisposable
             }
             finally { Working?.Invoke(null); }
         });
+
+    // ── The app network: talking to running apps through what they offer ──
+
+    private ClaudeAgentTool CallAppTool() => new(
+        "call_app",
+        "Ruft eine Funktion einer laufenden N.E.O.-App auf, so wie sie unter „Apps im App-Netzwerk“ steht, und gibt ihr Ergebnis zurück.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "app": { "type": "string", "description": "Name der App, wie im App-Netzwerk" },
+                "method": { "type": "string", "description": "Name der Funktion" },
+                "arguments": { "type": "array", "description": "Die Werte für ihre Parameter, in ihrer Reihenfolge", "items": {} }
+              },
+              "required": ["app", "method"]
+            }
+            """),
+        async (input, cancellation) =>
+        {
+            var app = Text(input, "app");
+            var method = Text(input, "method");
+            object?[] arguments = input.TryGetProperty("arguments", out var given) && given.ValueKind == JsonValueKind.Array
+                ? [.. given.EnumerateArray().Select(value => (object?)value.Clone())]
+                : [];
+            if (Pretend)
+                return new ClaudeAgentToolResult($"Nur eine Probe, nichts wurde aufgerufen: {app}.{method}({string.Join(", ", arguments)})");
+            await AppOnNetworkAsync(app, cancellation);
+            ShowApp(app);
+            App.Log($"call: {app}.{method}({string.Join(", ", arguments)})");
+            try
+            {
+                var result = await Apps.CallAsync<JsonElement>(app, method, arguments).WaitAsync(TimeSpan.FromSeconds(40), cancellation);
+                var text = result.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null ? "Erledigt." : "Ergebnis: " + result.GetRawText();
+                App.Log($"call: {text[..Math.Min(text.Length, 160)]}");
+                return new ClaudeAgentToolResult(text);
+            }
+            catch (AppNotFoundException)
+            {
+                return new ClaudeAgentToolResult($"Eine App „{app}“ läuft nicht.", IsError: true);
+            }
+            catch (Exception exception) when (exception is AppCallException or TimeoutException or IOException)
+            {
+                return new ClaudeAgentToolResult($"{app}.{method} ging nicht: {exception.Message}{Offer(app)}", IsError: true);
+            }
+        });
+
+    private ClaudeAgentTool ReadAppTool() => new(
+        "read_app",
+        "Liest einen Wert einer laufenden N.E.O.-App, so wie er unter „Apps im App-Netzwerk“ steht.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "app": { "type": "string", "description": "Name der App, wie im App-Netzwerk" },
+                "value": { "type": "string", "description": "Name des Werts" }
+              },
+              "required": ["app", "value"]
+            }
+            """),
+        async (input, cancellation) =>
+        {
+            var app = Text(input, "app");
+            var value = Text(input, "value");
+            await AppOnNetworkAsync(app, cancellation);
+            ShowApp(app);
+            try
+            {
+                var result = await Apps.ReadAsync<JsonElement>(app, value).WaitAsync(TimeSpan.FromSeconds(20), cancellation);
+                App.Log($"read: {app}.{value} = {(result.ValueKind == JsonValueKind.Undefined ? "nothing" : result.GetRawText())}");
+                return new ClaudeAgentToolResult(result.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null ? "Kein Wert." : result.GetRawText());
+            }
+            catch (AppNotFoundException)
+            {
+                return new ClaudeAgentToolResult($"Eine App „{app}“ läuft nicht.", IsError: true);
+            }
+            catch (Exception exception) when (exception is AppCallException or TimeoutException or IOException)
+            {
+                return new ClaudeAgentToolResult($"{app}.{value} ging nicht: {exception.Message}{Offer(app)}", IsError: true);
+            }
+        });
+
+    // An app N.E.O. has just changed may be in a new process that has not put itself on the network yet: a few seconds' grace.
+    private static async Task AppOnNetworkAsync(string app, CancellationToken cancellationToken)
+    {
+        for (var waited = 0; waited < 40 && Apps.Find(app) == null; waited++)
+            await Task.Delay(200, cancellationToken);
+    }
+
+    // What an app really offers, for a call that named something it does not have.
+    private static string Offer(string app)
+        => Apps.Find(app) is { } found ? Environment.NewLine + Language.Pick("Die App bietet: ", "The app offers: ") + found.Describe() : "";
+
+    // The window of an app Claude talks to lights up on the stage.
+    private void ShowApp(string name)
+    {
+        if (Apps.Find(name) is not { } app)
+            return;
+        if (OpenWindows.List(most: 64).FirstOrDefault(window => window.ProcessId == (uint)app.ProcessId) is { } window)
+            Touched?.Invoke(window);
+    }
+
+    /// <summary>The apps on the app network with what they offer, as the brain reads them with every question.</summary>
+    private static string NetworkApps()
+    {
+        try
+        {
+            var running = Apps.Running(includeSelf: true);
+            return running.Count == 0 ? "" : Language.Pick("Apps im App-Netzwerk (mit call_app und read_app nutzbar):", "Apps on the app network (usable with call_app and read_app):") + string.Concat(running.Select(app => Environment.NewLine + "- " + app.Describe().Replace("\n", "\n  ")));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return "";
+        }
+    }
 
     // ── PowerShell: everything nobody foresaw ──
 
@@ -527,9 +699,11 @@ internal sealed class Brain : IAsyncDisposable
     internal static bool Yes(string reply)
     {
         var words = reply.ToLowerInvariant().Split([' ', ',', '.', '!', '?', ';'], StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length == 0 || words.Any(word => word is "nein" or "nicht" or "nö" or "nee" or "stopp" or "warte" or "abbrechen"))
+        if (words.Length == 0 || words.Any(word => word is "nein" or "nicht" or "nö" or "nee" or "stopp" or "warte" or "abbrechen"
+                or "no" or "not" or "don't" or "dont" or "stop" or "wait" or "cancel" or "nope"))
             return false;
-        return words[0] is "ja" or "jawohl" or "jap" or "jo" or "yes" or "okay" or "ok" or "klar" or "genau" or "gerne" or "gern" or "bitte" or "mach" or "los" or "tu" or "natürlich" or "sicher";
+        return words[0] is "ja" or "jawohl" or "jap" or "jo" or "yes" or "okay" or "ok" or "klar" or "genau" or "gerne" or "gern" or "bitte" or "mach" or "los"
+            or "tu" or "natürlich" or "sicher" or "yeah" or "yep" or "sure" or "go" or "do" or "please" or "of" or "absolutely" or "alright";
     }
 
     private AppWindow? Window(JsonElement input, string property)
@@ -552,10 +726,12 @@ internal sealed class Brain : IAsyncDisposable
     internal static string Describe(Utterance utterance, IReadOnlyList<AppWindow> windows, IReadOnlyList<string>? apps = null)
     {
         var text = new StringBuilder();
-        text.AppendLine($"Gesagt: „{utterance.Text}“");
+        text.AppendLine(Language.Pick($"Gesagt: „{utterance.Text}“", $"Said: “{utterance.Text}”"));
         text.AppendLine(OpenWindows.Describe(windows));
         if (apps is { Count: > 0 })
-            text.AppendLine("Von N.E.O. gebaute Apps, die noch offen sind: " + string.Join(", ", apps.Select(app => $"„{app}“")));
+            text.AppendLine(Language.Pick("Von N.E.O. gebaute Apps, die noch offen sind: ", "Apps N.E.O. built that are still open: ") + string.Join(", ", apps.Select(app => $"“{app}”")));
+        if (NetworkApps() is { Length: > 0 } network)
+            text.AppendLine(network);
         if (Skills.Describe() is { Length: > 0 } skills)
             text.AppendLine(skills);
         if (utterance.Pointings.Count == 0)

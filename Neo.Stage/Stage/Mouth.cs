@@ -37,6 +37,15 @@ internal sealed class Mouth
     /// <summary>What went wrong the last time, if anything.</summary>
     public string? Problem { get; private set; }
 
+    /// <summary>
+    /// For a recording: gets every answer as it was played (22,050 Hz, 16-bit, mono, pauses included) and when it began,
+    /// by <see cref="Clock"/>.
+    /// </summary>
+    public Action<TimeSpan, byte[]>? Tape { get; set; }
+
+    /// <summary>The clock <see cref="Tape"/> tells the time by.</summary>
+    public Func<TimeSpan>? Clock { get; set; }
+
     /// <summary>How loud the voice is right now, from 0 to 1.</summary>
     public double Level => _speech?.Level ?? 0;
 
@@ -165,7 +174,8 @@ internal sealed class Mouth
         private async Task RunAsync()
         {
             var sound = new BufferedWaveProvider(new WaveFormat(SampleRate, 16, 1)) { BufferDuration = TimeSpan.FromMinutes(3), ReadFully = true };
-            _meter = new Meter(sound);
+            _meter = new Meter(sound, taping: _mouth.Tape != null);
+            var began = TimeSpan.Zero;
             IWavePlayer? output = null;
             var playing = false;
             var said = new StringBuilder();
@@ -202,6 +212,7 @@ internal sealed class Mouth
                         received += read;
                         if (!playing && sound.BufferedDuration >= TimeSpan.FromMilliseconds(250))
                         {
+                            began = _mouth.Clock?.Invoke() ?? TimeSpan.Zero;
                             output?.Play();
                             playing = true;
                             App.Log($"voice: first sound after {_clock.Elapsed.TotalSeconds:0.00} s");
@@ -211,6 +222,7 @@ internal sealed class Mouth
                 }
                 if (!playing && sound.BufferedBytes > 0)
                 {
+                    began = _mouth.Clock?.Invoke() ?? TimeSpan.Zero;
                     output?.Play();
                     playing = true;
                 }
@@ -240,14 +252,26 @@ internal sealed class Mouth
                 output?.Stop();
                 output?.Dispose();
                 _meter.Silent = true;
+                if (playing && _meter.Taped() is { Length: > 0 } taped)
+                    _mouth.Tape?.Invoke(began, taped);
             }
         }
     }
 
-    /// <summary>Passes the sound on and measures how loud it is as the player takes it.</summary>
-    private sealed class Meter(IWaveProvider source) : IWaveProvider
+    /// <summary>Passes the sound on and measures how loud it is as the player takes it; for a recording it keeps it too.</summary>
+    private sealed class Meter(IWaveProvider source, bool taping = false) : IWaveProvider
     {
+        private readonly MemoryStream? _tape = taping ? new MemoryStream() : null;
         private double _level;
+
+        /// <summary>All that was played so far.</summary>
+        public byte[] Taped()
+        {
+            if (_tape == null)
+                return [];
+            lock (_tape)
+                return _tape.ToArray();
+        }
 
         public WaveFormat WaveFormat => source.WaveFormat;
 
@@ -258,6 +282,11 @@ internal sealed class Mouth
         public int Read(byte[] buffer, int offset, int count)
         {
             var read = source.Read(buffer, offset, count);
+            if (_tape != null && !Silent)
+            {
+                lock (_tape)
+                    _tape.Write(buffer, offset, read);
+            }
             double sum = 0;
             var samples = 0;
             for (var i = offset; i + 1 < offset + read; i += 2)

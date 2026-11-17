@@ -40,7 +40,7 @@ internal static class StageRenderer
 
     // ── The answer ──
 
-    private const double AnswerWidth = 440, AnswerPadding = 18;
+    private const double AnswerWidth = 440, AnswerWideWidth = 600, AnswerPadding = 18;
 
     private static void DrawAnswer(DrawingContext context, AnswerView answer)
     {
@@ -49,11 +49,11 @@ internal static class StageRenderer
         var text = answer.Text.Length > 0 && !answer.Thinking
             ? new FormattedText(answer.Text, s_culture, FlowDirection.LeftToRight, Palette.Regular, 16.5, new ImmutableSolidColorBrush(Palette.Text))
             {
-                MaxTextWidth = AnswerWidth - 2 * AnswerPadding - 22,
+                MaxTextWidth = (answer.Above ? AnswerWideWidth : AnswerWidth) - 2 * AnswerPadding - 22,
                 LineHeight = 24,
             }
             : null;
-        var width = text != null ? Math.Min(AnswerWidth, text.WidthIncludingTrailingWhitespace + 2 * AnswerPadding + 22) : 92;
+        var width = text != null ? Math.Min(answer.Above ? AnswerWideWidth : AnswerWidth, text.WidthIncludingTrailingWhitespace + 2 * AnswerPadding + 22) : 92;
         var height = text != null ? text.Height + 2 * AnswerPadding - 4 : 46;
         width = Math.Max(width, 92);
         var box = answer.Above

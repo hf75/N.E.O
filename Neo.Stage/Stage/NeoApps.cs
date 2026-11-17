@@ -78,8 +78,11 @@ internal sealed class NeoApps
     /// <summary>Has a new app built from <paramref name="description"/>; its window is called <paramref name="name"/>.</summary>
     public async Task<string> BuildAsync(string name, string description, CancellationToken cancellationToken)
     {
+        if (Names.Any(open => string.Equals(open, name, StringComparison.OrdinalIgnoreCase)))
+            return Language.Pick($"„{name}“ ist schon offen; nicht noch einmal bauen. Ändern geht mit change_app.",
+                $"“{name}” is already open; it is not built again. Change it with change_app.");
         if (Host() is not { } host)
-            return "N.E.O. ist auf diesem Rechner nicht zu finden; ohne N.E.O. baue ich keine Apps.";
+            return Language.Pick("N.E.O. ist auf diesem Rechner nicht zu finden; ohne N.E.O. baue ich keine Apps.", "N.E.O. is not on this computer; without it no apps are built.");
         var pipeName = "neo-stage-" + Guid.NewGuid().ToString("N")[..12];
         var start = new ProcessStartInfo(host)
         {
@@ -98,12 +101,12 @@ internal sealed class NeoApps
         while (!pipe.IsConnected)
         {
             if (process.HasExited)
-                return $"N.E.O. hat sich beim Start beendet (Code {process.ExitCode}).";
+                return Language.Pick($"N.E.O. hat sich beim Start beendet (Code {process.ExitCode}).", $"N.E.O. ended while starting (code {process.ExitCode}).");
             if (clock.Elapsed > TimeSpan.FromSeconds(90))
             {
                 try { process.Kill(entireProcessTree: true); }
                 catch (InvalidOperationException) { }
-                return "N.E.O. ist nicht rechtzeitig bereit geworden.";
+                return Language.Pick("N.E.O. ist nicht rechtzeitig bereit geworden.", "N.E.O. was not ready in time.");
             }
             try { await pipe.ConnectAsync(500, cancellationToken); }
             catch (TimeoutException) { }
@@ -127,7 +130,7 @@ internal sealed class NeoApps
                 ?? _apps.LastOrDefault();
         }
         if (app == null)
-            return "Es ist keine App von N.E.O. offen, die ich ändern könnte.";
+            return Language.Pick("Es ist keine App von N.E.O. offen, die ich ändern könnte.", "No app N.E.O. built is open to change.");
         var clock = Stopwatch.StartNew();
         return Said(app, await app.AskAsync(change, cancellationToken), clock, built: false);
     }
@@ -135,14 +138,15 @@ internal sealed class NeoApps
     private static string Said(NeoApp app, Reply reply, Stopwatch clock, bool built)
     {
         App.Log($"neo: '{app.Name}' {(built ? "built" : "changed")} after {clock.Elapsed.TotalSeconds:0.0} s, done={reply.Done}, loaded={reply.AppLoaded}");
-        var chat = reply.Chat.Trim().Length > 0 ? $" N.E.O. schrieb dazu: {reply.Chat.Trim()}" : "";
+        var chat = reply.Chat.Trim().Length > 0 ? Language.Pick(" N.E.O. schrieb dazu: ", " N.E.O. wrote: ") + reply.Chat.Trim() : "";
+        var seconds = clock.Elapsed.TotalSeconds;
         if (!reply.Done)
-            return $"N.E.O. war mit „{app.Name}“ noch beschäftigt und hat nichts getan.{chat}";
+            return Language.Pick($"N.E.O. war mit „{app.Name}“ noch beschäftigt und hat nichts getan.", $"N.E.O. was still busy with “{app.Name}” and did nothing.") + chat;
         if (!reply.AppLoaded)
-            return $"N.E.O. hat „{app.Name}“ nicht zum Laufen gebracht.{chat}";
-        return built
-            ? $"„{app.Name}“ ist fertig und offen, nach {clock.Elapsed.TotalSeconds:0} s.{chat}"
-            : $"„{app.Name}“ ist geändert, nach {clock.Elapsed.TotalSeconds:0} s.{chat}";
+            return Language.Pick($"N.E.O. hat „{app.Name}“ nicht zum Laufen gebracht.", $"N.E.O. did not get “{app.Name}” running.") + chat;
+        return (built
+            ? Language.Pick($"„{app.Name}“ ist fertig und offen, nach {seconds:0} s.", $"“{app.Name}” is built and open, after {seconds:0} s. Do not build it again.")
+            : Language.Pick($"„{app.Name}“ ist geändert, nach {seconds:0} s.", $"“{app.Name}” is changed, after {seconds:0} s.")) + chat;
     }
 
     // The N.E.O. to start: the one the variable names, else the copy beside the stage.

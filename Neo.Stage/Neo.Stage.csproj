@@ -22,5 +22,7 @@
   <ItemGroup>
     <!-- The brain: a live Claude Code session. -->
     <ProjectReference Include="..\Neo.ClaudeAgent\Neo.ClaudeAgent.csproj" />
+    <!-- The app network: the running N.E.O. apps and the functions they offer. -->
+    <ProjectReference Include="..\Neo.App.Api\Neo.App.Api.csproj" />
   </ItemGroup>
 </Project>
