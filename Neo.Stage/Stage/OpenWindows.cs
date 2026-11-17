@@ -38,6 +38,34 @@ internal static class OpenWindows
         return found;
     }
 
+    /// <summary>
+    /// Waits until a window appears that was not in <paramref name="before"/>, or one of them takes up
+    /// <paramref name="hint"/> in its title (a page opened in a new tab, a folder in Explorer), and returns it; null when
+    /// none did in time.
+    /// </summary>
+    public static async Task<AppWindow?> AppearedAsync(IReadOnlyList<AppWindow> before, string? hint, TimeSpan within)
+    {
+        var known = before.GroupBy(window => window.Handle).ToDictionary(group => group.Key, group => group.First().Title);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (clock.Elapsed < within)
+        {
+            await Task.Delay(150);
+            foreach (var window in List(most: 64))
+            {
+                if (!known.TryGetValue(window.Handle, out var title))
+                {
+                    if (window.State != "minimiert")
+                        return window;
+                }
+                else if (hint is { Length: > 1 } && title != window.Title && window.Title.Contains(hint, StringComparison.OrdinalIgnoreCase))
+                {
+                    return window;
+                }
+            }
+        }
+        return null;
+    }
+
     /// <summary>The list as the brain reads it, one line per window.</summary>
     public static string Describe(IReadOnlyList<AppWindow> windows)
     {

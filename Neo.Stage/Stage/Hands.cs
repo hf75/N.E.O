@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Threading;
 
 namespace Neo.Stage;
 
@@ -12,7 +13,7 @@ namespace Neo.Stage;
 /// </summary>
 internal static class Hands
 {
-    public static readonly string[] Actions = ["minimize", "maximize", "restore", "front", "left_half", "right_half"];
+    public static readonly string[] Actions = ["minimize", "maximize", "restore", "front", "left_half", "right_half", "tile"];
 
     /// <summary>The top-level window a pointed thing belongs to.</summary>
     public static IntPtr TopWindow(PointedThing thing) => thing.Window == IntPtr.Zero ? IntPtr.Zero : GetAncestor(thing.Window, GA_ROOT);
@@ -71,9 +72,71 @@ internal static class Hands
     public static string Arrange(PointedThing thing, string action, bool pretend)
         => TopWindow(thing) is var window && window != IntPtr.Zero ? Arrange(window, action, pretend) : "Dazu gibt es kein Fenster.";
 
+    /// <summary>
+    /// Lays the windows side by side over the work area of the first one's screen, in a grid that fits their number:
+    /// two side by side, three in a row, four in two rows of two, and so on.
+    /// </summary>
+    public static string Tile(IReadOnlyList<IntPtr> windows, bool pretend)
+    {
+        var tiled = windows.Where(window => window != IntPtr.Zero && IsWindow(window)
+            && OpenWindows.ClassName(window) is not ("Shell_TrayWnd" or "Shell_SecondaryTrayWnd" or "Progman" or "WorkerW")).Distinct().ToList();
+        if (tiled.Count == 0)
+            return "Keines dieser Fenster gibt es.";
+        if (pretend)
+            return $"Nur eine Probe, nichts wurde verändert: {tiled.Count} Fenster würden nebeneinander gelegt werden.";
+        var monitor = MonitorFromWindow(tiled[0], MONITOR_DEFAULTTONEAREST);
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(monitor, ref info))
+            return "Den Bildschirm finde ich nicht.";
+        var area = info.Work;
+        var columns = tiled.Count <= 3 ? tiled.Count : (int)Math.Ceiling(Math.Sqrt(tiled.Count));
+        var rows = (int)Math.Ceiling(tiled.Count / (double)columns);
+        var width = (area.Right - area.Left) / columns;
+        var height = (area.Bottom - area.Top) / rows;
+        for (var i = 0; i < tiled.Count; i++)
+        {
+            var window = tiled[i];
+            ShowWindow(window, SW_RESTORE);
+            var (l, t, r, b) = InvisibleBorder(window);
+            SetWindowPos(window, IntPtr.Zero, area.Left + i % columns * width - l, area.Top + i / columns * height - t, width + l + r, height + t + b,
+                SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        return $"{tiled.Count} Fenster liegen jetzt nebeneinander, in {rows} {(rows == 1 ? "Reihe" : "Reihen")}.";
+    }
+
+    /// <summary>The window the person is using now.</summary>
+    public static IntPtr Foreground() => GetForegroundWindow();
+
+    /// <summary>
+    /// A program started for the person comes to the front when its window appears: a new window, or one that took up
+    /// <paramref name="hint"/> in its title (a new tab). Not when the person has gone on to another window meanwhile.
+    /// </summary>
+    public static void FrontWhenItAppears(IReadOnlyList<AppWindow> before, string? hint, TimeSpan within, Action<AppWindow>? shown = null)
+    {
+        var foreground = GetForegroundWindow();
+        _ = Task.Run(async () =>
+        {
+            var window = await OpenWindows.AppearedAsync(before, hint, within);
+            if (window == null)
+            {
+                App.Log($"front: no new window for '{hint}'");
+                return;
+            }
+            var now = GetForegroundWindow();
+            if (now != foreground && now != window.Handle && before.Any(earlier => earlier.Handle == now))
+            {
+                App.Log($"front: '{window.Title}' left behind, the person went on in another window");
+                return;
+            }
+            var front = await Dispatcher.UIThread.InvokeAsync(() => Front(window.Handle));
+            shown?.Invoke(window);
+            App.Log($"front: '{window.Title}' {(front ? "is in front" : "could not be brought to the front")}");
+        });
+    }
+
     // Windows lets only the program a person is using bring a window to the front. The stage borrows the input of the
-    // window in front for a moment, which counts as that.
-    private static bool Front(IntPtr window)
+    // window in front for a moment, which counts as that. Needs a thread with a message queue (the UI thread).
+    public static bool Front(IntPtr window)
     {
         if (IsIconic(window))
             ShowWindow(window, SW_RESTORE);

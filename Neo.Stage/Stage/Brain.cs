@@ -176,7 +176,8 @@ internal sealed class Brain : IAsyncDisposable
     private ClaudeAgentTool ArrangeTool() => new(
         "arrange",
         "Ordnet Fenster, auch mehrere in einem Aufruf. Aktionen: minimize (minimieren), maximize (maximieren), restore (wiederherstellen), " +
-        "front (nach vorne holen), left_half oder right_half (linke oder rechte Hälfte seines Bildschirms).",
+        "front (nach vorne holen), left_half oder right_half (linke oder rechte Hälfte seines Bildschirms), tile (alle Fenster mit tile " +
+        "werden zusammen ordentlich nebeneinander gelegt, in einem Raster, das zu ihrer Zahl passt).",
         Schema("""
             {
               "type": "object",
@@ -187,7 +188,7 @@ internal sealed class Brain : IAsyncDisposable
                     "type": "object",
                     "properties": {
                       "window": { "type": "integer", "description": "Nummer des Fensters aus der Liste der offenen Fenster" },
-                      "action": { "type": "string", "enum": ["minimize", "maximize", "restore", "front", "left_half", "right_half"] }
+                      "action": { "type": "string", "enum": ["minimize", "maximize", "restore", "front", "left_half", "right_half", "tile"] }
                     },
                     "required": ["window", "action"]
                   }
@@ -201,9 +202,16 @@ internal sealed class Brain : IAsyncDisposable
             if (!input.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
                 return new ClaudeAgentToolResult("steps fehlt.", IsError: true);
             var results = new List<string>();
+            var tiled = new List<AppWindow>();
             foreach (var step in steps.EnumerateArray())
             {
                 var action = Text(step, "action");
+                if (action == "tile" && Window(step, "window") is { } tile)
+                {
+                    tiled.Add(tile);
+                    Touched?.Invoke(tile);
+                    continue;
+                }
                 if (Window(step, "window") is not { } window)
                 {
                     results.Add($"Fenster {Number(step, "window")} gibt es nicht.");
@@ -220,6 +228,8 @@ internal sealed class Brain : IAsyncDisposable
                     ? await Dispatcher.UIThread.InvokeAsync(() => Hands.Arrange(window.Handle, action, Pretend))
                     : Hands.Arrange(window.Handle, action, Pretend));
             }
+            if (tiled.Count > 0)
+                results.Add(Hands.Tile([.. tiled.Select(window => window.Handle)], Pretend));
             return new ClaudeAgentToolResult(string.Join(" ", results));
         });
 
@@ -296,7 +306,15 @@ internal sealed class Brain : IAsyncDisposable
               "required": ["what"]
             }
             """),
-        (input, cancellation) => Task.Run(() => new ClaudeAgentToolResult(Opener.Open(Text(input, "what"), Pretend)), cancellation));
+        (input, cancellation) => Task.Run(() =>
+        {
+            // Windows keeps what the stage starts behind the window in use; it comes to the front when it appears.
+            var before = OpenWindows.List(most: 64);
+            var said = Opener.Open(Text(input, "what"), Pretend, out var hint);
+            if (hint != null && !Pretend)
+                Hands.FrontWhenItAppears(before, hint, TimeSpan.FromSeconds(15), window => Touched?.Invoke(window));
+            return new ClaudeAgentToolResult(said);
+        }, cancellation));
 
     private ClaudeAgentTool FindFilesTool() => new(
         "find_files",
@@ -352,6 +370,8 @@ internal sealed class Brain : IAsyncDisposable
             if (Pretend)
                 return new ClaudeAgentToolResult($"Nur eine Probe, nichts wurde gebaut. N.E.O. hätte „{name}“ gebaut: {description}");
             Working?.Invoke($"N.E.O. baut „{name}“");
+            // The app window appears a few seconds after N.E.O. starts, with N.E.O. at work in it: to the front with it.
+            Hands.FrontWhenItAppears(OpenWindows.List(most: 64), name, TimeSpan.FromSeconds(60), window => Touched?.Invoke(window));
             try { return new ClaudeAgentToolResult(await _apps.BuildAsync(name, description, cancellation)); }
             catch (Exception exception) when (exception is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
             {
@@ -380,7 +400,18 @@ internal sealed class Brain : IAsyncDisposable
             if (Pretend)
                 return new ClaudeAgentToolResult($"Nur eine Probe, nichts wurde geändert: {change}");
             Working?.Invoke($"N.E.O. ändert {(name.Length > 0 ? $"„{name}“" : "die App")}");
-            try { return new ClaudeAgentToolResult(await _apps.ChangeAsync(name, change, cancellation)); }
+            try
+            {
+                var said = await _apps.ChangeAsync(name, change, cancellation);
+                // The changed app comes to the front, so that the change can be seen.
+                if (_apps.Window(name) is { } changed)
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() => Hands.Front(changed));
+                    if (OpenWindows.List(most: 64).FirstOrDefault(window => window.Handle == changed) is { } shown)
+                        Touched?.Invoke(shown);
+                }
+                return new ClaudeAgentToolResult(said);
+            }
             catch (Exception exception) when (exception is IOException or InvalidOperationException)
             {
                 return new ClaudeAgentToolResult("N.E.O. ließ sich nicht fragen: " + exception.Message, IsError: true);

@@ -62,6 +62,19 @@ internal sealed class NeoApps
         }
     }
 
+    /// <summary>The window of an app (by name, or the newest): the window of the program its N.E.O. started, titled as the app.</summary>
+    public IntPtr? Window(string? name)
+    {
+        NeoApp? app;
+        lock (_apps)
+        {
+            _apps.RemoveAll(candidate => !candidate.Alive);
+            app = (name is { Length: > 0 } wanted ? _apps.LastOrDefault(candidate => candidate.Name.Contains(wanted, StringComparison.OrdinalIgnoreCase)) : null)
+                ?? _apps.LastOrDefault();
+        }
+        return app == null ? null : OpenWindows.List(most: 64).FirstOrDefault(window => window.Title == app.Name)?.Handle;
+    }
+
     /// <summary>Has a new app built from <paramref name="description"/>; its window is called <paramref name="name"/>.</summary>
     public async Task<string> BuildAsync(string name, string description, CancellationToken cancellationToken)
     {

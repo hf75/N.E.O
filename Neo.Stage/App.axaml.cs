@@ -154,7 +154,7 @@ public partial class App : Application
                     var matches = await Task.Run(() => Apps.Matching(name));
                     Log($"open '{name}': {Apps.All().Count} programs read in {clock.Elapsed.TotalSeconds:0.00} s; best: " +
                         string.Join(" | ", matches.Take(5).Select(match => $"{match.Name} ({match.Score})")));
-                    Log("  " + await Task.Run(() => Opener.Open(name, pretend: true)));
+                    Log("  " + await Task.Run(() => Opener.Open(name, pretend: true, out _)));
                     desktop.Shutdown();
                 });
             }
@@ -285,6 +285,9 @@ public partial class App : Application
         await AskAsync(brain, utterance);
         if (then != null)
             await AskAsync(brain, await PretendAsync(then, null));
+        // What the hands started in the background (a window brought to the front when it appears) gets its time.
+        if (forReal)
+            await Task.Delay(TimeSpan.FromSeconds(8));
 
         static async Task AskAsync(Brain brain, Utterance utterance)
         {

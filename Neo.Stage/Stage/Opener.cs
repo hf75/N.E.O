@@ -12,23 +12,39 @@ namespace Neo.Stage;
 /// </summary>
 internal static class Opener
 {
-    public static string Open(string what, bool pretend)
+    /// <param name="hint">What the title of the window it opens will hold (for bringing it to the front); null when nothing was opened.</param>
+    public static string Open(string what, bool pretend, out string? hint)
     {
+        hint = null;
         what = what.Trim().Trim('"', '„', '“');
         if (what.Length == 0)
             return "Was soll ich öffnen?";
 
         if (Website(what) is { } address)
+        {
+            // "www.spiegel.de/news" → "spiegel": pages are titled by their site's name, not its address.
+            var host = new Uri(address).Host.Split('.');
+            hint = host.Length >= 2 ? host[^2] : host[0];
             return Start(address, $"die Webseite {address}", pretend);
+        }
         if (KnownFolder(what) is { } folder)
-            return Start(folder, $"der Ordner {Path.GetFileName(folder)}", pretend, explorer: true);
+        {
+            hint = Path.GetFileName(folder);
+            return Start(folder, $"der Ordner {hint}", pretend, explorer: true);
+        }
         if (LooksLikePath(what))
         {
             var path = Environment.ExpandEnvironmentVariables(what);
             if (Directory.Exists(path))
-                return Start(path, $"der Ordner {Path.GetFileName(path.TrimEnd('\\'))}", pretend, explorer: true);
+            {
+                hint = Path.GetFileName(path.TrimEnd('\\'));
+                return Start(path, $"der Ordner {hint}", pretend, explorer: true);
+            }
             if (File.Exists(path))
+            {
+                hint = Path.GetFileNameWithoutExtension(path);
                 return Start(path, $"die Datei {Path.GetFileName(path)}", pretend);
+            }
             return $"Den Pfad {what} gibt es nicht.";
         }
 
@@ -38,6 +54,7 @@ internal static class Opener
         if (apps.Count > 1 && apps[0].Score == apps[1].Score)
             return $"Mehrere Programme passen zu „{what}“: {string.Join(", ", apps.Take(6).Select(app => app.Name))}. Welches ist gemeint?";
         var best = apps[0];
+        hint = best.Name;
         return Start($"shell:AppsFolder\\{best.Id}", best.Name, pretend, explorer: true);
     }
 
