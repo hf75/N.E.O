@@ -50,6 +50,15 @@ namespace Neo.App
         /// <summary>Set before the window is used when the host runs as a living app; null in the normal mode.</summary>
         public PlayerProject? Player { get; init; }
 
+        /// <summary>Set when the host builds apps for the stage (Neo.Stage): hidden like a living app, prompted through a pipe.</summary>
+        public StageLink? Stage { get; init; }
+
+        // A living app and the stage's builder both keep this window out of sight until Ctrl+Shift+N.
+        private bool Hidden => Player != null || Stage != null;
+
+        private StageChatTap? _stageChat;
+        private readonly System.Threading.CancellationTokenSource _stageStopping = new();
+
         private bool _hostInitialized;
         private bool _playerShuttingDown;
 
@@ -108,7 +117,7 @@ namespace Neo.App
         private async void MainWindow_Closing(object? sender, WindowClosingEventArgs e)
         {
             // In player mode the app window is the app; closing this one only puts it away.
-            if (Player != null && !_playerShuttingDown)
+            if (Hidden && !_playerShuttingDown)
             {
                 e.Cancel = true;
                 PutAway();
@@ -167,11 +176,19 @@ namespace Neo.App
                 _appController.DllPath = Path.Combine(playerRoot, "DynamicUserControl.dll");
                 _appController.NuGetPackageDirectory = Path.Combine(playerRoot, "NuGetPackages");
             }
+            else if (Stage != null)
+            {
+                // The same for each app the stage has built: they run side by side.
+                var stageRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    AppName, "Stage", "apps", Stage.PipeName);
+                _appController.DllPath = Path.Combine(stageRoot, "DynamicUserControl.dll");
+                _appController.NuGetPackageDirectory = Path.Combine(stageRoot, "NuGetPackages");
+            }
 
             if (_appController.AvailableAgents.Count == 0)
             {
                 var setup = new Neo.App.Views.ApiKeySetupWindow();
-                if (Player != null)
+                if (Hidden)
                 {
                     // No owner: this window is not on screen in player mode.
                     var closed = new TaskCompletionSource<bool>();
@@ -212,6 +229,8 @@ namespace Neo.App
                 }
                 else
                 {
+                    if (Stage != null)
+                        ConfigureStageMode();
                     await _appController.ChildProcessService.RestartAsync();
                     // Don't call HideChild here — the child's WaitOverlay is already
                     // visible by default (XAML). HideChild would start the timer.
@@ -221,7 +240,7 @@ namespace Neo.App
 
                 isCycleViewLocked = false;
                 txtPrompt.IsEnabled = true;
-                if (Player == null)
+                if (!Hidden)
                 {
                     Activate();
                     txtPrompt.Focus();
@@ -260,6 +279,46 @@ namespace Neo.App
             _appController.Logger.LogMessage(PlayerProject.Greeting(Player), BubbleType.Info);
         }
 
+        // ─── Stage mode ─────────────────────────────────────────────────
+
+        /// <summary>Builds apps for the stage: starts hidden with an empty app window, then answers prompts from the pipe.</summary>
+        public async Task RunForStageAsync()
+        {
+            if (Stage == null) throw new InvalidOperationException("No stage to serve.");
+
+            await InitializeHostAsync();
+            if (_appController == null) { ShutdownPlayer(); return; }
+            _appController.Logger.Clear();
+            _stageChat?.Take();
+            _ = Stage.ServeAsync(prompt => Dispatcher.UIThread.InvokeAsync(() => StagePromptAsync(prompt)), _stageStopping.Token);
+        }
+
+        // A prompt from the stage, as if it had been typed: N.E.O. builds or changes its app and says how it went.
+        private async Task<StageReply> StagePromptAsync(string prompt)
+        {
+            _stageChat?.Take();
+            var done = await _appController.ExecutePromptAsync(prompt);
+            return new StageReply(done, _appController.ChildProcessService.HasLoadedControl, _stageChat?.Take() ?? "");
+        }
+
+        private void ConfigureStageMode()
+        {
+            var stage = Stage!;
+            Title = $"N.E.O. · {stage.Title ?? "Stage"}";
+            if (_appController.ChildProcessService is not AvaloniaChildProcessService svc) return;
+            svc.DockChildToHost = false;
+            svc.TreatCloseAsCrash = false;
+            svc.ChildWindowTitle = stage.Title ?? "N.E.O.";
+            svc.ChildWindowHint = PlayerProject.HintText;
+            svc.HostToggleRequested += () => Dispatcher.UIThread.Post(ToggleHostWindow);
+            svc.ChildWindowBoundsChanged += _ => Dispatcher.UIThread.Post(() => { if (IsVisible) PlaceBesideApp(); });
+            svc.ChildExited += () => Dispatcher.UIThread.Post(() =>
+            {
+                _stageStopping.Cancel();
+                ShutdownPlayer();
+            });
+        }
+
         private void ConfigurePlayerMode()
         {
             var player = Player!;
@@ -284,7 +343,7 @@ namespace Neo.App
         /// <summary>Ctrl+Shift+N: N.E.O. beside the app, or away again.</summary>
         private void ToggleHostWindow()
         {
-            if (Player == null) return;
+            if (!Hidden) return;
             if (IsVisible) PutAway();
             else ShowHostBesideApp();
         }
@@ -360,7 +419,7 @@ namespace Neo.App
         // Dialogs need a visible owner; in player mode this window may be hidden when one is due.
         private void EnsureVisibleForDialog()
         {
-            if (Player != null && !IsVisible) ShowHostBesideApp();
+            if (Hidden && !IsVisible) ShowHostBesideApp();
         }
 
         private void EnsureAppDataFolderExists()
@@ -535,7 +594,7 @@ namespace Neo.App
 
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
             {
-                if (e.Key == Key.N && Player != null)
+                if (e.Key == Key.N && Hidden)
                 {
                     ToggleHostWindow();
                     e.Handled = true;
@@ -931,7 +990,7 @@ namespace Neo.App
         void IMainView.ClearPrompt() => txtPrompt.Clear();
         void IMainView.FocusPrompt() => txtPrompt.Focus();
         // Activate() would put a hidden window on screen — in player mode it stays away until asked for.
-        void IMainView.ActivateWindow() { if (Player == null || IsVisible) Activate(); }
+        void IMainView.ActivateWindow() { if (!Hidden || IsVisible) Activate(); }
 
         void IMainView.ShowRepairOverlay() => RepairOverlay.IsVisible = true;
         void IMainView.HideRepairOverlay() => RepairOverlay.IsVisible = false;
@@ -958,8 +1017,12 @@ namespace Neo.App
         IChildProcessService IMainView.CreateChildProcessService() =>
             new AvaloniaChildProcessService(this);
 
-        IAppLogger IMainView.CreateLogger(ApplicationState appState) =>
-            new AvaloniaAppLogger(appState, historyView);
+        IAppLogger IMainView.CreateLogger(ApplicationState appState)
+        {
+            var logger = new AvaloniaAppLogger(appState, historyView);
+            // For the stage, what each prompt writes to the chat goes back with its answer.
+            return Stage != null ? _stageChat = new StageChatTap(logger) : logger;
+        }
 
         bool IMainView.CheckUIThreadAccess() => Dispatcher.UIThread.CheckAccess();
 

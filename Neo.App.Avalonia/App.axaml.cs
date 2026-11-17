@@ -25,6 +25,25 @@ namespace Neo.App.Avalonia
 
                 // A living app: this executable was exported with a project next to it (or was
                 // started with --play). The host stays hidden behind the app window.
+                // The stage's app builder: hidden, the prompts come from Neo.Stage through a pipe.
+                var stage = Neo.App.StageLink.Detect(desktop.Args ?? Array.Empty<string>());
+                if (stage != null)
+                {
+                    desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                    try
+                    {
+                        var mainWindow = new Neo.App.MainWindow { Stage = stage };
+                        await mainWindow.RunForStageAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[OnStartup] Stage mode failed: {ex}");
+                        desktop.Shutdown(1);
+                    }
+                    base.OnFrameworkInitializationCompleted();
+                    return;
+                }
+
                 var player = PlayerProject.Detect(desktop.Args ?? Array.Empty<string>(), AppContext.BaseDirectory);
                 if (player != null)
                 {
