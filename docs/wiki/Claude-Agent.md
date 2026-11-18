@@ -1,6 +1,6 @@
 # Claude Agent — a live Claude Code session for .NET
 
-`Neo.ClaudeAgent` keeps one Claude Code running and talks to it turn by turn. Anthropic's Claude Agent SDK does this for TypeScript and Python; there is no official SDK for .NET, so this library is the part N.E.O. needs. Neo.Stage, the harness for speaking and pointing that is being built, uses it as its brain.
+`Neo.ClaudeAgent` keeps one Claude Code running and talks to it turn by turn. Anthropic's Claude Agent SDK does this for TypeScript and Python; there is no official SDK for .NET, so this library is the part N.E.O. needs. [[Stage]], the harness you talk to, uses it as its brain.
 
 ## Using it
 
