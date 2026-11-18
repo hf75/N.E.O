@@ -130,10 +130,16 @@ internal sealed class Director
             }
             if (line.Answer)
             {
-                // The answer to a question the stage asks (an app's): said when the question stands.
+                // The answer to a question the stage asks (an app's): said when the question has been heard to the end, as a
+                // person would answer it. The key, held at once, would cut it off (it did: the questions went unheard).
                 var from = Now;
                 while (!live.Asking && Now - from < 240)
                     await Task.Delay(100);
+                var asked = Now;
+                while (live.Asking && !mouth.Quiet && Now - asked < 30)
+                    await Task.Delay(50);
+                App.Log($"demo: the question was heard after {Now - asked:0.0} s");
+                await Task.Delay(600);
             }
             else
             {

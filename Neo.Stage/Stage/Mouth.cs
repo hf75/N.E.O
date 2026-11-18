@@ -51,6 +51,12 @@ internal sealed class Mouth
 
     public bool Speaking => _speech is { Done.IsCompleted: false };
 
+    /// <summary>
+    /// All that was given to the voice has been heard: a question the stage asks keeps its answer open (it stays
+    /// <see cref="Speaking"/>), but once its words are out it is quiet.
+    /// </summary>
+    public bool Quiet => _speech?.Quiet ?? true;
+
     /// <summary>A new answer begins; what was still being said stops.</summary>
     public void Begin()
     {
@@ -124,6 +130,8 @@ internal sealed class Mouth
         private readonly StringBuilder _pending = new();
         private readonly Stopwatch _clock = Stopwatch.StartNew();
         private Meter? _meter;
+        private BufferedWaveProvider? _sound;
+        private int _unheard; // sentences given to the voice whose sound has not all come yet
 
         public Speech(Mouth mouth)
         {
@@ -132,6 +140,9 @@ internal sealed class Mouth
         }
 
         public Task Done { get; }
+
+        /// <summary>Every sentence given to the voice has come and has been played out.</summary>
+        public bool Quiet => Done.IsCompleted || (Volatile.Read(ref _unheard) == 0 && (_sound?.BufferedBytes ?? 0) == 0);
 
         public double Level => _meter?.Level ?? 0;
 
@@ -167,13 +178,17 @@ internal sealed class Mouth
 
         private void Say(string sentence)
         {
-            if (sentence.Trim().Length > 0)
-                _sentences.Writer.TryWrite(sentence.Trim());
+            if (sentence.Trim().Length == 0)
+                return;
+            Interlocked.Increment(ref _unheard);
+            if (!_sentences.Writer.TryWrite(sentence.Trim()))
+                Interlocked.Decrement(ref _unheard);
         }
 
         private async Task RunAsync()
         {
             var sound = new BufferedWaveProvider(new WaveFormat(SampleRate, 16, 1)) { BufferDuration = TimeSpan.FromMinutes(3), ReadFully = true };
+            _sound = sound;
             _meter = new Meter(sound, taping: _mouth.Tape != null);
             var began = TimeSpan.Zero;
             IWavePlayer? output = null;
@@ -201,6 +216,7 @@ internal sealed class Mouth
                     {
                         _mouth.Problem = $"text to speech: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(_stop.Token).ConfigureAwait(false)}";
                         App.Log("voice: " + _mouth.Problem);
+                        Interlocked.Decrement(ref _unheard);
                         continue;
                     }
                     await using var stream = await response.Content.ReadAsStreamAsync(_stop.Token).ConfigureAwait(false);
@@ -219,6 +235,7 @@ internal sealed class Mouth
                         }
                     }
                     said.Append(said.Length > 0 ? " " : "").Append(sentence);
+                    Interlocked.Decrement(ref _unheard);
                 }
                 if (!playing && sound.BufferedBytes > 0)
                 {
