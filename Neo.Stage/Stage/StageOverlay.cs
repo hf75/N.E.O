@@ -65,13 +65,23 @@ internal sealed class StageOverlay : Window
 
     public IntPtr Handle => TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
 
+    /// <summary>
+    /// Back to the top of the windows that stay on top: a menu a program opened after the stage (Word's drop-downs are
+    /// such windows) would cover what the stage shows in it. Never takes the focus, so the menu stays open.
+    /// </summary>
+    public void StayOnTop()
+    {
+        if (OperatingSystem.IsWindows() && Handle != IntPtr.Zero)
+            SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+
     private void LetInputThrough()
     {
         if (!OperatingSystem.IsWindows() || Handle == IntPtr.Zero)
             return;
         // Layered and transparent together: Windows hit-tests through it. Tool window: not in Alt+Tab. No activate: never the focus.
         SetWindowLongPtr(Handle, GWL_EXSTYLE, GetWindowLongPtr(Handle, GWL_EXSTYLE) | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
-        SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        StayOnTop();
     }
 
     private const int GWL_EXSTYLE = -20;

@@ -26,7 +26,7 @@ internal sealed class Brain : IAsyncDisposable
         manchmal („Wort“ statt „Word“); deute das Gesagte mit Blick auf die offenen Fenster, und frag nur, wenn es wirklich unklar ist, dann
         mit einer kurzen Ja-oder-Nein-Frage.
 
-        Sprich, wie man spricht: Deutsch, so kurz wie möglich, meist ein Satz, höchstens zwei. Keine Aufzählungen, kein Markdown, keine Links,
+        Sprich, wie man spricht: Deutsch, mit „du“, so kurz wie möglich, meist ein Satz, höchstens zwei. Keine Aufzählungen, kein Markdown, keine Links,
         keine Fensternummern, keine Tipps, um die niemand gebeten hat. Nenne Fenster so, wie ein Mensch sie nennt („Word“, „der Browser“).
         Wenn du etwas tust, das einen Moment dauert, sag es in einem kurzen Satz, bevor du das Werkzeug benutzt; danach brauchst du nichts mehr
         zu sagen, außer etwas ging schief.
@@ -34,6 +34,10 @@ internal sealed class Brain : IAsyncDisposable
         Deine Hände:
         - arrange ordnet Fenster (auch mehrere auf einmal), show hebt sie hervor, look zeigt dir ein Bild eines Fensters, wenn die Frage es
           braucht. open öffnet Programme, Ordner, Webseiten und Dateien, find_files sucht Dateien. Diese sind schnell; nimm sie zuerst.
+        - guide zeigt dem Menschen Schritt für Schritt, wo er in einem Programm klicken muss: das erste leuchtet sofort auf, jedes weitere,
+          sobald es zu sehen ist, und die Bühne sagt es an. Sie klickt nie selbst. Fragt jemand, wie etwas geht („Wie stelle ich … ein?“,
+          „Wo finde ich …?“), zeig es mit guide, statt es selbst zu tun. Nimm die Namen, wie sie im Programm stehen, in seiner Sprache;
+          kennst du sie nicht sicher, schau vorher mit look. Sag dazu in einem Satz den ersten Schritt.
         - WebSearch und WebFetch für Fragen an das Internet (Wetter, Nachrichten, Fakten).
         - build_app lässt N.E.O. in Sekunden ein kleines Programm bauen (einen Timer, einen Rechner für etwas, eine Liste, ein kleines Spiel);
           change_app ändert eine solche App, während sie läuft. Laufende N.E.O.-Apps bieten Funktionen und Werte an (unter „Apps im
@@ -66,6 +70,10 @@ internal sealed class Brain : IAsyncDisposable
         Your hands:
         - arrange arranges windows (several at once), show highlights them, look gives you a picture of a window when the question needs
           it. open opens programs, folders, websites and files, find_files finds files. These are fast; use them first.
+        - guide shows the person step by step where to click in a program: the first thing lights up at once, each next one as soon
+          as it can be seen, and the stage says it. It never clicks itself. When someone asks how to do something ("How do I change …?",
+          "Where do I find …?"), show it with guide rather than doing it yourself. Use the names as the program shows them, in its
+          language; if you are not sure of them, look first. Say the first step in one sentence.
         - WebSearch and WebFetch for questions to the internet (weather, news, facts).
         - build_app has N.E.O. build a small program in seconds (a timer, a calculator for something, a list, a little game, a
           simulation); change_app changes such an app while it runs. Running N.E.O. apps offer functions and values (under "Apps on the
@@ -90,6 +98,7 @@ internal sealed class Brain : IAsyncDisposable
     private readonly NeoApps _apps = new();
     private ClaudeAgentSession? _session;
     private IReadOnlyList<AppWindow> _windows = [];
+    private string _goal = ""; // what the person last asked for, for a guide that goes on
     private Task? _last;
 
     /// <param name="pretend">A check: the hands say what they would do and do nothing (reading scripts still run).</param>
@@ -110,6 +119,9 @@ internal sealed class Brain : IAsyncDisposable
 
     /// <summary>A window was arranged, shown or looked at: the stage outlines it. Raised on the session's thread.</summary>
     public event Action<AppWindow>? Touched;
+
+    /// <summary>A guide begins: the stage shows its steps. Raised on the session's thread.</summary>
+    public event Action<Guide>? Guiding;
 
     /// <summary>Something that takes a while has begun ("N.E.O. baut …"), or ended (null). Raised on the session's thread.</summary>
     public event Action<string?>? Working;
@@ -142,6 +154,8 @@ internal sealed class Brain : IAsyncDisposable
             await Task.WhenAny(last, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken)).ConfigureAwait(false);
         }
         _windows = OpenWindows.List(_only);
+        if (!utterance.Unspoken)
+            _goal = utterance.Text;
         // An app N.E.O. just changed may still be putting itself back on the network: at most two seconds for that.
         for (var waited = 0; waited < 10 && _apps.Names.Any(built => Apps.Find(built) == null); waited++)
             await Task.Delay(200, cancellationToken).ConfigureAwait(false);
@@ -208,7 +222,7 @@ internal sealed class Brain : IAsyncDisposable
         BuiltInTools = ["WebSearch", "WebFetch"],
         AllowedTools = ["WebSearch", "WebFetch"],
         ToolServerName = "stage",
-        Tools = [ArrangeTool(), ShowTool(), LookTool(), OpenTool(), FindFilesTool(), BuildAppTool(), ChangeAppTool(), CallAppTool(), ReadAppTool(), RunTool()],
+        Tools = [ArrangeTool(), ShowTool(), LookTool(), GuideTool(), OpenTool(), FindFilesTool(), BuildAppTool(), ChangeAppTool(), CallAppTool(), ReadAppTool(), RunTool()],
         MaxBudgetUsd = 5m,
     };
 
@@ -332,6 +346,55 @@ internal sealed class Brain : IAsyncDisposable
             return picture == null
                 ? new ClaudeAgentToolResult($"Von „{window.Label}“ ließ sich kein Bild machen.", IsError: true)
                 : new ClaudeAgentToolResult($"So sieht „{window.Label}“ gerade aus.", Image: new ClaudeAgentImage(picture));
+        }, cancellation));
+
+    private ClaudeAgentTool GuideTool() => new(
+        "guide",
+        "Zeigt dem Menschen Schritt für Schritt, wo er in einem Fenster klicken muss. Das erste Element leuchtet sofort, jedes weitere, " +
+        "sobald es zu sehen ist (etwa wenn ein Reiter oder Menü aufgeht); dann sagt die Bühne dessen Satz. Klicken tut der Mensch selbst.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "window": { "type": "integer", "description": "Nummer des Fensters" },
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "find": { "type": "string", "description": "Name des Elements, so wie das Programm es zeigt, etwa „Layout“ oder „Seitenränder“" },
+                      "say": { "type": "string", "description": "Was die Bühne sagt, wenn es aufleuchtet, ein kurzer Satz" }
+                    },
+                    "required": ["find", "say"]
+                  }
+                }
+              },
+              "required": ["window", "steps"]
+            }
+            """),
+        (input, cancellation) => Task.Run(() =>
+        {
+            if (Window(input, "window") is not { } window)
+                return new ClaudeAgentToolResult(Language.Pick("Dieses Fenster gibt es nicht.", "There is no such window."), IsError: true);
+            var steps = input.TryGetProperty("steps", out var list) && list.ValueKind == JsonValueKind.Array
+                ? list.EnumerateArray().Select(step => new GuideStep(Text(step, "find"), Text(step, "say"))).Where(step => step.Find.Length > 0).ToList()
+                : [];
+            if (steps.Count == 0)
+                return new ClaudeAgentToolResult(Language.Pick("Es fehlen die Schritte.", "The steps are missing."), IsError: true);
+            if (Pretend)
+                return new ClaudeAgentToolResult(Language.Pick("Nur eine Probe: ", "Only a rehearsal: ") + string.Join(" → ", steps.Select(step => step.Find)));
+            var guide = new Guide(window.Handle, window.Label, steps) { Goal = _goal };
+            if (guide.Begin() is not { } first)
+            {
+                var clickable = Uia.Names(window.Handle);
+                return new ClaudeAgentToolResult(Language.Pick(
+                    $"In „{window.Label}“ ist keiner dieser Schritte zu sehen. Anklickbar ist dort gerade: {string.Join(", ", clickable)}.",
+                    $"None of these steps can be seen in “{window.Label}”. What can be clicked there now: {string.Join(", ", clickable)}."), IsError: true);
+            }
+            Guiding?.Invoke(guide);
+            return new ClaudeAgentToolResult(Language.Pick(
+                $"Schritt {guide.Current + 1} von {steps.Count} („{first.Name}“) leuchtet in „{window.Label}“. Die weiteren zeige und sage ich, sobald sie zu sehen sind; klicken muss der Mensch selbst.",
+                $"Step {guide.Current + 1} of {steps.Count} (“{first.Name}”) is lit in “{window.Label}”. I show and say the next ones as soon as they can be seen; the person clicks."));
         }, cancellation));
 
     private ClaudeAgentTool OpenTool() => new(
@@ -726,7 +789,9 @@ internal sealed class Brain : IAsyncDisposable
     internal static string Describe(Utterance utterance, IReadOnlyList<AppWindow> windows, IReadOnlyList<string>? apps = null)
     {
         var text = new StringBuilder();
-        text.AppendLine(Language.Pick($"Gesagt: „{utterance.Text}“", $"Said: “{utterance.Text}”"));
+        text.AppendLine(utterance.Unspoken
+            ? Language.Pick($"Die Bühne meldet: {utterance.Text}", $"The stage reports: {utterance.Text}")
+            : Language.Pick($"Gesagt: „{utterance.Text}“", $"Said: “{utterance.Text}”"));
         text.AppendLine(OpenWindows.Describe(windows));
         if (apps is { Count: > 0 })
             text.AppendLine(Language.Pick("Von N.E.O. gebaute Apps, die noch offen sind: ", "Apps N.E.O. built that are still open: ") + string.Join(", ", apps.Select(app => $"“{app}”")));

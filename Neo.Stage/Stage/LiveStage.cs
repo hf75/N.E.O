@@ -23,6 +23,9 @@ internal sealed class Utterance
 
     /// <summary>The final words with their times (seconds from <see cref="Started"/>), when the recognition gave them.</summary>
     public IReadOnlyList<HeardWord>? Heard { get; set; }
+
+    /// <summary>Not said by the person: the stage tells the brain something (a guide's step was done). Shown without words.</summary>
+    public bool Unspoken { get; init; }
 }
 
 /// <summary>
@@ -70,6 +73,11 @@ internal sealed class LiveStage
     private bool _replying, _wroteAny;
     private double _askedAt;
     private string? _working;
+    private Guide? _guide;
+    private double _guideShownAt, _guideEndedAt = double.NaN, _onTopAt;
+    private int _followUps; // how often a guide went on by itself since the person last spoke
+    private int _stepsDone; // steps the guides showed since the person last spoke: a guide that goes on counts on from there
+    private (Guide Guide, string Step, IReadOnlyList<string> Fresh, IReadOnlyList<string> Others)? _goOn; // waits until the stage is quiet
     private double _workingFrom;
     private Ears? _ears;
     private bool _probing, _looping;
@@ -126,6 +134,7 @@ internal sealed class LiveStage
                     Written(what + ".", finished: true);
             });
             brain.AskPerson = AskPersonAsync;
+            brain.Guiding += guide => Dispatcher.UIThread.Post(() => StartGuide(guide));
         }
     }
 
@@ -221,7 +230,12 @@ internal sealed class LiveStage
         _writing = "";
         _wordShown.Clear();
         if (!_replying)
+        {
             _touched.Clear();
+            _guide?.Stop(); // the person speaks again: the guide is over
+            _guide = null;
+            _goOn = null;
+        }
         var utterance = _utterance = new Utterance { Started = _listening };
         _probedAt = new Point(double.NaN, double.NaN);
 
@@ -288,15 +302,28 @@ internal sealed class LiveStage
         _spoken = _spoken * 0.55 + (_mouth?.Level ?? 0) * 0.45;
         FollowTouched(time);
         var fadeFrom = FadeFrom();
-        _stage.Display(_pointing ? PointingFrame(utterance, time, pointer, fadeFrom) : VoiceFrame(utterance, time, fadeFrom));
+        if (_guide != null && !double.IsNaN(_guideEndedAt) && time - _guideEndedAt > 0.7)
+            _guide = null; // faded out
+        if (_guide?.Shown != null && time - _onTopAt > 0.5)
+        {
+            _onTopAt = time;
+            _stage.StayOnTop(); // above a menu the program opened meanwhile, where the lit step may be
+        }
+        _stage.Display(_phase == Phase.Idle ? GuideFrame(time)
+            : _pointing ? PointingFrame(utterance, time, pointer, fadeFrom) : VoiceFrame(utterance, time, fadeFrom));
 
         if (time - fadeFrom > FadeOut + 0.1 && _phase is Phase.Releasing or Phase.Answering)
         {
             _phase = Phase.Idle;
+            Spoken?.Invoke(utterance);
+        }
+        if (_phase == Phase.Idle && _goOn is { } waiting)
+            GoOn(waiting.Guide, waiting.Step, waiting.Fresh, waiting.Others);
+        if (_phase == Phase.Idle && _guide == null)
+        {
             _looping = false;
             _stage.Display(StageFrame.Empty);
             _stage.Hide();
-            Spoken?.Invoke(utterance);
             return;
         }
         if (_phase is Phase.Armed or Phase.Blocked && fadeFrom < double.PositiveInfinity && time - fadeFrom > FadeOut + 0.1)
@@ -378,6 +405,8 @@ internal sealed class LiveStage
         }
         _turn = utterance;
         _wroteAny = false;
+        _followUps = 0;
+        _stepsDone = 0;
         _phase = Phase.Thinking;
         _thinkingFrom = Now;
         _written.Clear();
@@ -557,6 +586,99 @@ internal sealed class LiveStage
             return new TargetView(touch.Shown!.Value, touch.Window.Label, touch.Color, opacity, Motion.Lerp(22, 6, grow), glow, label);
         });
 
+    // ── Show me: a guide lights up what to click, step by step ──
+
+    private void StartGuide(Guide guide)
+    {
+        _guide?.Stop();
+        _guide = guide;
+        guide.Before = _stepsDone;
+        _guideShownAt = Now;
+        _guideEndedAt = double.NaN;
+        guide.StepShown += (index, element) => Dispatcher.UIThread.Post(() =>
+        {
+            if (_guide != guide)
+                return;
+            _guideShownAt = Now;
+            // The first step is in the brain's answer; each next one the stage says itself, when it is not speaking anyway.
+            if (index > 0 && _phase == Phase.Idle && guide.Steps[index].Say is { Length: > 0 } say && _mouth != null)
+                _ = _mouth.SpeakAsync(say);
+        });
+        guide.Ended += () => Dispatcher.UIThread.Post(() =>
+        {
+            if (_guide == guide)
+                _guideEndedAt = Now;
+        });
+        guide.Progressed += (step, fresh, others) => Dispatcher.UIThread.Post(() => GoOn(guide, step, fresh, others));
+        if (!_looping)
+        {
+            _looping = true;
+            _stage.Show();
+            _stage.RequestAnimationFrame(Tick);
+        }
+    }
+
+    // The person did the last step shown: the brain looks at what is there now and shows the next one, or says it is done.
+    // At most six times in a row without the person speaking.
+    private void GoOn(Guide guide, string step, IReadOnlyList<string> fresh, IReadOnlyList<string> others)
+    {
+        // The person spoke meanwhile, or a newer guide is on: nothing to go on with. (This one may have faded out already.)
+        if (guide.Stopped || (_guide != null && _guide != guide) || _brain == null)
+            return;
+        if (_phase != Phase.Idle)
+        {
+            _goOn = (guide, step, fresh, others); // the stage is still answering: right after that
+            return;
+        }
+        _goOn = null;
+        if (++_followUps > 6)
+            return;
+        _stepsDone = guide.Before + guide.Current + 1;
+        // What came new is what the step opened: it goes first, the rest only as far as it helps.
+        var rest = string.Join(", ", others.Take(Math.Max(20, 60 - fresh.Count)));
+        var besides = rest.Length > 0 ? Language.Pick($"Außerdem: {rest}. ", $"Besides: {rest}. ") : "";
+        var said = fresh.Count > 0
+            ? Language.Pick(
+                $"Der Mensch hat „{step}“ in „{guide.Title}“ angeklickt. Neu anklickbar ist jetzt: {string.Join(", ", fresh)}. {besides}",
+                $"The person clicked “{step}” in “{guide.Title}”. New to click there now: {string.Join(", ", fresh)}. {besides}")
+            : Language.Pick(
+                $"„{step}“ ist in „{guide.Title}“ nicht mehr zu sehen, und nichts Neues kam dazu: Der Mensch hat es angeklickt, " +
+                $"oder er hat nur das Menü geschlossen. Schau im Zweifel mit look nach. Anklickbar ist jetzt: {rest}. ",
+                $"“{step}” can no longer be seen in “{guide.Title}”, and nothing new came: the person clicked it, or only closed " +
+                $"the menu. If in doubt, look. What can be clicked now: {rest}. ");
+        said += Language.Pick(
+            $"Sein Ziel war: „{guide.Goal}“. Zeig ihm mit guide den nächsten Schritt, oder sag in einem kurzen Satz, dass er am Ziel ist.",
+            $"Their goal was: “{guide.Goal}”. Show the next step with guide, or say in one short sentence that they are there.");
+        var utterance = new Utterance { Started = Now, Ended = Now, Text = said, Unspoken = true };
+        _utterance = utterance;
+        _turn = utterance;
+        _listening = _released = _thinkingFrom = Now;
+        _fadeFrom = double.NaN;
+        _planFrom = double.NaN;
+        _written.Clear();
+        _writing = "";
+        _wordShown.Clear();
+        _wroteAny = false;
+        _phase = Phase.Thinking;
+        _mouth?.Begin();
+        App.Log($"guide: going on after '{step}'");
+        _ = AnswerAsync(utterance);
+    }
+
+    // The lit step: a green outline that breathes, with its number and name.
+    private IEnumerable<TargetView> GuideTargets(double time)
+    {
+        if (_guide is not { Shown: { } shown } guide)
+            yield break;
+        var leaving = double.IsNaN(_guideEndedAt) ? 0 : Motion.EaseInOutCubic(Motion.Progress(time, _guideEndedAt, 0.6));
+        var appear = Motion.EaseOutCubic(Motion.Progress(time, _guideShownAt, 0.4));
+        var pulse = 0.5 + 0.5 * Math.Sin(2 * Math.PI * (time - _guideShownAt) / 1.2);
+        yield return new TargetView(_stage.FromScreen(shown.Bounds), $"{guide.Before + guide.Current + 1} · {shown.Name}", Palette.Yes,
+            appear * (1 - leaving), Motion.Lerp(30, 5, appear), 0.35 + 0.65 * pulse, appear * (1 - leaving));
+    }
+
+    private StageFrame GuideFrame(double time) => new(null, [], [.. GuideTargets(time)], [], null, null, []);
+
     // ── The voice alone ──
 
     // Low in the middle: the ring, the words above it, the answer above them. Windows the brain touches are outlined.
@@ -581,7 +703,7 @@ internal sealed class LiveStage
             Math.Sin(2 * Math.PI * time / 1.6), spin, ShowArrow: false);
 
         var captions = new List<CaptionView>();
-        var words = Words(utterance);
+        var words = utterance.Unspoken ? [] : Words(utterance);
         var captionBottom = presence.Y - 50;
         if (words.Count > 0)
         {
@@ -625,7 +747,7 @@ internal sealed class LiveStage
                 [new PillPart(doing, Palette.There, Dot: true, Strong: true), new PillPart($"{seconds} s", Palette.TextDim)], begun * (1 - leaving), 6 * (1 - begun), PillAlign.Left, 13));
         }
 
-        return new StageFrame(ring, [], [.. TouchedTargets(time, leaving)], captions, null, null, pills, answer);
+        return new StageFrame(ring, [], [.. TouchedTargets(time, leaving), .. GuideTargets(time)], captions, null, null, pills, answer);
     }
 
     // ── Pointing (Put That There) ──
@@ -761,7 +883,7 @@ internal sealed class LiveStage
                 said.Length == 0, _speaking, time);
         }
 
-        return new StageFrame(ring, trail, [.. targets, .. TouchedTargets(time, leaving)], captions, null, null, pills, answer);
+        return new StageFrame(ring, trail, [.. targets, .. TouchedTargets(time, leaving), .. GuideTargets(time)], captions, null, null, pills, answer);
     }
 
     // The words ride beside the pointer, a little behind it, as if on a spring.

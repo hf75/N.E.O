@@ -10,6 +10,7 @@ The microphone is open only while the key is held. A shortcut with the right Ctr
 
 - **Windows by name.** With every question Claude gets the open windows (title, program, how each lies). It arranges them (minimize, maximize, restore, bring to front, left or right half, all of them in a grid), highlights them while it talks about them, and looks at one (a picture of that window) only when the question needs it.
 - **Opening.** Programs as the Start menu names them ("Word", "Rechner"), known folders (Downloads, Documents…), websites and files, and files found in the Windows Search index by name and content. What the stage starts comes to the front when its window appears.
+- **Show me.** "How do I set the margins in Word?" lights up what to click, step by step, in the program itself: "1 · Layout" glows at once, "2 · Margins" as soon as the tab is open. When a step opens something new (a drop-down, a dialog), Claude sees what came and shows the next step, numbered on ("3 · Custom Margins…"), or says you are there. The stage never clicks: you do, and learn where it is. It finds things by the names the program gives them for UI Automation, in drop-downs and dialogs too, and stops when you speak again.
 - **Everything nobody foresaw.** Claude writes a small Windows PowerShell script and says what it changes:
   - *nothing* (it only reads) and *undoable* (closing a window: the program asks itself about unsaved work) run at once;
   - *lasting* (deleting, overwriting, sending, installing) runs only after the stage has asked aloud and you held the key and said yes. The stage checks the script too and asks even when Claude did not say so;
@@ -43,7 +44,7 @@ Build `Neo.Stage` and start `Neo.Stage.exe`. Run it from a copy of the output fo
 ## What goes where
 
 - Your voice goes to ElevenLabs while the key is held, and the answers go there to be spoken.
-- What you said, the titles of the open windows, and pictures of windows when Claude looks at one go to Anthropic through Claude Code.
+- What you said, the titles of the open windows, pictures of windows when Claude looks at one, and the names of what can be clicked in a program it shows you around go to Anthropic through Claude Code.
 - Scripts run on your computer under your account; the ones that last only after your yes.
 
 ## Checks and demos
@@ -55,6 +56,7 @@ None of these opens the microphone or plays a sound unless it says so:
 | `--brain-check "sentence" [--then file] [--windows word] [--for-real] [--yes]` | Asks the brain directly; its hands only rehearse unless `--for-real`, and `--windows` lets it see only some windows |
 | `--live-check seconds [--sound pcm] [--reply pcm] [--brain]` | The whole stage as if the key were held, hearing recorded sentences |
 | `--mouth-check`, `--open-check`, `--find-check` | The voice without a loudspeaker; what "open" would do; the file search |
+| `--uia-find word --name name` | What the eyes find by that name in a window whose title holds the word, what can be clicked there, and how long a look takes |
 | `--frames folder` | Pictures of the stage's states over a drawn desktop |
 | `--demo script.json` | A demo nobody operates: lines spoken by a synthetic voice, the stage answering live, the screen recorded with ffmpeg and both voices kept with their times |
 
@@ -65,4 +67,5 @@ None of these opens the microphone or plays a sound unless it says so:
 - The brain is one Claude Code session that stays open; follow-ups know what came before.
 - Apps built before the stage restarted keep running and can still be called, but "change it" reaches only apps of the running stage.
 - N.E.O. sometimes replaces an app on a change instead of patching it in place; most state carries over, not always.
+- Show me needs a program that names its controls for UI Automation (Office, Windows' own programs, most WinForms, WPF and WinUI apps). A program that draws everything itself offers nothing to find.
 - German and English only.

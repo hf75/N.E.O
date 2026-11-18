@@ -121,11 +121,18 @@ public partial class App : Application
                         pointer: at is { } rest ? () => rest : null, pointing: arguments.Contains("--pointing"));
                     _live.Spoken += utterance =>
                     {
-                        Log($"spoken: {utterance.Ended - utterance.Started:0.0} s, {utterance.Trail.Count} trail points, " +
+                        if (utterance.Unspoken)
+                        {
+                            Log("own turn over"); // the stage went on by itself; the check's end stays where the person's turn put it
+                            return;
+                        }
+                        Log($"spoken:{utterance.Ended - utterance.Started:0.0} s, {utterance.Trail.Count} trail points, " +
                             $"pointed at {string.Join(" / ", utterance.Pointings.Select(p => $"{p.Thing.Kind} '{p.Thing.Label}' at {p.Time - utterance.Started:0.00} s"))}");
                         foreach (var word in utterance.Heard ?? [])
                             Log($"  {word.Start,5:0.00} {word.Text}");
-                        desktop.Shutdown();
+                        // --linger seconds: what goes on after the answer (a guide, say) gets its time before the check ends.
+                        var linger = double.Parse(Argument(arguments, "--linger") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+                        DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(Math.Max(0.01, linger)));
                     };
                     _live.Start();
                 });
@@ -183,6 +190,30 @@ public partial class App : Application
                 {
                     try { await Director.RunAsync(demo, PrimaryScreen()); }
                     catch (Exception exception) { Log("demo failed: " + exception); }
+                    desktop.Shutdown();
+                });
+            }
+            else if (Argument(arguments, "--uia-find") is { } titleWord)
+            {
+                // What the eyes find by name in a window whose title holds the word, and what can be clicked there.
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    var name = Argument(arguments, "--name") ?? "";
+                    var window = OpenWindows.List(Only(titleWord)).FirstOrDefault();
+                    if (window == null)
+                        Log($"uia-find: no window with '{titleWord}'");
+                    else
+                    {
+                        for (var round = 1; round <= 2; round++) // the first look of a process wakes UI Automation up
+                        {
+                            var clock = Stopwatch.StartNew();
+                            var seen = await Task.Run(() => Uia.Look(window.Handle));
+                            var found = Uia.Find(seen, name);
+                            Log($"uia-find '{name}' in '{window.Title}': {(found == null ? "nothing" : $"{found.Kind} '{found.Name}' at {found.Bounds}")} " +
+                                $"(look {round}: {seen?.Count ?? 0} elements in {clock.ElapsedMilliseconds} ms)");
+                        }
+                        Log("  clickable: " + string.Join(" | ", await Task.Run(() => Uia.Names(window.Handle, 30))));
+                    }
                     desktop.Shutdown();
                 });
             }
