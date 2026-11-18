@@ -81,6 +81,7 @@ internal sealed class LiveStage
     private string? _working;
     private Guide? _guide;
     private double _guideShownAt, _guideEndedAt = double.NaN, _onTopAt;
+    private readonly List<(int Number, string Name, PixelRect Bounds, double At)> _noted = []; // steps the recorder just noted
     private int _followUps; // how often a guide went on by itself since the person last spoke
     private int _stepsDone; // steps the guides showed since the person last spoke: a guide that goes on counts on from there
     private (Guide Guide, string Step, IReadOnlyList<string> Fresh, IReadOnlyList<string> Others)? _goOn; // waits until the stage is quiet
@@ -142,6 +143,16 @@ internal sealed class LiveStage
             });
             brain.AskPerson = AskPersonAsync;
             brain.Guiding += guide => Dispatcher.UIThread.Post(() => StartGuide(guide));
+            brain.Recorder.Changed += recording =>
+            {
+                if (recording)
+                    Loop();
+            };
+            brain.Recorder.Stepped += (number, step, bounds) => Dispatcher.UIThread.Post(() =>
+            {
+                _noted.Add((number, step.Find, bounds, Now));
+                Loop();
+            });
             brain.Watchers.Fired += (who, said) => _ = FromAppAsync(who, said, asking: false,
                 note: Language.Pick($"{who} meldete: „{said}“", $"{who} said: “{said}”"));
         }
@@ -314,12 +325,12 @@ internal sealed class LiveStage
         var fadeFrom = FadeFrom();
         if (_guide != null && !double.IsNaN(_guideEndedAt) && time - _guideEndedAt > 0.7)
             _guide = null; // faded out
-        if (_guide?.Shown != null && time - _onTopAt > 0.5)
+        if ((_guide?.Shown != null || _noted.Count > 0 || Watching) && time - _onTopAt > 0.5)
         {
             _onTopAt = time;
             _stage.StayOnTop(); // above a menu the program opened meanwhile, where the lit step may be
         }
-        _stage.Display(_phase == Phase.Idle ? GuideFrame(time)
+        _stage.Display(_phase == Phase.Idle ? IdleFrame(time)
             : _pointing ? PointingFrame(utterance, time, pointer, fadeFrom) : VoiceFrame(utterance, time, fadeFrom));
 
         if (time - fadeFrom > FadeOut + 0.1 && _phase is Phase.Releasing or Phase.Answering)
@@ -332,7 +343,8 @@ internal sealed class LiveStage
             GoOn(waiting.Guide, waiting.Step, waiting.Fresh, waiting.Others);
         if (_phase == Phase.Idle)
             NextFromApp();
-        if (_phase == Phase.Idle && _guide == null)
+        _noted.RemoveAll(noted => time - noted.At > 1.8);
+        if (_phase == Phase.Idle && _guide == null && !Watching && _noted.Count == 0)
         {
             _looping = false;
             _stage.Display(StageFrame.Empty);
@@ -748,18 +760,21 @@ internal sealed class LiveStage
         // What came new is what the step opened: it goes first, the rest only as far as it helps.
         var rest = string.Join(", ", others.Take(Math.Max(20, 60 - fresh.Count)));
         var besides = rest.Length > 0 ? Language.Pick($"Außerdem: {rest}. ", $"Besides: {rest}. ") : "";
+        // What the guide saw is only that the window changed: whether the person did the step, the names have to tell.
         var said = fresh.Count > 0
             ? Language.Pick(
-                $"Der Mensch hat „{step}“ in „{guide.Title}“ angeklickt. Neu anklickbar ist jetzt: {string.Join(", ", fresh)}. {besides}",
-                $"The person clicked “{step}” in “{guide.Title}”. New to click there now: {string.Join(", ", fresh)}. {besides}")
+                $"Nach dem Schritt „{step}“ hat sich „{guide.Title}“ verändert. Neu anklickbar ist jetzt: {string.Join(", ", fresh)}. {besides}",
+                $"After the step “{step}”, “{guide.Title}” changed. New to click there now: {string.Join(", ", fresh)}. {besides}")
             : Language.Pick(
                 $"„{step}“ ist in „{guide.Title}“ nicht mehr zu sehen, und nichts Neues kam dazu: Der Mensch hat es angeklickt, " +
                 $"oder er hat nur das Menü geschlossen. Schau im Zweifel mit look nach. Anklickbar ist jetzt: {rest}. ",
                 $"“{step}” can no longer be seen in “{guide.Title}”, and nothing new came: the person clicked it, or only closed " +
                 $"the menu. If in doubt, look. What can be clicked now: {rest}. ");
         said += Language.Pick(
-            $"Sein Ziel war: „{guide.Goal}“. Zeig ihm mit guide den nächsten Schritt, oder sag in einem kurzen Satz, dass er am Ziel ist.",
-            $"Their goal was: “{guide.Goal}”. Show the next step with guide, or say in one short sentence that they are there.");
+            $"Sein Ziel war: „{guide.Goal}“. Passt das Neue zu dem, was dieser Schritt öffnet, zeig mit guide den nächsten Schritt, oder sag in einem " +
+            "kurzen Satz, dass er am Ziel ist. Passt es nicht (er ist woanders hingegangen), zeig den Schritt noch einmal. Behaupte nichts, was die Namen nicht zeigen.",
+            $"Their goal was: “{guide.Goal}”. If what is new fits what this step opens, show the next step with guide, or say in one short " +
+            "sentence that they are there. If it does not fit (they went elsewhere), show the step again. Claim nothing the names do not show.");
         var utterance = new Utterance { Started = Now, Ended = Now, Text = said, Unspoken = true };
         _utterance = utterance;
         _turn = utterance;
@@ -788,7 +803,48 @@ internal sealed class LiveStage
             appear * (1 - leaving), Motion.Lerp(30, 5, appear), 0.35 + 0.65 * pulse, appear * (1 - leaving));
     }
 
-    private StageFrame GuideFrame(double time) => new(null, [], [.. GuideTargets(time)], [], null, null, []);
+    // Between utterances: the lit step of a guide, the steps just noted, and while the stage watches, its light.
+    private StageFrame IdleFrame(double time)
+    {
+        var work = _stage.WorkArea;
+        return new StageFrame(null, [], [.. GuideTargets(time), .. NotedTargets(time)], [], null, null,
+            [.. RecordPill(time, new Point(work.Center.X, work.Bottom - 70), PillAlign.Center)]);
+    }
+
+    private bool Watching => _brain?.Recorder.Recording == true;
+
+    // The stage starts drawing (again) when something shows between utterances.
+    private void Loop()
+    {
+        if (_looping)
+            return;
+        _looping = true;
+        _stage.Show();
+        _stage.RequestAnimationFrame(Tick);
+    }
+
+    // A step just noted: a red outline that flares and fades, with its number and name.
+    private IEnumerable<TargetView> NotedTargets(double time)
+        => _noted.Select(noted =>
+        {
+            var age = time - noted.At;
+            var appear = Motion.EaseOutCubic(Motion.Progress(time, noted.At, 0.25));
+            var fade = 1 - Motion.EaseInOutCubic(Motion.Progress(time, noted.At + 1.0, 0.8));
+            return new TargetView(_stage.FromScreen(noted.Bounds), $"{noted.Number} · {noted.Name}", Palette.Record, appear * fade,
+                Motion.Lerp(26, 5, appear), Math.Max(0.2, 1 - age), appear * fade);
+        });
+
+    // While the stage watches: its light and how many steps it has, beside the ring or where the ring would be.
+    private IEnumerable<PillView> RecordPill(double time, Point at, PillAlign align)
+    {
+        if (!Watching)
+            yield break;
+        var count = _brain!.Recorder.Count;
+        yield return new PillView(at, [
+                new PillPart(Language.Pick("Ich schaue zu", "Watching"), Palette.Record, Dot: true, Strong: true),
+                new PillPart(Language.Pick($"{count} {(count == 1 ? "Schritt" : "Schritte")}", $"{count} {(count == 1 ? "step" : "steps")}"), Palette.TextDim)],
+            0.8 + 0.2 * Math.Sin(2 * Math.PI * time / 1.6), 0, align, 13);
+    }
 
     // ── The voice alone ──
 
@@ -867,7 +923,9 @@ internal sealed class LiveStage
                 [new PillPart(doing, Palette.There, Dot: true, Strong: true), new PillPart($"{seconds} s", Palette.TextDim)], begun * (1 - leaving), 6 * (1 - begun), PillAlign.Left, 13));
         }
 
-        return new StageFrame(ring, [], [.. TouchedTargets(time, leaving), .. GuideTargets(time)], captions, null, null, pills, answer);
+        if (pills.Count == 0)
+            pills.AddRange(RecordPill(time, new Point(presence.X + 64, presence.Y), PillAlign.Left));
+        return new StageFrame(ring, [], [.. TouchedTargets(time, leaving), .. GuideTargets(time), .. NotedTargets(time)], captions, null, null, pills, answer);
     }
 
     // ── Pointing (Put That There) ──

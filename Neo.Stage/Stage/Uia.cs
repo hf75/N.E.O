@@ -29,6 +29,9 @@ internal static class Uia
     {
         try
         {
+            // The program under the point kept awake while it is asked (see Look): Word answers late while it idles.
+            var under = WindowFromPoint(new NativePoint { X = point.X, Y = point.Y });
+            using var nudge = new Timer(_ => PostMessage(under, WM_NULL, IntPtr.Zero, IntPtr.Zero), null, 0, 15);
             var automation = Automation;
             var element = automation.ElementFromPoint(new NativePoint { X = point.X, Y = point.Y });
             // A window that lets the input through still counts as on top for UI Automation: the stage itself.

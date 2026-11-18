@@ -24,6 +24,9 @@ internal static class Palette
     /// <summary>A yes: green.</summary>
     public static readonly Color Yes = Color.FromRgb(0x5E, 0xE6, 0x9B);
 
+    /// <summary>The stage watches and notes ("Schau mir zu"): a soft red, like a recording light.</summary>
+    public static readonly Color Record = Color.FromRgb(0xFF, 0x6E, 0x6E);
+
     private static readonly FontFamily s_inter = new("fonts:Inter#Inter");
     public static readonly Typeface Regular = new(s_inter, FontStyle.Normal, FontWeight.Medium);
     public static readonly Typeface Strong = new(s_inter, FontStyle.Normal, FontWeight.SemiBold);

@@ -96,6 +96,12 @@ public partial class App : Application
                     var sounds = new Queue<byte[]>();
                     if (Argument(arguments, "--sound") is { } file)
                         sounds.Enqueue(File.ReadAllBytes(file));
+                    var later = (Argument(arguments, "--more") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(entry => entry.Split('@'))
+                        .Select(parts => (Sound: File.ReadAllBytes(parts[0]), At: double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture)))
+                        .OrderBy(entry => entry.At).ToList();
+                    foreach (var entry in later)
+                        sounds.Enqueue(entry.Sound);
                     var reply = Argument(arguments, "--reply") is { } replyFile ? File.ReadAllBytes(replyFile) : null;
                     if (reply != null)
                         sounds.Enqueue(reply);
@@ -112,6 +118,8 @@ public partial class App : Application
                     {
                         var now = clock.Elapsed.TotalSeconds;
                         if (now < hold)
+                            return true;
+                        if (later.Any(entry => now >= entry.At && now < entry.At + entry.Sound.Length / 32000.0 + 0.5))
                             return true;
                         if (reply != null && replyFrom == null && _live?.Asking == true)
                             replyFrom = now + 0.5;
@@ -136,6 +144,22 @@ public partial class App : Application
                     };
                     _live.Start();
                     StageOnNetwork.Publish(_live);
+                    if (_brain != null && Argument(arguments, "--clicks") is { } clicks)
+                    {
+                        _brain.Recorder.HookMouse = false; // only these clicks: the person's own stay out of the check
+                        foreach (var click in clicks.Split(';', StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            var parts = click.Split('@');
+                            var clickAt = ScreenPoint(parts[0]);
+                            var after = double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture);
+                            var brain = _brain;
+                            DispatcherTimer.RunOnce(() =>
+                            {
+                                Log($"check: click at {clickAt}{(brain.Recorder.Recording ? "" : " (not watching)")}");
+                                brain.Recorder.Feed(clickAt);
+                            }, TimeSpan.FromSeconds(Math.Max(0.01, after - clock.Elapsed.TotalSeconds)));
+                        }
+                    }
                 });
             }
             else if (Argument(arguments, "--brain-check") is { } sentence)

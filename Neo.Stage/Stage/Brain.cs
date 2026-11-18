@@ -40,6 +40,9 @@ internal sealed class Brain : IAsyncDisposable
           „Wo finde ich …?“), zeig es mit guide, statt es selbst zu tun. Nimm die Namen, wie sie im Programm stehen, in seiner Sprache;
           kennst du sie nicht sicher, schau vorher mit look. Sag dazu in einem Satz den ersten Schritt.
         - WebSearch und WebFetch für Fragen an das Internet (Wetter, Nachrichten, Fakten).
+        - record_steps schaut zu, wie der Mensch etwas vormacht („Schau mir zu“): jeder Klick wird mit dem Namen des Angeklickten gemerkt,
+          nie eine Taste. Sagt er „fertig“, speichert stop_recording den Ablauf unter dem Namen, den er nennt (sonst einem treffenden).
+          Später zeigt guide mit recipe den Ablauf Schritt für Schritt, jedem, der fragt, wie das geht.
         - watch behält etwas für den Menschen im Auge und meldet sich, wenn es passiert („Sag mir Bescheid, wenn …“): ein Skript, das nur
           nachsieht und nur dann etwas ausgibt, wenn es so weit ist (ein Download fertig, der Akku unter 20 %), oder mit on_change einen Wert
           ausgibt, dessen Änderung zählt (eine Webseite, die Zahl der Mails). Oder es liest einen Wert einer laufenden N.E.O.-App. Prüfe das
@@ -88,6 +91,9 @@ internal sealed class Brain : IAsyncDisposable
           "Where do I find …?"), show it with guide rather than doing it yourself. Use the names as the program shows them, in its
           language; if you are not sure of them, look first. Say the first step in one sentence.
         - WebSearch and WebFetch for questions to the internet (weather, news, facts).
+        - record_steps watches the person show how something is done ("watch me"): every click is noted by the name of what was
+          clicked, never a key. When they say "done", stop_recording keeps it under the name they give (or a fitting one). Later guide
+          with recipe shows it step by step to anyone who asks how it is done.
         - watch keeps an eye on something for the person and speaks up when it happens ("tell me when …"): a script that only looks
           and writes something only when the moment has come (a download finished, the battery below 20 %), or with on_change writes a
           value whose change counts (a web page, the number of mails). Or it reads a value of a running N.E.O. app. Try the script once
@@ -143,6 +149,9 @@ internal sealed class Brain : IAsyncDisposable
 
     /// <summary>What the stage keeps an eye on for the person ("Sag mir Bescheid, wenn …").</summary>
     public Watchers Watchers { get; }
+
+    /// <summary>Notes the person's clicks while they show how something is done ("Schau mir zu").</summary>
+    public Recorder Recorder { get; } = new();
 
     /// <summary>Everything the session reports. Raised on its reading thread.</summary>
     public event Action<ClaudeAgentEvent>? Event;
@@ -216,6 +225,11 @@ internal sealed class Brain : IAsyncDisposable
         var described = Describe(utterance, _windows, _apps.Names, news);
         if (Watchers.Describe() is { Length: > 0 } watching)
             described += watching + Environment.NewLine;
+        if (Recipes.Describe() is { Length: > 0 } recipes)
+            described += recipes + Environment.NewLine;
+        if (Recorder.Recording)
+            described += Language.Pick($"Du schaust gerade zu und hast {Recorder.Count} Klicks gemerkt; stop_recording beendet es.",
+                $"You are watching now and have noted {Recorder.Count} clicks; stop_recording ends it.") + Environment.NewLine;
         var turn = session.SendAsync(described, pictures, cancellationToken);
         _last = turn;
         var result = await turn.ConfigureAwait(false);
@@ -276,7 +290,7 @@ internal sealed class Brain : IAsyncDisposable
         AllowedTools = ["WebSearch", "WebFetch"],
         ToolServerName = "stage",
         Tools = [ArrangeTool(), ShowTool(), LookTool(), GuideTool(), OpenTool(), FindFilesTool(), BuildAppTool(), ChangeAppTool(), CallAppTool(), ReadAppTool(), RunTool(),
-            WatchTool(), StopWatchingTool(), BuildVariantsTool(), ChooseVariantTool()],
+            WatchTool(), StopWatchingTool(), BuildVariantsTool(), ChooseVariantTool(), RecordStepsTool(), StopRecordingTool()],
         MaxBudgetUsd = 5m,
     };
 
@@ -410,7 +424,8 @@ internal sealed class Brain : IAsyncDisposable
             {
               "type": "object",
               "properties": {
-                "window": { "type": "integer", "description": "Nummer des Fensters" },
+                "window": { "type": "integer", "description": "Nummer des Fensters; bei recipe nur nötig, wenn das Programm mehrfach offen ist" },
+                "recipe": { "type": "string", "description": "Statt steps: der Name eines vorgemachten Ablaufs" },
                 "steps": {
                   "type": "array",
                   "items": {
@@ -423,16 +438,28 @@ internal sealed class Brain : IAsyncDisposable
                   }
                 }
               },
-              "required": ["window", "steps"]
+              "required": []
             }
             """),
         (input, cancellation) => Task.Run(() =>
         {
-            if (Window(input, "window") is not { } window)
-                return new ClaudeAgentToolResult(Language.Pick("Dieses Fenster gibt es nicht.", "There is no such window."), IsError: true);
             var steps = input.TryGetProperty("steps", out var list) && list.ValueKind == JsonValueKind.Array
                 ? list.EnumerateArray().Select(step => new GuideStep(Text(step, "find"), Text(step, "say"))).Where(step => step.Find.Length > 0).ToList()
                 : [];
+            var window = Window(input, "window");
+            if (Text(input, "recipe") is { Length: > 0 } recipeName)
+            {
+                if (Recipes.Find(recipeName) is not { } recipe)
+                    return new ClaudeAgentToolResult(Language.Pick($"Einen vorgemachten Ablauf „{recipeName}“ gibt es nicht.", $"There is no recorded “{recipeName}”."), IsError: true);
+                steps = [.. recipe.Guide];
+                // Its program, where it is open: the window the brain named, or the first of that program.
+                window ??= _windows.FirstOrDefault(open => open.Program.Contains(recipe.Program, StringComparison.OrdinalIgnoreCase)
+                    || (open.Program.Length > 0 && recipe.Program.Contains(open.Program, StringComparison.OrdinalIgnoreCase)));
+                if (window == null)
+                    return new ClaudeAgentToolResult(Language.Pick($"„{recipe.Program}“ ist nicht offen; öffne es zuerst.", $"“{recipe.Program}” is not open; open it first."), IsError: true);
+            }
+            if (window == null)
+                return new ClaudeAgentToolResult(Language.Pick("Dieses Fenster gibt es nicht.", "There is no such window."), IsError: true);
             if (steps.Count == 0)
                 return new ClaudeAgentToolResult(Language.Pick("Es fehlen die Schritte.", "The steps are missing."), IsError: true);
             if (Pretend)
@@ -450,6 +477,54 @@ internal sealed class Brain : IAsyncDisposable
                 $"Schritt {guide.Current + 1} von {steps.Count} („{first.Name}“) leuchtet in „{window.Label}“. Die weiteren zeige und sage ich, sobald sie zu sehen sind; klicken muss der Mensch selbst.",
                 $"Step {guide.Current + 1} of {steps.Count} (“{first.Name}”) is lit in “{window.Label}”. I show and say the next ones as soon as they can be seen; the person clicks."));
         }, cancellation));
+
+    private ClaudeAgentTool RecordStepsTool() => new(
+        "record_steps",
+        "Schaut zu, wie der Mensch etwas vormacht: jeder Klick wird mit dem Namen des Angeklickten gemerkt, nie eine Taste. Endet mit stop_recording.",
+        Schema("""{ "type": "object", "properties": {} }"""),
+        async (_, _) =>
+        {
+            if (Pretend)
+                return new ClaudeAgentToolResult(Language.Pick("Nur eine Probe: ich würde jetzt zuschauen.", "Only a rehearsal: I would watch now."));
+            var hooked = await Dispatcher.UIThread.InvokeAsync(Recorder.Start);
+            return new ClaudeAgentToolResult(hooked
+                ? Language.Pick("Ich schaue zu und merke mir jeden Klick, keine Tasten. Wenn der Mensch fertig ist, sagt er es.",
+                    "I am watching and note every click, no keys. When the person is done, they say so.")
+                : Language.Pick("Ich kann die Klicks gerade nicht sehen (Windows hat es nicht erlaubt).", "I cannot see the clicks right now (Windows did not allow it)."),
+                IsError: !hooked && !Recorder.Recording);
+        });
+
+    private ClaudeAgentTool StopRecordingTool() => new(
+        "stop_recording",
+        "Hört auf zuzuschauen und behält den vorgemachten Ablauf unter einem Namen, damit guide ihn später zeigen kann. Ohne name wird er verworfen.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string", "description": "Wie der Ablauf heißt, etwa „Seitenränder einstellen“; leer zum Verwerfen" },
+                "description": { "type": "string", "description": "In einem Satz, wofür er gut ist" }
+              }
+            }
+            """),
+        async (input, _) =>
+        {
+            if (Pretend)
+                return new ClaudeAgentToolResult(Language.Pick("Nur eine Probe.", "Only a rehearsal."));
+            var steps = await Dispatcher.UIThread.InvokeAsync(Recorder.Stop);
+            var name = Text(input, "name").Trim();
+            if (steps.Count == 0)
+                return new ClaudeAgentToolResult(Language.Pick("Ich habe keinen Klick gesehen; nichts behalten.", "I saw no click; nothing kept."));
+            var listed = string.Join(" ", steps.Select((step, i) => $"{i + 1}. {step.Kind} „{step.Find}“ ({step.Program})."));
+            if (name.Length == 0)
+                return new ClaudeAgentToolResult(Language.Pick($"Verworfen. Gesehen hatte ich: {listed}", $"Thrown away. I had seen: {listed}"));
+            var program = steps.GroupBy(step => step.Program, StringComparer.OrdinalIgnoreCase).OrderByDescending(group => group.Count()).First().Key;
+            var recipe = new Recipe(name, Text(input, "description"), program, steps, DateTimeOffset.Now);
+            Recipes.Keep(recipe);
+            App.Log($"recorder: kept '{name}' ({program}, {steps.Count} steps)");
+            return new ClaudeAgentToolResult(Language.Pick(
+                $"Behalten als „{name}“ ({program}): {listed} Mit guide und recipe zeigst du es.",
+                $"Kept as “{name}” ({program}): {listed} guide with recipe shows it."));
+        });
 
     private ClaudeAgentTool WatchTool() => new(
         "watch",
