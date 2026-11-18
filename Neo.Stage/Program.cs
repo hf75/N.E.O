@@ -1,4 +1,8 @@
+using System.Runtime.Versioning;
 using Avalonia;
+
+// The stage works through Windows itself: its windows, UI Automation, the shell, the search index, the sound devices.
+[assembly: SupportedOSPlatform("windows")]
 
 namespace Neo.Stage;
 
