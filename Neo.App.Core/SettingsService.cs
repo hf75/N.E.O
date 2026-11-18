@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Neo.App
@@ -368,7 +369,7 @@ namespace Neo.App
                 if (!File.Exists(file))
                     return new SettingsModel(); // Defaults
 
-                var json = File.ReadAllText(file);
+                var json = ReadShared(file);
                 var model = JsonSerializer.Deserialize<SettingsModel>(json, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
@@ -409,7 +410,45 @@ namespace Neo.App
             {
                 WriteIndented = true
             });
-            File.WriteAllText(GetSettingsFilePath(), json);
+            // Written beside the file and moved over it, so that a reader never sees half of it; another N.E.O. writing
+            // at the same moment (the stage starts several for its variants) makes this one wait a little, not fail.
+            var file = GetSettingsFilePath();
+            var temporary = $"{file}.{Environment.ProcessId}.{Environment.CurrentManagedThreadId}.tmp";
+            for (var attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    File.WriteAllText(temporary, json);
+                    File.Move(temporary, file, overwrite: true);
+                    return;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < Attempts)
+                {
+                    Thread.Sleep(AttemptPause);
+                }
+            }
+        }
+
+        private const int Attempts = 40;
+        private static readonly TimeSpan AttemptPause = TimeSpan.FromMilliseconds(25);
+
+        // Another N.E.O. may be writing the file at this moment: wait a little for it rather than taking the defaults,
+        // which the next save would write over the person's settings.
+        private static string ReadShared(string file)
+        {
+            for (var attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var reader = new StreamReader(stream);
+                    return reader.ReadToEnd();
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < Attempts)
+                {
+                    Thread.Sleep(AttemptPause);
+                }
+            }
         }
     }
 }

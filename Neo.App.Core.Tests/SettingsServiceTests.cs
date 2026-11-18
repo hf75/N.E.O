@@ -266,6 +266,41 @@ public class SettingsServiceTests : IDisposable
         SettingsService.GetSettingsFolderPath().Should().EndWith("Neo");
     }
 
+    // ── Several N.E.O.s at once (the stage starts three for its variants) ──
+
+    [Fact]
+    public async Task Save_and_Load_at_the_same_time_never_fail_and_never_fall_back_to_the_defaults()
+    {
+        SettingsService.Save(new SettingsModel { AiCodeGenerationAttempts = 7, OllamaEndpoint = "http://kept/" });
+
+        var work = Enumerable.Range(0, 8).Select(_ => Task.Run(() =>
+        {
+            for (var n = 0; n < 40; n++)
+            {
+                var model = SettingsService.Load();
+                model.AiCodeGenerationAttempts.Should().Be(7, "a read that meets a write waits for it instead of taking the defaults");
+                model.OllamaEndpoint.Should().Be("http://kept/");
+                SettingsService.Save(model);
+            }
+        }));
+        await Task.WhenAll(work);
+
+        SettingsService.Load().OllamaEndpoint.Should().Be("http://kept/");
+        Directory.GetFiles(_folder, "*.tmp").Should().BeEmpty("every write ends as the settings file");
+    }
+
+    [Fact]
+    public void Save_waits_for_a_reader_that_holds_the_file()
+    {
+        SettingsService.Save(new SettingsModel { AiCodeGenerationAttempts = 6 });
+        var held = new FileStream(SettingsService.GetSettingsFilePath(), FileMode.Open, FileAccess.Read, FileShare.Read); // as an older N.E.O. reads it
+        _ = Task.Delay(300).ContinueWith(_ => held.Dispose(), TaskScheduler.Default);
+
+        SettingsService.Save(new SettingsModel { AiCodeGenerationAttempts = 9 });
+
+        SettingsService.Load().AiCodeGenerationAttempts.Should().Be(9);
+    }
+
     // ── JSON serialization roundtrip (no file system) ───────────────
 
     [Fact]

@@ -160,9 +160,13 @@ namespace Neo.App
             // Force UseAvalonia BEFORE AppController constructor, because
             // the constructor calls RecreatePromptToDllSession which reads
             // Settings.UseAvalonia to select the correct base code template.
+            // Written only when it changes: several N.E.O.s starting at once (the stage's variants) collided on this file.
             var preSettings = SettingsService.Load();
-            preSettings.UseAvalonia = true;
-            SettingsService.Save(preSettings);
+            if (!preSettings.UseAvalonia)
+            {
+                preSettings.UseAvalonia = true;
+                SettingsService.Save(preSettings);
+            }
 
             _appController = new AppController(this, new AvaloniaPlatformServices());
             _appController.SharingChanged += () => global::Avalonia.Threading.Dispatcher.UIThread.Post(UpdateShareButton);
