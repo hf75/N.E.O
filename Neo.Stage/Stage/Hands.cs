@@ -76,7 +76,8 @@ internal static class Hands
     /// Lays the windows side by side over the work area of the first one's screen, in a grid that fits their number:
     /// two side by side, three in a row, four in two rows of two, and so on.
     /// </summary>
-    public static string Tile(IReadOnlyList<IntPtr> windows, bool pretend)
+    /// <param name="aboveStage">Leaves the strip at the bottom free where the stage speaks, with a little air between the windows.</param>
+    public static string Tile(IReadOnlyList<IntPtr> windows, bool pretend, bool aboveStage = false)
     {
         var tiled = windows.Where(window => window != IntPtr.Zero && IsWindow(window)
             && OpenWindows.ClassName(window) is not ("Shell_TrayWnd" or "Shell_SecondaryTrayWnd" or "Progman" or "WorkerW")).Distinct().ToList();
@@ -89,16 +90,19 @@ internal static class Hands
         if (!GetMonitorInfo(monitor, ref info))
             return "Den Bildschirm finde ich nicht.";
         var area = info.Work;
+        var gap = aboveStage ? 12 : 0;
+        if (aboveStage)
+            area = new NativeRect { Left = area.Left + gap, Top = area.Top + gap, Right = area.Right - gap, Bottom = area.Bottom - 300 };
         var columns = tiled.Count <= 3 ? tiled.Count : (int)Math.Ceiling(Math.Sqrt(tiled.Count));
         var rows = (int)Math.Ceiling(tiled.Count / (double)columns);
-        var width = (area.Right - area.Left) / columns;
-        var height = (area.Bottom - area.Top) / rows;
+        var width = (area.Right - area.Left + gap) / columns - gap;
+        var height = (area.Bottom - area.Top + gap) / rows - gap;
         for (var i = 0; i < tiled.Count; i++)
         {
             var window = tiled[i];
             ShowWindow(window, SW_RESTORE);
             var (l, t, r, b) = InvisibleBorder(window);
-            SetWindowPos(window, IntPtr.Zero, area.Left + i % columns * width - l, area.Top + i / columns * height - t, width + l + r, height + t + b,
+            SetWindowPos(window, IntPtr.Zero, area.Left + i % columns * (width + gap) - l, area.Top + i / columns * (height + gap) - t, width + l + r, height + t + b,
                 SWP_NOZORDER | SWP_NOACTIVATE);
         }
         return $"{tiled.Count} Fenster liegen jetzt nebeneinander, in {rows} {(rows == 1 ? "Reihe" : "Reihen")}.";
@@ -148,6 +152,13 @@ internal static class Hands
 
     /// <summary>The window the person is using now.</summary>
     public static IntPtr Foreground() => GetForegroundWindow();
+
+    /// <summary>Asks a window to close, as its close button would; the program may still ask about unsaved work.</summary>
+    public static void Close(IntPtr window)
+    {
+        if (IsWindow(window))
+            PostMessage(window, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+    }
 
     /// <summary>
     /// A program started for the person comes to the front when its window appears: a new window, or one that took up
@@ -288,7 +299,7 @@ internal static class Hands
     [StructLayout(LayoutKind.Sequential)]
     private struct MonitorInfo { public int Size; public NativeRect Monitor, Work; public uint Flags; }
 
-    private const uint GA_ROOT = 2, MONITOR_DEFAULTTONEAREST = 2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10, WM_NULL = 0;
+    private const uint GA_ROOT = 2, MONITOR_DEFAULTTONEAREST = 2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10, WM_NULL = 0, WM_CLOSE = 0x10;
     private const uint RDW_INVALIDATE = 0x1, RDW_ERASE = 0x4, RDW_ALLCHILDREN = 0x80, RDW_UPDATENOW = 0x100, RDW_FRAME = 0x400;
     private const int SW_MAXIMIZE = 3, SW_MINIMIZE = 6, SW_RESTORE = 9, DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 

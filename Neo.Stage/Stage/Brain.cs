@@ -48,6 +48,9 @@ internal sealed class Brain : IAsyncDisposable
           sagt etwas laut, Ask(question) fragt den Menschen und gibt seine gesprochene Antwort zurück. Soll eine App Bescheid sagen, etwas
           vorlesen oder den Menschen abfragen („sag mir, wenn …“, „frag mich ab“), sag N.E.O. beim Bauen ausdrücklich, dass sie dafür Say
           oder Ask von „N.E.O. Stage“ im App-Netzwerk benutzt. Was Apps gesagt und gefragt haben, steht in deiner nächsten Nachricht.
+        - build_variants lässt N.E.O. zwei oder drei Varianten derselben App zugleich bauen und legt sie nebeneinander, links A, in der Mitte
+          B, rechts C („zeig mir drei Varianten“, „mach mir ein paar Entwürfe“); gib jeder eine eigene Richtung. Wählt der Mensch („nimm die
+          mittlere“), behält choose_variant diese und schließt die anderen.
         - build_app lässt N.E.O. in Sekunden ein kleines Programm bauen (einen Timer, einen Rechner für etwas, eine Liste, ein kleines Spiel);
           change_app ändert eine solche App, während sie läuft. Laufende N.E.O.-Apps bieten Funktionen und Werte an (unter „Apps im
           App-Netzwerk“): call_app ruft eine Funktion auf, read_app liest einen Wert. Das geht sofort und genau; nimm es vor change_app und look,
@@ -93,6 +96,9 @@ internal sealed class Brain : IAsyncDisposable
           something aloud, Ask(question) asks the person and returns their spoken answer. When an app should tell the person something,
           read something out or quiz them ("tell me when …", "quiz me"), tell N.E.O. when building it to use Say or Ask of "N.E.O. Stage"
           on the app network. What apps said and asked comes with your next message.
+        - build_variants has N.E.O. build two or three variants of the same app at once and lays them side by side, A on the left, B in
+          the middle, C on the right ("show me three variants", "make me a few drafts"); give each its own direction. When the person
+          picks one ("take the middle one"), choose_variant keeps it and closes the others.
         - build_app has N.E.O. build a small program in seconds (a timer, a calculator for something, a list, a little game, a
           simulation); change_app changes such an app while it runs. Running N.E.O. apps offer functions and values (under "Apps on the
           app network"): call_app calls a function, read_app reads a value. That is instant and exact; prefer it to change_app and look
@@ -270,7 +276,7 @@ internal sealed class Brain : IAsyncDisposable
         AllowedTools = ["WebSearch", "WebFetch"],
         ToolServerName = "stage",
         Tools = [ArrangeTool(), ShowTool(), LookTool(), GuideTool(), OpenTool(), FindFilesTool(), BuildAppTool(), ChangeAppTool(), CallAppTool(), ReadAppTool(), RunTool(),
-            WatchTool(), StopWatchingTool()],
+            WatchTool(), StopWatchingTool(), BuildVariantsTool(), ChooseVariantTool()],
         MaxBudgetUsd = 5m,
     };
 
@@ -587,6 +593,145 @@ internal sealed class Brain : IAsyncDisposable
                 return new ClaudeAgentToolResult("N.E.O. ließ sich nicht fragen: " + exception.Message, IsError: true);
             }
             finally { Working?.Invoke(null); }
+        });
+
+    // ── Variants: the same app two or three times, side by side, and the person picks one ──
+
+    private const string VariantLetters = "ABC";
+
+    private ClaudeAgentTool BuildVariantsTool() => new(
+        "build_variants",
+        "Lässt N.E.O. zwei oder drei Varianten derselben App zugleich bauen; sie liegen nebeneinander, links A, in der Mitte B, rechts C. " +
+        "Dauert etwa so lange wie eine. Danach wählt der Mensch, und choose_variant behält eine.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string", "description": "Kurzer Name der App, ohne Buchstaben; die Fenster heißen dann „Name A“, „Name B“ …" },
+                "description": { "type": "string", "description": "Was die App tun soll, so genau wie der Mensch es sagte, in seiner Sprache" },
+                "variants": {
+                  "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 3,
+                  "description": "Worin sich jede Variante unterscheidet, etwa „schlicht und ruhig“, „farbig und verspielt“, „kompakt“"
+                }
+              },
+              "required": ["name", "description", "variants"]
+            }
+            """),
+        async (input, cancellation) =>
+        {
+            var name = Text(input, "name");
+            var description = Text(input, "description");
+            var variants = input.TryGetProperty("variants", out var list) && list.ValueKind == JsonValueKind.Array
+                ? list.EnumerateArray().Select(variant => variant.GetString() ?? "").Where(variant => variant.Trim().Length > 0).Take(3).ToList()
+                : [];
+            if (name.Length == 0 || description.Length == 0)
+                return new ClaudeAgentToolResult("name und description fehlen.", IsError: true);
+            if (variants.Count < 2)
+                variants = Language.English ? ["calm and plain", "colourful and playful", "compact"] : ["schlicht und ruhig", "farbig und verspielt", "kompakt"];
+            var names = variants.Select((_, i) => $"{name} {VariantLetters[i]}").ToList();
+            if (Pretend)
+                return new ClaudeAgentToolResult($"Nur eine Probe, nichts wurde gebaut: {string.Join(", ", names.Select((variant, i) => $"{variant} ({variants[i]})"))}.");
+            Working?.Invoke(Language.Pick($"N.E.O. baut {names.Count} Varianten von „{name}“", $"N.E.O. is building {names.Count} variants of “{name}”"));
+            using var arranging = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            _ = ArrangeVariantsAsync(names, arranging.Token); // side by side as soon as the windows are there
+            try
+            {
+                var builds = names.Select((variant, i) => _apps.BuildAsync(variant, Voiceable(variant, description + Environment.NewLine + Environment.NewLine + Language.Pick(
+                    $"Gestalte diese Variante so: {variants[i]}. Zugleich entstehen {names.Count - 1} andere Varianten derselben App, jede anders; diese hat klar ihre eigene Gestalt.",
+                    $"Design this variant like this: {variants[i]}. {names.Count - 1} other variants of the same app are made at the same time, each different; this one has a look of its own."
+                    )), cancellation)).ToList();
+                var results = await Task.WhenAll(builds);
+                arranging.Cancel();
+                await PlaceVariantsAsync(names);
+                return new ClaudeAgentToolResult(string.Join(" ", names.Select((variant, i) => $"{variant} ({variants[i]}): {results[i]}")) + " " + Language.Pick(
+                    "Sie liegen nebeneinander: links A, in der Mitte B, rechts C. Wenn der Mensch wählt, nimm choose_variant.",
+                    "They lie side by side: A on the left, B in the middle, C on the right. When the person picks, use choose_variant."));
+            }
+            catch (Exception exception) when (exception is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                return new ClaudeAgentToolResult("N.E.O. ließ sich nicht fragen: " + exception.Message, IsError: true);
+            }
+            finally { Working?.Invoke(null); }
+        });
+
+    // The variants' windows appear a few seconds after their N.E.O.s start, with N.E.O. at work in them: side by side as soon
+    // as all are there, so that the person watches all of them come about.
+    private async Task ArrangeVariantsAsync(IReadOnlyList<string> names, CancellationToken cancellation)
+    {
+        try
+        {
+            for (var waited = 0; waited < 120; waited++)
+            {
+                await Task.Delay(500, cancellation);
+                if (VariantWindows(names).Count == names.Count)
+                {
+                    await PlaceVariantsAsync(names);
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task PlaceVariantsAsync(IReadOnlyList<string> names)
+    {
+        var windows = VariantWindows(names);
+        if (windows.Count == 0)
+            return;
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            foreach (var window in windows)
+                Hands.Front(window.Handle);
+            Hands.Tile([.. windows.Select(window => window.Handle)], pretend: false, aboveStage: true);
+        });
+        foreach (var window in windows)
+            Touched?.Invoke(window);
+        App.Log($"variants: {string.Join(", ", windows.Select(window => window.Title))} side by side");
+    }
+
+    // The windows of these variants, in the order of their letters.
+    private static List<AppWindow> VariantWindows(IReadOnlyList<string> names)
+    {
+        var open = OpenWindows.List(most: 64);
+        return [.. names.Select(name => open.FirstOrDefault(window => window.Title == name)).OfType<AppWindow>()];
+    }
+
+    private ClaudeAgentTool ChooseVariantTool() => new(
+        "choose_variant",
+        "Behält eine Variante, die build_variants gebaut hat, und schließt die anderen. Links ist A, in der Mitte B, rechts C.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string", "description": "Der Name der App ohne Buchstaben, wie bei build_variants" },
+                "keep": { "type": "string", "enum": ["A", "B", "C"], "description": "Die Variante, die bleibt" }
+              },
+              "required": ["name", "keep"]
+            }
+            """),
+        async (input, _) =>
+        {
+            var name = Text(input, "name");
+            var keep = Text(input, "keep").Trim().ToUpperInvariant();
+            var windows = VariantWindows([.. VariantLetters.Select(letter => $"{name} {letter}")]);
+            if (windows.FirstOrDefault(window => window.Title == $"{name} {keep}") is not { } kept)
+                return new ClaudeAgentToolResult(Language.Pick($"Eine Variante „{name} {keep}“ ist nicht offen.", $"No variant “{name} {keep}” is open."), IsError: true);
+            var others = windows.Where(window => window.Handle != kept.Handle).ToList();
+            if (Pretend)
+                return new ClaudeAgentToolResult($"Nur eine Probe: „{kept.Title}“ bliebe, {string.Join(", ", others.Select(window => window.Title))} würden geschlossen.");
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                foreach (var other in others)
+                    Hands.Close(other.Handle);
+                Hands.Front(kept.Handle);
+                Hands.Arrange(kept.Handle, "restore", pretend: false);
+                Hands.AboveStage(kept.Handle);
+            });
+            Touched?.Invoke(kept);
+            App.Log($"variants: kept '{kept.Title}', closed {string.Join(", ", others.Select(window => window.Title))}");
+            return new ClaudeAgentToolResult(Language.Pick(
+                $"„{kept.Title}“ bleibt und liegt vorne; {string.Join(", ", others.Select(window => window.Title))} sind zu.",
+                $"“{kept.Title}” stays, in front; {string.Join(", ", others.Select(window => window.Title))} are closed."));
         });
 
     /// <summary>
