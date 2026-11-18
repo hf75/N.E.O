@@ -26,6 +26,12 @@ internal sealed class Utterance
 
     /// <summary>Not said by the person: the stage tells the brain something (a guide's step was done). Shown without words.</summary>
     public bool Unspoken { get; init; }
+
+    /// <summary>An app's words, not the person's: the app that speaks or asks through the stage (<see cref="StageOnNetwork"/>).</summary>
+    public string? App { get; init; }
+
+    /// <summary>For an app's words: done once they are said, with the person's answer when the app asked.</summary>
+    public TaskCompletionSource<string?>? Done { get; init; }
 }
 
 /// <summary>
@@ -78,6 +84,7 @@ internal sealed class LiveStage
     private int _followUps; // how often a guide went on by itself since the person last spoke
     private int _stepsDone; // steps the guides showed since the person last spoke: a guide that goes on counts on from there
     private (Guide Guide, string Step, IReadOnlyList<string> Fresh, IReadOnlyList<string> Others)? _goOn; // waits until the stage is quiet
+    private readonly Queue<(string App, string Text, bool Asking, TaskCompletionSource<string?> Done)> _fromApps = new(); // wait until the stage is free
     private double _workingFrom;
     private Ears? _ears;
     private bool _probing, _looping;
@@ -232,6 +239,7 @@ internal sealed class LiveStage
         if (!_replying)
         {
             _touched.Clear();
+            _turn?.Done?.TrySetResult(null); // an app's words the person spoke into are over
             _guide?.Stop(); // the person speaks again: the guide is over
             _guide = null;
             _goOn = null;
@@ -315,10 +323,13 @@ internal sealed class LiveStage
         if (time - fadeFrom > FadeOut + 0.1 && _phase is Phase.Releasing or Phase.Answering)
         {
             _phase = Phase.Idle;
+            _turn?.Done?.TrySetResult(null); // an app's words are said (the answer it asked for came before)
             Spoken?.Invoke(utterance);
         }
         if (_phase == Phase.Idle && _goOn is { } waiting)
             GoOn(waiting.Guide, waiting.Step, waiting.Fresh, waiting.Others);
+        if (_phase == Phase.Idle)
+            NextFromApp();
         if (_phase == Phase.Idle && _guide == null)
         {
             _looping = false;
@@ -388,13 +399,22 @@ internal sealed class LiveStage
         {
             _replying = false;
             _question = null;
+            var reply = utterance.Text.Trim();
+            App.Log($"replied: '{reply}'");
+            if (_turn?.App is { } asker)
+            {
+                // An app asked: it gets the answer, the stage goes quiet; what the app makes of it, it says itself.
+                _brain?.Note(Language.Pick($"Der Mensch antwortete der App „{asker}“: „{reply}“", $"The person answered the app “{asker}”: “{reply}”"));
+                question.TrySetResult(reply);
+                _phase = Phase.Answering;
+                _fadeFrom = Now + 0.6;
+                return;
+            }
             _phase = Phase.Thinking;
             _thinkingFrom = Now;
             _written.Clear();
             _writing = "";
             _mouth?.Begin(); // what it says after the answer is a new speech
-            var reply = utterance.Text.Trim();
-            App.Log($"replied: '{reply}'");
             question.TrySetResult(reply.Length > 0 ? reply : null);
             return;
         }
@@ -586,6 +606,95 @@ internal sealed class LiveStage
             return new TargetView(touch.Shown!.Value, touch.Window.Label, touch.Color, opacity, Motion.Lerp(22, 6, grow), glow, label);
         });
 
+    // ── Apps that speak up: N.E.O. apps say things and ask through the stage ──
+
+    /// <summary>
+    /// An app on the app network speaks up (<see cref="StageOnNetwork"/>). As soon as the stage is free (never into the
+    /// person's words or another answer) it says <paramref name="text"/> aloud, with the app's name and its window outlined.
+    /// Asking, it waits up to a minute for the person's spoken answer and returns it; otherwise it returns null once the
+    /// words are said. Any thread.
+    /// </summary>
+    public Task<string?> FromAppAsync(string? app, string text, bool asking)
+    {
+        var done = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        text = text.Trim();
+        if (text.Length == 0)
+        {
+            done.TrySetResult(null);
+            return done.Task;
+        }
+        Dispatcher.UIThread.Post(() =>
+        {
+            _fromApps.Enqueue((string.IsNullOrWhiteSpace(app) ? Language.Pick("Eine App", "An app") : app.Trim(), text, asking, done));
+            NextFromApp();
+        });
+        return done.Task;
+    }
+
+    // The next app's words, when the stage is free.
+    private void NextFromApp()
+    {
+        if (_phase != Phase.Idle || !Enabled || !_fromApps.TryDequeue(out var next))
+            return;
+        var (app, text, asking, done) = next;
+        var utterance = new Utterance { Started = Now, Ended = Now, Text = text, Unspoken = true, App = app, Done = done };
+        _utterance = utterance;
+        _turn = utterance;
+        _listening = _released = _thinkingFrom = _answeringFrom = Now;
+        _fadeFrom = double.NaN;
+        _planFrom = double.NaN;
+        _written.Clear();
+        _written.Add(text);
+        _writing = "";
+        _wordShown.Clear();
+        _wroteAny = true;
+        _touched.Clear();
+        _working = null;
+        _mouth?.Begin();
+        _mouth?.Add(text);
+        App.Log($"app '{app}' {(asking ? "asks" : "says")}: '{text}'");
+        _brain?.Note(asking
+            ? Language.Pick($"Die App „{app}“ fragte den Menschen: „{text}“", $"The app “{app}” asked the person: “{text}”")
+            : Language.Pick($"Die App „{app}“ sagte: „{text}“", $"The app “{app}” said: “{text}”"));
+        if (asking)
+        {
+            _mouth?.Flush();
+            _question = done;
+            _phase = Phase.Asking;
+            _askedAt = Now;
+            // A minute without an answer: the question goes, the app gets an empty answer.
+            DispatcherTimer.RunOnce(() =>
+            {
+                if (_question != done || _replying)
+                    return;
+                _question = null;
+                done.TrySetResult(null);
+                App.Log($"app '{app}': no answer");
+                if (_turn == utterance)
+                {
+                    _phase = Phase.Answering;
+                    _fadeFrom = Now;
+                }
+            }, TimeSpan.FromSeconds(60));
+        }
+        else
+        {
+            _phase = Phase.Answering;
+            _speakingNow = _mouth != null;
+            _ = SpeakAsync(utterance, text);
+        }
+        // The app's window, outlined with its name: who speaks.
+        if (Neo.App.Apps.Find(app) is { } descriptor
+            && OpenWindows.List(most: 64).FirstOrDefault(window => window.ProcessId == (uint)descriptor.ProcessId) is { } window)
+            Touched(window);
+        if (!_looping)
+        {
+            _looping = true;
+            _stage.Show();
+            _stage.RequestAnimationFrame(Tick);
+        }
+    }
+
     // ── Show me: a guide lights up what to click, step by step ──
 
     private void StartGuide(Guide guide)
@@ -736,8 +845,17 @@ internal sealed class LiveStage
         if (_phase == Phase.Asking)
         {
             var shown = Motion.EaseOutCubic(Motion.Progress(time, _askedAt, 0.3));
-            pills.Add(new PillView(new Point(presence.X + 64, presence.Y), [new PillPart(Language.Pick("Taste halten: Ja oder Nein", "Hold the key: yes or no"), Palette.Yes, Dot: true, Strong: true)],
+            var hint = _turn?.App is { } asker
+                ? Language.Pick($"{asker} fragt · Taste halten und antworten", $"{asker} asks · hold the key and answer")
+                : Language.Pick("Taste halten: Ja oder Nein", "Hold the key: yes or no");
+            pills.Add(new PillView(new Point(presence.X + 64, presence.Y), [new PillPart(hint, Palette.Yes, Dot: true, Strong: true)],
                 shown * (0.75 + 0.25 * Math.Sin(2 * Math.PI * time / 1.4)), 6 * (1 - shown), PillAlign.Left, 13));
+        }
+        else if (_turn?.App is { } speaker && _phase is Phase.Answering)
+        {
+            var begun = Motion.EaseOutCubic(Motion.Progress(time, _answeringFrom, 0.3));
+            pills.Add(new PillView(new Point(presence.X + 64, presence.Y), [new PillPart(speaker, Palette.There, Dot: true, Strong: true)],
+                begun * (1 - leaving), 6 * (1 - begun), PillAlign.Left, 13));
         }
         else if (_working is { } doing && _phase is Phase.Thinking or Phase.Answering)
         {

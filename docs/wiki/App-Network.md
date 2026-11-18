@@ -47,7 +47,8 @@ foreach (var app in Apps.Running()) app.Describe();                    // who is
 - `AppNotFoundException`: no app of that name is running. `AppCallException`: the other app could not carry out the call — unknown method, wrong arguments, an exception in the method (its type and message), a timeout, the person said no — the message says which.
 - A chain of calls that runs in circles (A calls B calls A …) is cut off after 8 nested calls.
 - A call that changes something waits for the person's answer as well (up to a minute), a call of an interface also for a repair (`RepairSeconds`, 150 s): the caller's own timeout includes both.
-- Who calls is shown to the person when a change is asked about: the calling app's name, or what a process without an app calls itself (`Apps.CallerName`; the MCP server says *Claude Code*). It is what the caller says, not proof.
+- Who calls is shown to the person when a change is asked about: the calling app's name, or what a process without an app calls itself (`Apps.CallerName`; the MCP server says *Claude Code*). The called method can ask too: `AppNetwork.CurrentCaller` (null outside of a call). It is what the caller says, not proof.
+- The [[N.E.O. Stage|Stage]] is on the network as **N.E.O. Stage** while it runs: `await Apps.CallAsync("N.E.O. Stage", "Say", "The eggs are done")` says something aloud to the person, `await Apps.CallAsync<string>("N.E.O. Stage", "Ask", "Capital of France?")` asks them and returns what they answered by voice.
 - `Apps.CallJsonAsync(app, method, "[\"4711\", 3]")` and `Apps.ReadJsonAsync` take and give JSON, for callers that have no types for it. Claude reaches every app through `call_running_app` and `read_running_app` of the [[MCP Server]].
 
 ## What the AI knows

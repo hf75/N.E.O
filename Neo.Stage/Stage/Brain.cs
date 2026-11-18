@@ -39,6 +39,10 @@ internal sealed class Brain : IAsyncDisposable
           „Wo finde ich …?“), zeig es mit guide, statt es selbst zu tun. Nimm die Namen, wie sie im Programm stehen, in seiner Sprache;
           kennst du sie nicht sicher, schau vorher mit look. Sag dazu in einem Satz den ersten Schritt.
         - WebSearch und WebFetch für Fragen an das Internet (Wetter, Nachrichten, Fakten).
+        - Apps können sprechen und fragen: Jede N.E.O.-App kann im App-Netzwerk die App „N.E.O. Stage“ benutzen, das bist du. Say(text)
+          sagt etwas laut, Ask(question) fragt den Menschen und gibt seine gesprochene Antwort zurück. Soll eine App Bescheid sagen, etwas
+          vorlesen oder den Menschen abfragen („sag mir, wenn …“, „frag mich ab“), sag N.E.O. beim Bauen ausdrücklich, dass sie dafür Say
+          oder Ask von „N.E.O. Stage“ im App-Netzwerk benutzt. Was Apps gesagt und gefragt haben, steht in deiner nächsten Nachricht.
         - build_app lässt N.E.O. in Sekunden ein kleines Programm bauen (einen Timer, einen Rechner für etwas, eine Liste, ein kleines Spiel);
           change_app ändert eine solche App, während sie läuft. Laufende N.E.O.-Apps bieten Funktionen und Werte an (unter „Apps im
           App-Netzwerk“): call_app ruft eine Funktion auf, read_app liest einen Wert. Das geht sofort und genau; nimm es vor change_app und look,
@@ -75,6 +79,10 @@ internal sealed class Brain : IAsyncDisposable
           "Where do I find …?"), show it with guide rather than doing it yourself. Use the names as the program shows them, in its
           language; if you are not sure of them, look first. Say the first step in one sentence.
         - WebSearch and WebFetch for questions to the internet (weather, news, facts).
+        - Apps can speak and ask: every N.E.O. app can use the app "N.E.O. Stage" on the app network, which is you. Say(text) says
+          something aloud, Ask(question) asks the person and returns their spoken answer. When an app should tell the person something,
+          read something out or quiz them ("tell me when …", "quiz me"), tell N.E.O. when building it to use Say or Ask of "N.E.O. Stage"
+          on the app network. What apps said and asked comes with your next message.
         - build_app has N.E.O. build a small program in seconds (a timer, a calculator for something, a list, a little game, a
           simulation); change_app changes such an app while it runs. Running N.E.O. apps offer functions and values (under "Apps on the
           app network"): call_app calls a function, read_app reads a value. That is instant and exact; prefer it to change_app and look
@@ -99,6 +107,7 @@ internal sealed class Brain : IAsyncDisposable
     private ClaudeAgentSession? _session;
     private IReadOnlyList<AppWindow> _windows = [];
     private string _goal = ""; // what the person last asked for, for a guide that goes on
+    private readonly List<string> _news = []; // what happened since the last question: apps spoke, the person answered them
     private Task? _last;
 
     /// <param name="pretend">A check: the hands say what they would do and do nothing (reading scripts still run).</param>
@@ -119,6 +128,20 @@ internal sealed class Brain : IAsyncDisposable
 
     /// <summary>A window was arranged, shown or looked at: the stage outlines it. Raised on the session's thread.</summary>
     public event Action<AppWindow>? Touched;
+
+    /// <summary>
+    /// Something that happened between the person's questions (an app spoke, the person answered it): the brain reads it
+    /// with the next question. Any thread.
+    /// </summary>
+    public void Note(string line)
+    {
+        lock (_news)
+        {
+            _news.Add(line);
+            if (_news.Count > 12)
+                _news.RemoveAt(0);
+        }
+    }
 
     /// <summary>A guide begins: the stage shows its steps. Raised on the session's thread.</summary>
     public event Action<Guide>? Guiding;
@@ -163,7 +186,13 @@ internal sealed class Brain : IAsyncDisposable
         var pictures = utterance.Pointings.Where(pointing => pointing.Picture != null).Select(pointing => new ClaudeAgentImage(pointing.Picture!)).ToList();
         lock (_said)
             _said.Clear();
-        var turn = session.SendAsync(Describe(utterance, _windows, _apps.Names), pictures, cancellationToken);
+        string[] news;
+        lock (_news)
+        {
+            news = [.. _news];
+            _news.Clear();
+        }
+        var turn = session.SendAsync(Describe(utterance, _windows, _apps.Names, news), pictures, cancellationToken);
         _last = turn;
         var result = await turn.ConfigureAwait(false);
         string said;
@@ -647,7 +676,7 @@ internal sealed class Brain : IAsyncDisposable
     {
         try
         {
-            var running = Apps.Running(includeSelf: true);
+            var running = Apps.Running(includeSelf: false); // the stage is on it too, as "N.E.O. Stage"; the prompt tells about that
             return running.Count == 0 ? "" : Language.Pick("Apps im App-Netzwerk (mit call_app und read_app nutzbar):", "Apps on the app network (usable with call_app and read_app):") + string.Concat(running.Select(app => Environment.NewLine + "- " + app.Describe().Replace("\n", "\n  ")));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
@@ -786,9 +815,11 @@ internal sealed class Brain : IAsyncDisposable
     /// The utterance as the brain reads it: what was said, the open windows, the apps N.E.O. built and the skills it
     /// learned, and what was pointed at, if anything.
     /// </summary>
-    internal static string Describe(Utterance utterance, IReadOnlyList<AppWindow> windows, IReadOnlyList<string>? apps = null)
+    internal static string Describe(Utterance utterance, IReadOnlyList<AppWindow> windows, IReadOnlyList<string>? apps = null, IReadOnlyList<string>? news = null)
     {
         var text = new StringBuilder();
+        if (news is { Count: > 0 })
+            text.AppendLine(Language.Pick("Seit deiner letzten Antwort: ", "Since your last answer: ") + string.Join(" · ", news));
         text.AppendLine(utterance.Unspoken
             ? Language.Pick($"Die Bühne meldet: {utterance.Text}", $"The stage reports: {utterance.Text}")
             : Language.Pick($"Gesagt: „{utterance.Text}“", $"Said: “{utterance.Text}”"));

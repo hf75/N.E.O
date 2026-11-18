@@ -118,6 +118,38 @@ public class AppNetworkTests : IDisposable
         (await Apps.ReadAsync<List<ProductTotal>>("Totals", "PerProduct")).Should().ContainSingle().Which.Should().Be(new ProductTotal("Coffee", 7m));
     }
 
+    [AppInfo("Desk", "Knows who calls.")]
+    public class DeskApp
+    {
+        [McpCallable("Who calls.")]
+        public string WhoCalls() => AppNetwork.CurrentCaller ?? "(nobody)";
+
+        [McpCallable("Who calls, asked later and off the UI thread.", OffUiThread = true)]
+        public async Task<string> WhoCallsLater()
+        {
+            await Task.Delay(10);
+            return AppNetwork.CurrentCaller ?? "(nobody)";
+        }
+    }
+
+    [Fact]
+    public async Task The_called_method_knows_who_calls()
+    {
+        Publish(new DeskApp());
+        var before = Apps.CallerName;
+        Apps.CallerName = "Claude Code";
+        try
+        {
+            (await Apps.CallAsync<string>("Desk", "WhoCalls")).Should().Be("Claude Code");
+            (await Apps.CallAsync<string>("Desk", "WhoCallsLater")).Should().Be("Claude Code");
+        }
+        finally
+        {
+            Apps.CallerName = before;
+        }
+        AppNetwork.CurrentCaller.Should().BeNull("outside of a call nobody calls");
+    }
+
     [Fact]
     public void An_app_without_AppInfo_gets_the_name_its_host_gives_it()
     {

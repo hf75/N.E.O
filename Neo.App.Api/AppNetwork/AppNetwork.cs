@@ -25,11 +25,19 @@ public static class AppNetwork
     public const int MaxCallDepth = 8;
 
     private static readonly AsyncLocal<int> s_hops = new();
+    private static readonly AsyncLocal<string?> s_caller = new();
     private static readonly object s_gate = new();
     private static AppServer? s_server;
 
     /// <summary>How many app-to-app calls the current work is nested in (0 outside of any call).</summary>
     public static int CurrentHops => s_hops.Value;
+
+    /// <summary>
+    /// Who called the method or read the value that runs now: the calling app's name, or what a process without an app
+    /// of its own calls itself ("Claude Code"); null outside of a call. The caller says it, so it is for showing, not
+    /// proof of anything.
+    /// </summary>
+    public static string? CurrentCaller => s_caller.Value;
 
     /// <summary>
     /// Messages between the N.E.O.s behind the apps, not between the apps: "take this program over". Set by
@@ -95,11 +103,17 @@ public static class AppNetwork
         }
     }
 
-    internal static IDisposable EnterCall(int incomingHops)
+    internal static IDisposable EnterCall(int incomingHops, string? from = null)
     {
         var previous = s_hops.Value;
+        var previousCaller = s_caller.Value;
         s_hops.Value = incomingHops + 1;
-        return new Restore(() => s_hops.Value = previous);
+        s_caller.Value = from;
+        return new Restore(() =>
+        {
+            s_hops.Value = previous;
+            s_caller.Value = previousCaller;
+        });
     }
 
     private sealed class Restore(Action undo) : IDisposable { public void Dispose() => undo(); }
@@ -259,7 +273,7 @@ public static class AppNetwork
                     if (descriptor.Values.All(v => v.Name != request.Name))
                         return new Response(false, null, $"'{descriptor.Name}' has no value called '{request.Name}'.");
                     var prop = app.GetType().GetProperty(request.Name!, BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)!;
-                    using (EnterCall(request.Hops))
+                    using (EnterCall(request.Hops, request.From))
                     {
                         var value = await onUiThread(() => prop.GetValue(app)).ConfigureAwait(false);
                         return new Response(true, JsonSerializer.SerializeToElement(value, WireJson), null);
@@ -280,7 +294,7 @@ public static class AppNetwork
                             return new Response(false, null, $"The person did not allow '{descriptor.Name}.{entry.Name}'.");
                     }
 
-                    using (EnterCall(request.Hops))
+                    using (EnterCall(request.Hops, request.From))
                     {
                         var (response, changed) = await InvokeAsync(entry, request).ConfigureAwait(false);
                         if (changed == null || RepairHandler is not { } repair) return response;

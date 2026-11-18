@@ -135,6 +135,7 @@ public partial class App : Application
                         DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(Math.Max(0.01, linger)));
                     };
                     _live.Start();
+                    StageOnNetwork.Publish(_live);
                 });
             }
             else if (Argument(arguments, "--brain-check") is { } sentence)
@@ -276,6 +277,7 @@ public partial class App : Application
                     // Pointing with the mouse while speaking is off unless NEO_STAGE_POINTING=1: the voice alone comes first.
                     _live = new LiveStage(_stage, brain: _brain, mouth: mouth, pointing: Environment.GetEnvironmentVariable("NEO_STAGE_POINTING") == "1");
                     _live.Start();
+                    StageOnNetwork.Publish(_live); // apps speak and ask through it
                     Log($"live (process {Environment.ProcessId}): hold the right Ctrl key and speak{(mouth == null ? $" (no voice without {Ears.KeyVariable})" : "")}");
                 });
             }
@@ -286,6 +288,7 @@ public partial class App : Application
             // Claude Code ends with the stage.
             lifetime.Exit += (_, _) =>
             {
+                Neo.App.AppNetwork.Unpublish();
                 if (_brain != null)
                     Task.Run(() => _brain.DisposeAsync().AsTask()).Wait(TimeSpan.FromSeconds(3));
             };

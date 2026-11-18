@@ -18,6 +18,7 @@ The microphone is open only while the key is held. A shortcut with the right Ctr
   A script that worked can be kept as a skill and used again by name.
 - **The web:** questions to the internet go to web search.
 - **Apps by voice.** "Build me a timer…" has [[N.E.O.|Home]] build the app in a hidden N.E.O. (only the app window is seen, Ctrl+Shift+N shows N.E.O. beside it). "Make it blue" changes it while it runs. Every app the stage builds offers its settings and its state on the [[App Network]], so Claude can then simply call it: "make Earth go twice as fast" sets a value, "how many laps has Earth done?" reads one, instantly and exactly, without looking at the screen.
+- **Apps that speak up.** The stage is on the [[App Network]] as *N.E.O. Stage*: any N.E.O. app can say something aloud through it (`Say`) or ask the person and get the spoken answer back (`Ask`). "Build me an egg timer that tells me when it is done" gives an app that says "the eggs are done" in the stage's voice when the time is up; a quiz can ask its questions aloud and hear the answers. The stage names the app and outlines its window, waits until neither you nor another answer is speaking, and tells Claude what the app said and what you answered, with your next question.
 - **Speaking while writing:** the first sentence of an answer is spoken while the rest is still being written; when something takes a while ("N.E.O. is building…"), the stage says so instead of keeping silent.
 
 ## What you need
@@ -46,6 +47,7 @@ Build `Neo.Stage` and start `Neo.Stage.exe`. Run it from a copy of the output fo
 - Your voice goes to ElevenLabs while the key is held, and the answers go there to be spoken.
 - What you said, the titles of the open windows, pictures of windows when Claude looks at one, and the names of what can be clicked in a program it shows you around go to Anthropic through Claude Code.
 - Scripts run on your computer under your account; the ones that last only after your yes.
+- What an app says through the stage goes to ElevenLabs to be spoken; your answer to an app's question goes to that app, and both to Claude with your next question.
 
 ## Checks and demos
 
