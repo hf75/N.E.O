@@ -12,10 +12,16 @@ using NAudio.Wave;
 
 namespace Neo.Stage;
 
-/// <summary>A demo as a list of lines a person says, in order, with a pause after each answer.</summary>
-internal sealed record DemoScript(string Language, string Voice, IReadOnlyList<DemoLine> Lines, bool Record = true, string Model = "eleven_multilingual_v2");
+/// <summary>
+/// A demo as a list of lines a person says, in order, with a pause after each answer. <see cref="Windows"/>: words of the
+/// titles or programs of windows the brain may see besides the apps N.E.O. builds (a program the crew made, say).
+/// </summary>
+internal sealed record DemoScript(string Language, string Voice, IReadOnlyList<DemoLine> Lines, bool Record = true, string Model = "eleven_multilingual_v2",
+    IReadOnlyList<string>? Windows = null);
 
-internal sealed record DemoLine(string Say, double Pause = 2);
+/// <param name="Answer">Said when the stage asks something (an app's question, say), as the answer to it.</param>
+/// <param name="After">Said only after the stage has spoken for this one (an app, a watcher, the crew): the wait is cut short in the video.</param>
+internal sealed record DemoLine(string Say, double Pause = 2, bool Answer = false, string? After = null);
 
 /// <summary>
 /// Plays a demo without anyone at the computer. The lines are spoken by a synthetic voice (ElevenLabs), played aloud and
@@ -35,6 +41,7 @@ internal sealed class Director
     private TaskCompletionSource _heard = new(), _spoken = new();
     private WaveOutEvent? _speaker;
     private JsonObject? _waiting;
+    private readonly List<string> _announced = []; // who besides the person has spoken through the stage (apps, the crew)
 
     private Director(string folder) => _folder = folder;
 
@@ -63,7 +70,9 @@ internal sealed class Director
         // The stage as it is at work, with ears that hear the clips, a voice that is taped, and a brain that sees only the
         // windows of the apps N.E.O. builds.
         var stage = new StageOverlay(screen);
-        var brain = new Brain(only: (_, program) => program.Contains("PluginWindow", StringComparison.OrdinalIgnoreCase));
+        var seen = script.Windows ?? [];
+        var brain = new Brain(only: (title, program) => program.Contains("PluginWindow", StringComparison.OrdinalIgnoreCase)
+            || seen.Any(word => title.Contains(word, StringComparison.OrdinalIgnoreCase) || program.Contains(word, StringComparison.OrdinalIgnoreCase)));
         brain.Working += what => Dispatcher.UIThread.Post(() => Working(what));
         _ = brain.WarmAsync();
         var mouth = new Mouth(key)
@@ -72,14 +81,30 @@ internal sealed class Director
             Tape = (began, sound) => Dispatcher.UIThread.Post(() => KeepVoice(began, sound)),
         };
         var live = new LiveStage(stage, () => _holding, Hear, brain, mouth);
-        live.Spoken += _ => _spoken.TrySetResult();
+        live.Spoken += utterance =>
+        {
+            if (utterance.App is { } who)
+            {
+                lock (_announced)
+                    _announced.Add(who);
+            }
+            _spoken.TrySetResult();
+        };
         live.Start();
+        StageOnNetwork.Publish(live); // apps speak and ask through it, as with the stage at work
 
         // Nothing of the desktop: the backdrop in front of every window, the pointer resting in a corner.
         var backdrop = new Backdrop(screen);
         backdrop.Show();
         await Task.Delay(300);
-        Hands.Front(backdrop.Handle);
+        backdrop.Cover();
+        // The demo's windows stay over it: those the brain may see (the apps N.E.O. builds, the named programs).
+        var keeper = new DispatcherTimer(TimeSpan.FromMilliseconds(200), DispatcherPriority.Background, (_, _) =>
+        {
+            if (backdrop.Lift(OpenWindows.List(brain.Only, most: 64).Select(window => window.Handle)))
+                stage.StayOnTop(); // the stage's light over the lifted windows
+        });
+        keeper.Start();
         var area = screen.WorkingArea;
         SetCursorPos(area.Right - 60, area.Bottom - 46);
         await Task.Delay(1500);
@@ -92,8 +117,29 @@ internal sealed class Director
 
         for (var i = 0; i < script.Lines.Count; i++)
         {
-            while (live.Busy)
-                await Task.Delay(100);
+            var line = script.Lines[i];
+            if (line.After is { } awaited)
+            {
+                // Someone else has to speak first (the crew, when it is done): the time it takes is cut short in the video.
+                var from = Now;
+                while (!Announced(awaited) && Now - from < 480)
+                    await Task.Delay(200);
+                if (Now - from > 1)
+                    _waits.Add(new JsonObject { ["label"] = awaited, ["from"] = from, ["to"] = Now });
+                App.Log($"demo: '{awaited}' spoke after {Now - from:0.0} s of waiting");
+            }
+            if (line.Answer)
+            {
+                // The answer to a question the stage asks (an app's): said when the question stands.
+                var from = Now;
+                while (!live.Asking && Now - from < 240)
+                    await Task.Delay(100);
+            }
+            else
+            {
+                while (live.Busy)
+                    await Task.Delay(100);
+            }
             _clip = clips[i];
             _heard = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _spoken = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -113,6 +159,8 @@ internal sealed class Director
         var end = Now;
         if (recorder != null)
             await StopRecordingAsync(recorder);
+        keeper.Stop();
+        backdrop.Lower();
         backdrop.Close();
 
         var take = new JsonObject
@@ -126,7 +174,14 @@ internal sealed class Director
         };
         await File.WriteAllTextAsync(Path.Combine(_folder, "take.json"), take.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         App.Log($"demo: done after {end:0.0} s, take in {_folder}");
+        Neo.App.AppNetwork.Unpublish();
         await brain.DisposeAsync();
+    }
+
+    private bool Announced(string who)
+    {
+        lock (_announced)
+            return _announced.Any(announced => announced.Contains(who, StringComparison.OrdinalIgnoreCase));
     }
 
     // The stage starts listening: the person's clip plays aloud from this moment, and the ears hear the same sound.

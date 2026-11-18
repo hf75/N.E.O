@@ -76,7 +76,20 @@ internal sealed class NeoApps
     }
 
     /// <summary>Has a new app built from <paramref name="description"/>; its window is called <paramref name="name"/>.</summary>
-    public async Task<string> BuildAsync(string name, string description, CancellationToken cancellationToken)
+    /// <param name="ready">Called once its N.E.O. is up and listens (or could not start): the next one may start then.</param>
+    public async Task<string> BuildAsync(string name, string description, CancellationToken cancellationToken, Action? ready = null)
+    {
+        try
+        {
+            return await BuildOnceUpAsync(name, description, cancellationToken, ready);
+        }
+        finally
+        {
+            ready?.Invoke(); // also when it failed: the others must not wait for it
+        }
+    }
+
+    private async Task<string> BuildOnceUpAsync(string name, string description, CancellationToken cancellationToken, Action? ready)
     {
         if (Names.Any(open => string.Equals(open, name, StringComparison.OrdinalIgnoreCase)))
             return Language.Pick($"„{name}“ ist schon offen; nicht noch einmal bauen. Ändern geht mit change_app.",
@@ -112,6 +125,7 @@ internal sealed class NeoApps
             catch (TimeoutException) { }
         }
         App.Log($"neo: N.E.O. for '{name}' ready after {clock.Elapsed.TotalSeconds:0.0} s (process {process.Id})");
+        ready?.Invoke();
 
         var app = new NeoApp(name, process, pipe);
         lock (_apps)

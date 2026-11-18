@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -54,4 +55,56 @@ internal sealed class Backdrop : Window
     }
 
     public IntPtr Handle => TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+
+    /// <summary>
+    /// Over the person's windows, once: by its place among the windows, never by taking the focus. A backdrop that could
+    /// be activated came forward again whenever the stage began to listen, over the windows the demo had opened.
+    /// </summary>
+    public void Cover()
+    {
+        if (!OperatingSystem.IsWindows() || Handle == IntPtr.Zero)
+            return;
+        SetWindowLongPtr(Handle, GWL_EXSTYLE, GetWindowLongPtr(Handle, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+        SetWindowPos(Handle, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+
+    private readonly HashSet<IntPtr> _lifted = [];
+
+    /// <summary>
+    /// The windows the demo shows go into the layer of windows that stay on top, once each, for as long as the demo runs:
+    /// the backdrop, below that layer, cannot cover them whatever brings it forward (it came forward whenever the stage
+    /// began to listen). True when one was lifted now: the stage must then go back over them.
+    /// </summary>
+    public bool Lift(IEnumerable<IntPtr> windows)
+    {
+        if (!OperatingSystem.IsWindows())
+            return false;
+        var lifted = false;
+        foreach (var window in windows)
+        {
+            if (window == IntPtr.Zero || !_lifted.Add(window))
+                continue;
+            SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            App.Log($"backdrop: '{OpenWindows.Title(window)}' lifted over it");
+            lifted = true;
+        }
+        return lifted;
+    }
+
+    /// <summary>The lifted windows back among the others, when the demo ends: those still open stay on the person's screen.</summary>
+    public void Lower()
+    {
+        foreach (var window in _lifted)
+            SetWindowPos(window, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        _lifted.Clear();
+    }
+
+    private const int GWL_EXSTYLE = -20;
+    private const long WS_EX_NOACTIVATE = 0x08000000, WS_EX_TOOLWINDOW = 0x80;
+    private const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOACTIVATE = 0x10;
+    private static readonly IntPtr HWND_TOP = IntPtr.Zero, HWND_TOPMOST = new(-1), HWND_NOTOPMOST = new(-2);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern long GetWindowLongPtr(IntPtr window, int index);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] private static extern long SetWindowLongPtr(IntPtr window, int index, long value);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 }

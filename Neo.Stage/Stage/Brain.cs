@@ -27,7 +27,9 @@ internal sealed class Brain : IAsyncDisposable
         mit einer kurzen Ja-oder-Nein-Frage. Gesagte Dateinamen verlieren Bindestriche, Punkte und Leerzeichen („Stagetest“ für „stage-test“):
         such Dateien mit Platzhaltern (*), nicht mit dem genauen Namen.
 
-        Sprich, wie man spricht: Deutsch, mit „du“, so kurz wie möglich, meist ein Satz, höchstens zwei. Keine Aufzählungen, kein Markdown, keine Links,
+        Sprich, wie man spricht: Deutsch, mit „du“, so kurz wie möglich, meist ein Satz, höchstens zwei. Was du anlegst (Apps, Varianten,
+        Aufträge, Wächter), benennst du auf Deutsch. Was Apps, Wächter und der Bautrupp gemeldet haben, hat der Mensch schon gehört;
+        wiederhole es nicht ungefragt. Keine Aufzählungen, kein Markdown, keine Links,
         keine Fensternummern, keine Tipps, um die niemand gebeten hat. Nenne Fenster so, wie ein Mensch sie nennt („Word“, „der Browser“).
         Wenn du etwas tust, das einen Moment dauert, sag es in einem kurzen Satz, bevor du das Werkzeug benutzt; danach brauchst du nichts mehr
         zu sagen, außer etwas ging schief.
@@ -54,6 +56,7 @@ internal sealed class Brain : IAsyncDisposable
         - delegate gibt eine große Arbeit an den Bautrupp: Claude Code im Hintergrund, mit eigenem Ordner, für ein richtiges Programm, einen
           Dienst, eine Auswertung vieler Dateien, alles, was mehr als eine kleine App ist oder länger als eine Minute dauert. Beschreibe den
           Auftrag vollständig, er kann nicht nachfragen. Er meldet sich laut, wenn er fertig ist; was er gerade tut, steht in jeder Nachricht.
+          Was er gebaut hat, öffnest du erst, wenn der Mensch es will.
           Kleine Apps baut weiter N.E.O. (build_app), das geht in Sekunden.
         - build_variants lässt N.E.O. zwei oder drei Varianten derselben App zugleich bauen und legt sie nebeneinander, links A, in der Mitte
           B, rechts C („zeig mir drei Varianten“, „mach mir ein paar Entwürfe“); gib jeder eine eigene Richtung. Wählt der Mensch („nimm die
@@ -82,7 +85,9 @@ internal sealed class Brain : IAsyncDisposable
         yes-or-no question. Spoken file names lose hyphens, dots and spaces ("stagetest" for "stage-test"): look for files with
         wildcards (*), not by the exact name.
 
-        Speak the way people speak: English, as short as possible, usually one sentence, two at most. No lists, no Markdown, no links,
+        Speak the way people speak: English, as short as possible, usually one sentence, two at most. Name what you create (apps, variants,
+        crew jobs, watchers) in English. What apps, watchers and the crew announced, the person has heard already; do not repeat it
+        unasked. No lists, no Markdown, no links,
         no window numbers, no tips nobody asked for. Call windows what a person calls them ("Word", "the browser"). When you do something
         that takes a moment, say so in one short sentence before you use the tool; after that you need not say anything, unless
         something went wrong.
@@ -108,7 +113,8 @@ internal sealed class Brain : IAsyncDisposable
           on the app network. What apps said and asked comes with your next message.
         - delegate hands a big piece of work to the crew: Claude Code in the background, with a folder of its own, for a real program, a
           service, a report over many files, anything more than a small app or longer than a minute. Describe the job fully, it cannot ask
-          back. It speaks up when it is done; what it is doing comes with every message. Small apps are still N.E.O.'s (build_app), in seconds.
+          back. It speaks up when it is done; what it is doing comes with every message. Open what it made only when the person asks.
+          Small apps are still N.E.O.'s (build_app), in seconds.
         - build_variants has N.E.O. build two or three variants of the same app at once and lays them side by side, A on the left, B in
           the middle, C on the right ("show me three variants", "make me a few drafts"); give each its own direction. When the person
           picks one ("take the middle one"), choose_variant keeps it and closes the others.
@@ -153,6 +159,9 @@ internal sealed class Brain : IAsyncDisposable
     }
 
     public bool Pretend { get; }
+
+    /// <summary>Which windows it may see (title, program); null: all of them.</summary>
+    public Func<string, string, bool>? Only => _only;
 
     /// <summary>What the stage keeps an eye on for the person ("Sag mir Bescheid, wenn …").</summary>
     public Watchers Watchers { get; }
@@ -472,6 +481,8 @@ internal sealed class Brain : IAsyncDisposable
             }
             if (window == null)
                 return new ClaudeAgentToolResult(Language.Pick("Dieses Fenster gibt es nicht.", "There is no such window."), IsError: true);
+            if (!Pretend && Hands.Foreground() != window.Handle)
+                Dispatcher.UIThread.InvokeAsync(() => Hands.Front(window.Handle)).GetTask().Wait(TimeSpan.FromSeconds(2));
             if (steps.Count == 0)
                 return new ClaudeAgentToolResult(Language.Pick("Es fehlen die Schritte.", "The steps are missing."), IsError: true);
             if (Pretend)
@@ -498,7 +509,7 @@ internal sealed class Brain : IAsyncDisposable
             {
               "type": "object",
               "properties": {
-                "name": { "type": "string", "description": "Kurzer Name des Auftrags, etwa „Primzahlen-Programm“" },
+                "name": { "type": "string", "description": "Kurzer Name des Auftrags in der Sprache des Menschen, so wie er das Programm nennt" },
                 "task": { "type": "string", "description": "Der Auftrag, vollständig und genau, in der Sprache des Menschen; der Bautrupp kann nicht nachfragen" }
               },
               "required": ["name", "task"]
@@ -761,10 +772,23 @@ internal sealed class Brain : IAsyncDisposable
             _ = ArrangeVariantsAsync(names, arranging.Token); // side by side as soon as the windows are there
             try
             {
-                var builds = names.Select((variant, i) => _apps.BuildAsync(variant, Voiceable(variant, description + Environment.NewLine + Environment.NewLine + Language.Pick(
-                    $"Gestalte diese Variante so: {variants[i]}. Zugleich entstehen {names.Count - 1} andere Varianten derselben App, jede anders; diese hat klar ihre eigene Gestalt.",
-                    $"Design this variant like this: {variants[i]}. {names.Count - 1} other variants of the same app are made at the same time, each different; this one has a look of its own."
-                    )), cancellation)).ToList();
+                // One N.E.O. starts when the one before is up (starting at the same moment, they collided); then all build at once.
+                var builds = new List<Task<string>>();
+                var before = Task.CompletedTask;
+                for (var i = 0; i < names.Count; i++)
+                {
+                    var (variant, direction, waitFor) = (names[i], variants[i], before);
+                    var up = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    builds.Add(Task.Run(async () =>
+                    {
+                        await waitFor;
+                        return await _apps.BuildAsync(variant, Voiceable(variant, description + Environment.NewLine + Environment.NewLine + Language.Pick(
+                            $"Gestalte diese Variante so: {direction}. Zugleich entstehen {names.Count - 1} andere Varianten derselben App, jede anders; diese hat klar ihre eigene Gestalt.",
+                            $"Design this variant like this: {direction}. {names.Count - 1} other variants of the same app are made at the same time, each different; this one has a look of its own.")),
+                            cancellation, ready: () => up.TrySetResult());
+                    }, cancellation));
+                    before = up.Task;
+                }
                 var results = await Task.WhenAll(builds);
                 arranging.Cancel();
                 await PlaceVariantsAsync(names);
@@ -869,13 +893,15 @@ internal sealed class Brain : IAsyncDisposable
           "want to set or trigger in it (with plain parameters such as a name and a number; in an animation or simulation, for instance the speed " +
           "of each thing that moves), and public [McpObservable] properties for " +
           "everything one would want to ask about (counters, states, results); every setting that can be set can also be read. They change " +
-          "only the app itself and need no Changes = true. All text in the app is in English."
+          "only the app itself and need no Changes = true. A method that starts something that goes on (a quiz, a timer, a game) returns at " +
+          "once and lets it run by itself. All text in the app is in English."
         : description + Environment.NewLine + Environment.NewLine +
         $"Diese App wird später per Sprache bedient. Gib ihr [AppInfo(\"{name}\", \"…\")], öffentliche [McpCallable]-Methoden für alles, was man " +
         "an ihr einstellen oder auslösen möchte (mit einfachen Parametern wie Name und Zahl; in einer Animation oder Simulation etwa das Tempo von allem, " +
         "was sich bewegt), und öffentliche [McpObservable]-Eigenschaften für alles, " +
         "was man abfragen möchte (Zähler, Zustände, Ergebnisse); jede Einstellung, die man setzen kann, soll man auch abfragen können. " +
-        "Sie ändern nur die App selbst und brauchen kein Changes = true.";
+        "Sie ändern nur die App selbst und brauchen kein Changes = true. Eine Methode, die etwas startet, das weiterläuft (ein Quiz, einen Timer, " +
+        "ein Spiel), kehrt sofort zurück und lässt es von selbst laufen.";
 
     private ClaudeAgentTool ChangeAppTool() => new(
         "change_app",
@@ -944,9 +970,25 @@ internal sealed class Brain : IAsyncDisposable
             await AppOnNetworkAsync(app, cancellation);
             ShowApp(app);
             App.Log($"call: {app}.{method}({string.Join(", ", arguments)})");
+            var speaks = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _calling = (app, speaks);
             try
             {
-                var result = await Apps.CallAsync<JsonElement>(app, method, arguments).WaitAsync(TimeSpan.FromSeconds(40), cancellation);
+                // A method that starts something that goes on (a quiz asking through the stage) may not return for long, and the
+                // stage cannot let the app speak while the brain waits: when the app speaks, or after ten seconds, the brain goes on.
+                var call = Apps.CallAsync<JsonElement>(app, method, arguments);
+                var first = await Task.WhenAny(call, speaks.Task, Task.Delay(TimeSpan.FromSeconds(10), cancellation));
+                if (first != call)
+                {
+                    _ = call.ContinueWith(ended => App.Log($"call: {app}.{method} ended later" +
+                        (ended.IsFaulted ? ": " + ended.Exception?.GetBaseException().Message : "")), TaskScheduler.Default);
+                    App.Log($"call: {app}.{method} goes on by itself{(first == speaks.Task ? ", the app speaks" : "")}");
+                    return new ClaudeAgentToolResult(first == speaks.Task
+                        ? Language.Pick($"{app}.{method} läuft; die App spricht jetzt selbst mit dem Menschen.", $"{app}.{method} is running; the app is talking to the person now.")
+                        : Language.Pick($"{app}.{method} läuft weiter (es hat etwas gestartet, das dauert); sein Ergebnis kommt nicht zurück.",
+                            $"{app}.{method} keeps running (it started something that goes on); its result will not come back."));
+                }
+                var result = await call;
                 var text = result.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null ? "Erledigt." : "Ergebnis: " + result.GetRawText();
                 App.Log($"call: {text[..Math.Min(text.Length, 160)]}");
                 return new ClaudeAgentToolResult(text);
@@ -959,7 +1001,20 @@ internal sealed class Brain : IAsyncDisposable
             {
                 return new ClaudeAgentToolResult($"{app}.{method} ging nicht: {exception.Message}{Offer(app)}", IsError: true);
             }
+            finally
+            {
+                _calling = null;
+            }
         });
+
+    private (string App, TaskCompletionSource Speaks)? _calling; // the app the brain is calling now
+
+    /// <summary>An app speaks through the stage: when the brain is waiting for a call to it, it waits no longer.</summary>
+    public void AppSpeaks(string app)
+    {
+        if (_calling is { } calling && string.Equals(calling.App, app, StringComparison.OrdinalIgnoreCase))
+            calling.Speaks.TrySetResult();
+    }
 
     private ClaudeAgentTool ReadAppTool() => new(
         "read_app",

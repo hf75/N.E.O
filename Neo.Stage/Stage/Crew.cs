@@ -109,12 +109,16 @@ internal sealed class Crew
                     $"Du bist der Bautrupp der N.E.O.-Bühne und arbeitest allein im Hintergrund; niemand beantwortet Fragen, entscheide selbst sinnvoll. " +
                     $"Arbeite nur in deinem Ordner {job.Folder}: schreibe Dateien mit Write und Edit nur dort. Löschen, Verschieben, Überschreiben " +
                     "per Befehl, Senden und Installieren (außer NuGet-Paketen in dein eigenes Projekt) sind dir verboten. Prüfe, was du baust: " +
-                    "bauen, kurz ausführen, testen. Starte nichts, das auf einen Menschen wartet, außer kurz zum Prüfen. Schließe mit höchstens drei " +
+                    "bauen, kurz ausführen, testen; ein Programm mit Fenster prüfst du nur durch Bauen und Tests ohne Fenster, nie durch Starten. " +
+                    "Ein Programm baust du als .NET-Projekt mit dotnet, sodass eine .exe entsteht (kein Startskript), und nennst am Ende ihren Pfad. " +
+                    "Schließe mit höchstens drei " +
                     "einfachen Sätzen, gesprochen, ohne Markdown: was fertig ist, wo es liegt und wie man es startet.",
                     $"You are the crew of the N.E.O. stage and work alone in the background; nobody answers questions, decide sensibly yourself. " +
                     $"Work only in your folder {job.Folder}: write files with Write and Edit only there. Deleting, moving, overwriting by command, " +
                     "sending and installing (except NuGet packages into your own project) are forbidden to you. Check what you build: build it, " +
-                    "run it briefly, test it. Start nothing that waits for a person, except briefly to check it. End with at most three plain " +
+                    "run it briefly, test it; a program with a window you check only by building it and by tests without a window, never by starting it. " +
+                    "Build a program as a .NET project with dotnet, so that there is an .exe (no launcher script), and give its path at the end. " +
+                    "End with at most three plain " +
                     "sentences, to be spoken, without markdown: what is done, where it is and how to start it."),
                 AllowedTools = ["Read", "Glob", "Grep", "WebSearch", "WebFetch", "TodoWrite", "Bash(dotnet *)", "PowerShell(dotnet *)"],
                 DisallowedTools = ["AskUserQuestion"],
@@ -159,11 +163,13 @@ internal sealed class Crew
         }
         catch (IOException) { }
         var said = job.Succeeded
-            ? Language.Pick($"Der Bautrupp ist fertig mit „{job.Name}“. ", $"The crew is done with “{job.Name}”. ") + Sentences(job.Result!, 2)
+            ? Language.Pick($"Der Bautrupp ist fertig mit „{job.Name}“.", $"The crew is done with “{job.Name}”.")
             : Language.Pick($"Der Bautrupp ist mit „{job.Name}“ nicht zu Ende gekommen. ", $"The crew did not finish “{job.Name}”. ") + Sentences(job.Result ?? "", 1);
         var whole = Language.Pick(
-            $"Der Bautrupp meldet zu „{job.Name}“ ({(job.Succeeded ? "fertig" : "nicht fertig")}, {minutes:0.0} min, Ordner {job.Folder}): {Short(job.Result ?? "", 1500)}",
-            $"The crew reports on “{job.Name}” ({(job.Succeeded ? "done" : "not done")}, {minutes:0.0} min, folder {job.Folder}): {Short(job.Result ?? "", 1500)}");
+            $"Der Bautrupp meldet zu „{job.Name}“ ({(job.Succeeded ? "fertig" : "nicht fertig")}, {minutes:0.0} min, Ordner {job.Folder}; dass er fertig ist, " +
+            $"hat der Mensch gehört, erzähl die Einzelheiten nur, wenn er fragt): {Short(job.Result ?? "", 1500)}",
+            $"The crew reports on “{job.Name}” ({(job.Succeeded ? "done" : "not done")}, {minutes:0.0} min, folder {job.Folder}; the person has heard that it is " +
+            $"done, tell the details only when asked): {Short(job.Result ?? "", 1500)}");
         Done?.Invoke(Language.Pick("Bautrupp", "Crew"), said, whole);
     }
 
@@ -246,7 +252,7 @@ internal sealed class Crew
                 next++;
             end = Math.Min(text.Length, next + 1);
         }
-        return Short(text[..end], 320);
+        return Short(text[..end], 200);
     }
 
     private static string Short(string text, int most)

@@ -641,6 +641,8 @@ internal sealed class LiveStage
         Dispatcher.UIThread.Post(() =>
         {
             _fromApps.Enqueue((string.IsNullOrWhiteSpace(app) ? Language.Pick("Eine App", "An app") : app.Trim(), text, asking, done, note));
+            if (app != null)
+                _brain?.AppSpeaks(app); // a call to it the brain is waiting for goes on by itself
             NextFromApp();
         });
         return done.Task;

@@ -20,10 +20,14 @@ internal sealed class StageOnNetwork(LiveStage live)
         OffUiThread = true, TimeoutSeconds = 180)]
     public Task Say(string text) => live.FromAppAsync(AppNetwork.CurrentCaller, text, asking: false);
 
-    [McpCallable("Asks the person a short question aloud and returns what they answer by voice (they hold a key while they speak); " +
-                 "an empty string when they do not answer within a minute.",
+    [McpCallable("Asks the person a short question aloud and returns what they answer by voice (they hold a key while they speak), " +
+                 "without the full stop or question mark at its end; an empty string when they do not answer within a minute. " +
+                 "Compare the answer without regard to case. Ask speaks the question itself: do not Say it before.",
         OffUiThread = true, TimeoutSeconds = 180)]
-    public async Task<string> Ask(string question) => await live.FromAppAsync(AppNetwork.CurrentCaller, question, asking: true) ?? "";
+    public async Task<string> Ask(string question) => Plain(await live.FromAppAsync(AppNetwork.CurrentCaller, question, asking: true) ?? "");
+
+    // Speech recognition writes a sentence: "Paris." for Paris. The full stop goes; what was said stays.
+    internal static string Plain(string answer) => answer.Trim().TrimEnd('.', '!', '?', '…', ' ').Trim();
 
     /// <summary>Puts the stage on the app network; it leaves when the process ends.</summary>
     public static void Publish(LiveStage live)
