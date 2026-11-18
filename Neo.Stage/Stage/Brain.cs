@@ -51,6 +51,10 @@ internal sealed class Brain : IAsyncDisposable
           sagt etwas laut, Ask(question) fragt den Menschen und gibt seine gesprochene Antwort zurück. Soll eine App Bescheid sagen, etwas
           vorlesen oder den Menschen abfragen („sag mir, wenn …“, „frag mich ab“), sag N.E.O. beim Bauen ausdrücklich, dass sie dafür Say
           oder Ask von „N.E.O. Stage“ im App-Netzwerk benutzt. Was Apps gesagt und gefragt haben, steht in deiner nächsten Nachricht.
+        - delegate gibt eine große Arbeit an den Bautrupp: Claude Code im Hintergrund, mit eigenem Ordner, für ein richtiges Programm, einen
+          Dienst, eine Auswertung vieler Dateien, alles, was mehr als eine kleine App ist oder länger als eine Minute dauert. Beschreibe den
+          Auftrag vollständig, er kann nicht nachfragen. Er meldet sich laut, wenn er fertig ist; was er gerade tut, steht in jeder Nachricht.
+          Kleine Apps baut weiter N.E.O. (build_app), das geht in Sekunden.
         - build_variants lässt N.E.O. zwei oder drei Varianten derselben App zugleich bauen und legt sie nebeneinander, links A, in der Mitte
           B, rechts C („zeig mir drei Varianten“, „mach mir ein paar Entwürfe“); gib jeder eine eigene Richtung. Wählt der Mensch („nimm die
           mittlere“), behält choose_variant diese und schließt die anderen.
@@ -102,6 +106,9 @@ internal sealed class Brain : IAsyncDisposable
           something aloud, Ask(question) asks the person and returns their spoken answer. When an app should tell the person something,
           read something out or quiz them ("tell me when …", "quiz me"), tell N.E.O. when building it to use Say or Ask of "N.E.O. Stage"
           on the app network. What apps said and asked comes with your next message.
+        - delegate hands a big piece of work to the crew: Claude Code in the background, with a folder of its own, for a real program, a
+          service, a report over many files, anything more than a small app or longer than a minute. Describe the job fully, it cannot ask
+          back. It speaks up when it is done; what it is doing comes with every message. Small apps are still N.E.O.'s (build_app), in seconds.
         - build_variants has N.E.O. build two or three variants of the same app at once and lays them side by side, A on the left, B in
           the middle, C on the right ("show me three variants", "make me a few drafts"); give each its own direction. When the person
           picks one ("take the middle one"), choose_variant keeps it and closes the others.
@@ -152,6 +159,9 @@ internal sealed class Brain : IAsyncDisposable
 
     /// <summary>Notes the person's clicks while they show how something is done ("Schau mir zu").</summary>
     public Recorder Recorder { get; } = new();
+
+    /// <summary>Big jobs done by Claude Code in the background ("Bautrupp").</summary>
+    public Crew Crew { get; } = new();
 
     /// <summary>Everything the session reports. Raised on its reading thread.</summary>
     public event Action<ClaudeAgentEvent>? Event;
@@ -227,6 +237,8 @@ internal sealed class Brain : IAsyncDisposable
             described += watching + Environment.NewLine;
         if (Recipes.Describe() is { Length: > 0 } recipes)
             described += recipes + Environment.NewLine;
+        if (Crew.Describe() is { Length: > 0 } crew)
+            described += crew + Environment.NewLine;
         if (Recorder.Recording)
             described += Language.Pick($"Du schaust gerade zu und hast {Recorder.Count} Klicks gemerkt; stop_recording beendet es.",
                 $"You are watching now and have noted {Recorder.Count} clicks; stop_recording ends it.") + Environment.NewLine;
@@ -290,7 +302,7 @@ internal sealed class Brain : IAsyncDisposable
         AllowedTools = ["WebSearch", "WebFetch"],
         ToolServerName = "stage",
         Tools = [ArrangeTool(), ShowTool(), LookTool(), GuideTool(), OpenTool(), FindFilesTool(), BuildAppTool(), ChangeAppTool(), CallAppTool(), ReadAppTool(), RunTool(),
-            WatchTool(), StopWatchingTool(), BuildVariantsTool(), ChooseVariantTool(), RecordStepsTool(), StopRecordingTool()],
+            WatchTool(), StopWatchingTool(), BuildVariantsTool(), ChooseVariantTool(), RecordStepsTool(), StopRecordingTool(), DelegateTool(), StopCrewTool()],
         MaxBudgetUsd = 5m,
     };
 
@@ -477,6 +489,44 @@ internal sealed class Brain : IAsyncDisposable
                 $"Schritt {guide.Current + 1} von {steps.Count} („{first.Name}“) leuchtet in „{window.Label}“. Die weiteren zeige und sage ich, sobald sie zu sehen sind; klicken muss der Mensch selbst.",
                 $"Step {guide.Current + 1} of {steps.Count} (“{first.Name}”) is lit in “{window.Label}”. I show and say the next ones as soon as they can be seen; the person clicks."));
         }, cancellation));
+
+    private ClaudeAgentTool DelegateTool() => new(
+        "delegate",
+        "Gibt eine große Arbeit an den Bautrupp (Claude Code im Hintergrund, eigener Ordner, darf dort schreiben und bauen, nichts löschen " +
+        "oder installieren). Kehrt sofort zurück; der Bautrupp meldet sich laut, wenn er fertig ist.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string", "description": "Kurzer Name des Auftrags, etwa „Primzahlen-Programm“" },
+                "task": { "type": "string", "description": "Der Auftrag, vollständig und genau, in der Sprache des Menschen; der Bautrupp kann nicht nachfragen" }
+              },
+              "required": ["name", "task"]
+            }
+            """),
+        (input, _) =>
+        {
+            var name = Text(input, "name");
+            var task = Text(input, "task");
+            if (name.Length == 0 || task.Length == 0)
+                return Task.FromResult(new ClaudeAgentToolResult("name und task fehlen.", IsError: true));
+            App.Log($"delegate: '{name}': {task.ReplaceLineEndings(" ")}");
+            if (Pretend)
+                return Task.FromResult(new ClaudeAgentToolResult($"Nur eine Probe: der Bautrupp hätte „{name}“ übernommen."));
+            return Task.FromResult(new ClaudeAgentToolResult(Crew.Start(name, task)));
+        });
+
+    private ClaudeAgentTool StopCrewTool() => new(
+        "stop_crew",
+        "Bricht einen Auftrag des Bautrupps ab, der noch läuft.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": { "name": { "type": "string", "description": "Name des Auftrags" } },
+              "required": ["name"]
+            }
+            """),
+        (input, _) => Task.FromResult(new ClaudeAgentToolResult(Pretend ? "Nur eine Probe." : Crew.Cancel(Text(input, "name")))));
 
     private ClaudeAgentTool RecordStepsTool() => new(
         "record_steps",

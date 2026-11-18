@@ -218,6 +218,29 @@ public partial class App : Application
                     desktop.Shutdown();
                 });
             }
+            else if (arguments.Contains("--crew-check"))
+            {
+                // What the crew may do, asked of the judge directly: nothing runs, nothing is written.
+                var crewFolder = Path.Combine(Path.GetTempPath(), "neo-crew-check");
+                foreach (var (tool, field, value) in (ReadOnlySpan<(string, string, string)>)[
+                    ("Write", "file_path", Path.Combine(crewFolder, "App", "Program.cs")),
+                    ("Write", "file_path", @"C:\Users\Public\x.txt"),
+                    ("Edit", "file_path", Path.Combine(crewFolder, "..", "outside.txt")),
+                    ("Bash", "command", "dotnet build -nologo"),
+                    ("PowerShell", "command", "Get-ChildItem; dotnet run"),
+                    ("Bash", "command", "rm -rf bin"),
+                    ("PowerShell", "command", @"Remove-Item -Recurse C:\Users\x"),
+                    ("PowerShell", "command", "Set-Content notes.txt hello"),
+                    ("PowerShell", "command", "Start-Process powershell -Verb RunAs"),
+                    ("Read", "file_path", @"C:\Windows\win.ini"),
+                    ("mcp__other__tool", "x", "y")])
+                {
+                    var input = System.Text.Json.JsonSerializer.SerializeToElement(new Dictionary<string, string> { [field] = value });
+                    var decision = Crew.Decide("check", crewFolder, new Neo.ClaudeAgent.ClaudeAgentPermissionRequest(tool, input, null, null, null, null, null));
+                    Log($"crew-check: {tool} {value} → {(decision.Allowed ? "yes" : "no: " + decision.Message)}");
+                }
+                Dispatcher.UIThread.Post(() => desktop.Shutdown()); // once the loop runs
+            }
             else if (Argument(arguments, "--uia-find") is { } titleWord)
             {
                 // What the eyes find by name in a window whose title holds the word, and what can be clicked there.

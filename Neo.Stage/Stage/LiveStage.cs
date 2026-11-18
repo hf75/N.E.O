@@ -155,6 +155,7 @@ internal sealed class LiveStage
             });
             brain.Watchers.Fired += (who, said) => _ = FromAppAsync(who, said, asking: false,
                 note: Language.Pick($"{who} meldete: „{said}“", $"{who} said: “{said}”"));
+            brain.Crew.Done += (who, said, whole) => _ = FromAppAsync(who, said, asking: false, note: whole);
         }
     }
 
