@@ -271,13 +271,14 @@ public partial class App : Application
                     }
                     _stage ??= new StageOverlay(PrimaryScreen());
                     // The brain starts now, so the first question does not wait for Claude Code; the voice needs the ElevenLabs key.
-                    _brain = new Brain();
+                    _brain = new Brain(keep: true);
                     _ = _brain.WarmAsync();
                     var mouth = Ears.Key() is { } key ? new Mouth(key) : null;
                     // Pointing with the mouse while speaking is off unless NEO_STAGE_POINTING=1: the voice alone comes first.
                     _live = new LiveStage(_stage, brain: _brain, mouth: mouth, pointing: Environment.GetEnvironmentVariable("NEO_STAGE_POINTING") == "1");
                     _live.Start();
                     StageOnNetwork.Publish(_live); // apps speak and ask through it
+                    _brain.Watchers.Resume(); // what it kept an eye on before a restart
                     Log($"live (process {Environment.ProcessId}): hold the right Ctrl key and speak{(mouth == null ? $" (no voice without {Ears.KeyVariable})" : "")}");
                 });
             }

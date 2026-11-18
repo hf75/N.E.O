@@ -84,7 +84,7 @@ internal sealed class LiveStage
     private int _followUps; // how often a guide went on by itself since the person last spoke
     private int _stepsDone; // steps the guides showed since the person last spoke: a guide that goes on counts on from there
     private (Guide Guide, string Step, IReadOnlyList<string> Fresh, IReadOnlyList<string> Others)? _goOn; // waits until the stage is quiet
-    private readonly Queue<(string App, string Text, bool Asking, TaskCompletionSource<string?> Done)> _fromApps = new(); // wait until the stage is free
+    private readonly Queue<(string App, string Text, bool Asking, TaskCompletionSource<string?> Done, string? Note)> _fromApps = new(); // wait until the stage is free
     private double _workingFrom;
     private Ears? _ears;
     private bool _probing, _looping;
@@ -142,6 +142,8 @@ internal sealed class LiveStage
             });
             brain.AskPerson = AskPersonAsync;
             brain.Guiding += guide => Dispatcher.UIThread.Post(() => StartGuide(guide));
+            brain.Watchers.Fired += (who, said) => _ = FromAppAsync(who, said, asking: false,
+                note: Language.Pick($"{who} meldete: „{said}“", $"{who} said: “{said}”"));
         }
     }
 
@@ -614,7 +616,7 @@ internal sealed class LiveStage
     /// Asking, it waits up to a minute for the person's spoken answer and returns it; otherwise it returns null once the
     /// words are said. Any thread.
     /// </summary>
-    public Task<string?> FromAppAsync(string? app, string text, bool asking)
+    public Task<string?> FromAppAsync(string? app, string text, bool asking, string? note = null)
     {
         var done = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         text = text.Trim();
@@ -625,7 +627,7 @@ internal sealed class LiveStage
         }
         Dispatcher.UIThread.Post(() =>
         {
-            _fromApps.Enqueue((string.IsNullOrWhiteSpace(app) ? Language.Pick("Eine App", "An app") : app.Trim(), text, asking, done));
+            _fromApps.Enqueue((string.IsNullOrWhiteSpace(app) ? Language.Pick("Eine App", "An app") : app.Trim(), text, asking, done, note));
             NextFromApp();
         });
         return done.Task;
@@ -636,7 +638,7 @@ internal sealed class LiveStage
     {
         if (_phase != Phase.Idle || !Enabled || !_fromApps.TryDequeue(out var next))
             return;
-        var (app, text, asking, done) = next;
+        var (app, text, asking, done, note) = next;
         var utterance = new Utterance { Started = Now, Ended = Now, Text = text, Unspoken = true, App = app, Done = done };
         _utterance = utterance;
         _turn = utterance;
@@ -653,9 +655,9 @@ internal sealed class LiveStage
         _mouth?.Begin();
         _mouth?.Add(text);
         App.Log($"app '{app}' {(asking ? "asks" : "says")}: '{text}'");
-        _brain?.Note(asking
+        _brain?.Note(note ?? (asking
             ? Language.Pick($"Die App „{app}“ fragte den Menschen: „{text}“", $"The app “{app}” asked the person: “{text}”")
-            : Language.Pick($"Die App „{app}“ sagte: „{text}“", $"The app “{app}” said: “{text}”"));
+            : Language.Pick($"Die App „{app}“ sagte: „{text}“", $"The app “{app}” said: “{text}”")));
         if (asking)
         {
             _mouth?.Flush();

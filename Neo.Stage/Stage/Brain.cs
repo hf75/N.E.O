@@ -24,7 +24,8 @@ internal sealed class Brain : IAsyncDisposable
         vorgelesen. Mit jeder Frage bekommst du die offenen Fenster, nummeriert, das oberste zuerst. „Im Vordergrund“ ist das, mit dem er gerade
         arbeitet; meint er ein Fenster, ohne es zu nennen („mach das groß“), ist das im Vordergrund gemeint. Die Spracherkennung verhört sich
         manchmal („Wort“ statt „Word“); deute das Gesagte mit Blick auf die offenen Fenster, und frag nur, wenn es wirklich unklar ist, dann
-        mit einer kurzen Ja-oder-Nein-Frage.
+        mit einer kurzen Ja-oder-Nein-Frage. Gesagte Dateinamen verlieren Bindestriche, Punkte und Leerzeichen („Stagetest“ für „stage-test“):
+        such Dateien mit Platzhaltern (*), nicht mit dem genauen Namen.
 
         Sprich, wie man spricht: Deutsch, mit „du“, so kurz wie möglich, meist ein Satz, höchstens zwei. Keine Aufzählungen, kein Markdown, keine Links,
         keine Fensternummern, keine Tipps, um die niemand gebeten hat. Nenne Fenster so, wie ein Mensch sie nennt („Word“, „der Browser“).
@@ -39,6 +40,10 @@ internal sealed class Brain : IAsyncDisposable
           „Wo finde ich …?“), zeig es mit guide, statt es selbst zu tun. Nimm die Namen, wie sie im Programm stehen, in seiner Sprache;
           kennst du sie nicht sicher, schau vorher mit look. Sag dazu in einem Satz den ersten Schritt.
         - WebSearch und WebFetch für Fragen an das Internet (Wetter, Nachrichten, Fakten).
+        - watch behält etwas für den Menschen im Auge und meldet sich, wenn es passiert („Sag mir Bescheid, wenn …“): ein Skript, das nur
+          nachsieht und nur dann etwas ausgibt, wenn es so weit ist (ein Download fertig, der Akku unter 20 %), oder mit on_change einen Wert
+          ausgibt, dessen Änderung zählt (eine Webseite, die Zahl der Mails). Oder es liest einen Wert einer laufenden N.E.O.-App. Prüfe das
+          Skript vorher einmal mit run, wenn du unsicher bist. stop_watching beendet einen Wächter; welche laufen, steht in jeder Nachricht.
         - Apps können sprechen und fragen: Jede N.E.O.-App kann im App-Netzwerk die App „N.E.O. Stage“ benutzen, das bist du. Say(text)
           sagt etwas laut, Ask(question) fragt den Menschen und gibt seine gesprochene Antwort zurück. Soll eine App Bescheid sagen, etwas
           vorlesen oder den Menschen abfragen („sag mir, wenn …“, „frag mich ab“), sag N.E.O. beim Bauen ausdrücklich, dass sie dafür Say
@@ -64,7 +69,8 @@ internal sealed class Brain : IAsyncDisposable
         aloud. With every question you get the open windows, numbered, the top one first. "In front" is the one they are working in;
         when they mean a window without naming it ("make that bigger"), they mean the one in front. Speech recognition sometimes
         mishears; read what was said in the light of the open windows, and ask only when it is really unclear, then with a short
-        yes-or-no question.
+        yes-or-no question. Spoken file names lose hyphens, dots and spaces ("stagetest" for "stage-test"): look for files with
+        wildcards (*), not by the exact name.
 
         Speak the way people speak: English, as short as possible, usually one sentence, two at most. No lists, no Markdown, no links,
         no window numbers, no tips nobody asked for. Call windows what a person calls them ("Word", "the browser"). When you do something
@@ -79,6 +85,10 @@ internal sealed class Brain : IAsyncDisposable
           "Where do I find …?"), show it with guide rather than doing it yourself. Use the names as the program shows them, in its
           language; if you are not sure of them, look first. Say the first step in one sentence.
         - WebSearch and WebFetch for questions to the internet (weather, news, facts).
+        - watch keeps an eye on something for the person and speaks up when it happens ("tell me when …"): a script that only looks
+          and writes something only when the moment has come (a download finished, the battery below 20 %), or with on_change writes a
+          value whose change counts (a web page, the number of mails). Or it reads a value of a running N.E.O. app. Try the script once
+          with run first when unsure. stop_watching ends a watcher; which ones are on comes with every message.
         - Apps can speak and ask: every N.E.O. app can use the app "N.E.O. Stage" on the app network, which is you. Say(text) says
           something aloud, Ask(question) asks the person and returns their spoken answer. When an app should tell the person something,
           read something out or quiz them ("tell me when …", "quiz me"), tell N.E.O. when building it to use Say or Ask of "N.E.O. Stage"
@@ -112,8 +122,10 @@ internal sealed class Brain : IAsyncDisposable
 
     /// <param name="pretend">A check: the hands say what they would do and do nothing (reading scripts still run).</param>
     /// <param name="only">Which windows it may see (title, program); a check passes its own. Null: all of them.</param>
-    public Brain(bool pretend = false, Func<string, string, bool>? only = null)
+    /// <param name="keep">The real stage: watchers are written down and come back after a restart.</param>
+    public Brain(bool pretend = false, Func<string, string, bool>? only = null, bool keep = false)
     {
+        Watchers = new Watchers(keep);
         Apps.CallerName = "N.E.O. Stage"; // the person sees it when a call wants to change something
         Pretend = pretend;
         _only = only;
@@ -122,6 +134,9 @@ internal sealed class Brain : IAsyncDisposable
     }
 
     public bool Pretend { get; }
+
+    /// <summary>What the stage keeps an eye on for the person ("Sag mir Bescheid, wenn …").</summary>
+    public Watchers Watchers { get; }
 
     /// <summary>Everything the session reports. Raised on its reading thread.</summary>
     public event Action<ClaudeAgentEvent>? Event;
@@ -192,7 +207,10 @@ internal sealed class Brain : IAsyncDisposable
             news = [.. _news];
             _news.Clear();
         }
-        var turn = session.SendAsync(Describe(utterance, _windows, _apps.Names, news), pictures, cancellationToken);
+        var described = Describe(utterance, _windows, _apps.Names, news);
+        if (Watchers.Describe() is { Length: > 0 } watching)
+            described += watching + Environment.NewLine;
+        var turn = session.SendAsync(described, pictures, cancellationToken);
         _last = turn;
         var result = await turn.ConfigureAwait(false);
         string said;
@@ -251,7 +269,8 @@ internal sealed class Brain : IAsyncDisposable
         BuiltInTools = ["WebSearch", "WebFetch"],
         AllowedTools = ["WebSearch", "WebFetch"],
         ToolServerName = "stage",
-        Tools = [ArrangeTool(), ShowTool(), LookTool(), GuideTool(), OpenTool(), FindFilesTool(), BuildAppTool(), ChangeAppTool(), CallAppTool(), ReadAppTool(), RunTool()],
+        Tools = [ArrangeTool(), ShowTool(), LookTool(), GuideTool(), OpenTool(), FindFilesTool(), BuildAppTool(), ChangeAppTool(), CallAppTool(), ReadAppTool(), RunTool(),
+            WatchTool(), StopWatchingTool()],
         MaxBudgetUsd = 5m,
     };
 
@@ -425,6 +444,62 @@ internal sealed class Brain : IAsyncDisposable
                 $"Schritt {guide.Current + 1} von {steps.Count} („{first.Name}“) leuchtet in „{window.Label}“. Die weiteren zeige und sage ich, sobald sie zu sehen sind; klicken muss der Mensch selbst.",
                 $"Step {guide.Current + 1} of {steps.Count} (“{first.Name}”) is lit in “{window.Label}”. I show and say the next ones as soon as they can be seen; the person clicks."));
         }, cancellation));
+
+    private ClaudeAgentTool WatchTool() => new(
+        "watch",
+        "Behält etwas für den Menschen im Auge und meldet sich laut, wenn es passiert. Das Skript (Windows PowerShell 5.1) darf nur nachsehen. " +
+        "Ohne on_change gibt es nur dann etwas aus, wenn es so weit ist (sonst nichts oder False); mit on_change gibt es einen Wert aus, und " +
+        "jede Änderung gegenüber dem ersten Mal zählt. Statt eines Skripts geht auch app und value: ein Wert einer laufenden N.E.O.-App.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string", "description": "Kurzer Name, etwa „Download“ oder „Akku“" },
+                "what": { "type": "string", "description": "Wonach er sieht, als Nebensatz: „der Download fertig ist“" },
+                "say": { "type": "string", "description": "Was die Bühne dann sagt, ein kurzer Satz; {wert} steht für das, was das Skript ausgab" },
+                "script": { "type": "string", "description": "Windows-PowerShell-Skript, das nur nachsieht" },
+                "app": { "type": "string", "description": "Statt eines Skripts: Name einer laufenden N.E.O.-App" },
+                "value": { "type": "string", "description": "Mit app: der Wert, auf den er achtet" },
+                "every": { "type": "integer", "description": "Alle wie viele Sekunden er nachsieht (5 bis 3600, sonst 30)" },
+                "on_change": { "type": "boolean", "description": "Meldet sich, wenn sich der Wert ändert" },
+                "repeat": { "type": "boolean", "description": "Meldet sich jedes Mal und läuft weiter, statt nach dem ersten Mal zu enden" }
+              },
+              "required": ["name", "what", "say"]
+            }
+            """),
+        (input, _) =>
+        {
+            var spec = new WatcherSpec(Text(input, "name"), Text(input, "what"), Text(input, "say"),
+                Text(input, "script") is { Length: > 0 } script ? script : null,
+                Text(input, "app") is { Length: > 0 } app ? app : null,
+                Text(input, "value") is { Length: > 0 } value ? value : null,
+                input.TryGetProperty("every", out var every) && every.TryGetInt32(out var seconds) ? seconds : 30,
+                input.TryGetProperty("on_change", out var change) && change.ValueKind == JsonValueKind.True,
+                input.TryGetProperty("repeat", out var repeat) && repeat.ValueKind == JsonValueKind.True);
+            if (spec.Name.Length == 0)
+                return Task.FromResult(new ClaudeAgentToolResult(Language.Pick("Der Wächter braucht einen Namen.", "The watcher needs a name."), IsError: true));
+            App.Log($"watch: '{spec.Name}' ({spec.What}), every {spec.EverySeconds} s{(spec.OnChange ? ", on change" : "")}{(spec.Repeat ? ", repeating" : "")}: " +
+                    (spec.Script ?? $"{spec.App}.{spec.Value}").ReplaceLineEndings(" ⏎ "));
+            if (Pretend)
+                return Task.FromResult(new ClaudeAgentToolResult(Language.Pick($"Nur eine Probe: der Wächter „{spec.Name}“ würde nachsehen, ob {spec.What}.",
+                    $"Only a rehearsal: the watcher “{spec.Name}” would look whether {spec.What}.")));
+            var answer = Watchers.Add(spec);
+            return Task.FromResult(new ClaudeAgentToolResult(answer, IsError: !answer.StartsWith(Language.Pick("Der Wächter", "The watcher"), StringComparison.Ordinal)));
+        });
+
+    private ClaudeAgentTool StopWatchingTool() => new(
+        "stop_watching",
+        "Beendet einen Wächter, oder alle mit „alle“.",
+        Schema("""
+            {
+              "type": "object",
+              "properties": { "name": { "type": "string", "description": "Name des Wächters, oder „alle“" } },
+              "required": ["name"]
+            }
+            """),
+        (input, _) => Task.FromResult(new ClaudeAgentToolResult(Pretend
+            ? Language.Pick("Nur eine Probe.", "Only a rehearsal.")
+            : Watchers.Stop(Text(input, "name")))));
 
     private ClaudeAgentTool OpenTool() => new(
         "open",

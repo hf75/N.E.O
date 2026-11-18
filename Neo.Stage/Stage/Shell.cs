@@ -29,12 +29,32 @@ internal static partial class Shell
     public static Changes AtLeast(string script, Changes said)
         => said != Changes.Lasting && Lasting().IsMatch(script) ? Changes.Lasting : said;
 
+    /// <summary>What a script wrote and how it ended: its exit code (null when it ran too long and was stopped), its output and errors.</summary>
+    internal sealed record Outcome(int? Code, string Output, string Errors, TimeSpan Took);
+
     /// <summary>Runs the script with Windows PowerShell and returns what it wrote, shortened, and how it ended.</summary>
     public static async Task<string> RunAsync(string script, IReadOnlyDictionary<string, string>? parameters = null, CancellationToken cancellationToken = default)
     {
+        var outcome = await ExecuteAsync(script, parameters, s_timeout, cancellationToken);
+        if (outcome.Code is not { } code)
+            return $"Abgebrochen nach {outcome.Took.TotalSeconds:0} s, ohne Ende. Bisher kam: {Short(outcome.Output)}";
+        var text = new StringBuilder();
+        text.Append(code == 0 ? "Fertig" : $"Beendet mit Code {code}");
+        text.Append($" nach {outcome.Took.TotalSeconds:0.0} s.");
+        if (Short(outcome.Output) is { Length: > 0 } written)
+            text.Append(" Ausgabe: ").Append(written);
+        if (Short(outcome.Errors) is { Length: > 0 } failed)
+            text.Append(" Fehler: ").Append(failed);
+        return text.ToString();
+    }
+
+    /// <summary>Runs the script with Windows PowerShell, stopped after <paramref name="timeout"/>, and returns what came of it untouched.</summary>
+    public static async Task<Outcome> ExecuteAsync(string script, IReadOnlyDictionary<string, string>? parameters, TimeSpan timeout, CancellationToken cancellationToken)
+    {
         var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Neo", "Stage", "scripts");
         Directory.CreateDirectory(folder);
-        var file = Path.Combine(folder, $"run-{DateTime.Now:yyyyMMdd-HHmmss-fff}.ps1");
+        // Watchers run their scripts at the same time as the brain runs its own: every file a name of its own.
+        var file = Path.Combine(folder, $"run-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid().ToString("N")[..6]}.ps1");
         // With a byte order mark, so that Windows PowerShell reads umlauts right; and UTF-8 out, so that they come back right.
         await File.WriteAllTextAsync(file, "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\r\n$ProgressPreference = 'SilentlyContinue'\r\n" + script,
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), cancellationToken);
@@ -63,32 +83,24 @@ internal static partial class Shell
         process.StandardInput.Close();
         var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var errors = process.StandardError.ReadToEndAsync(cancellationToken);
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(s_timeout);
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        stop.CancelAfter(timeout);
         try
         {
-            await process.WaitForExitAsync(timeout.Token);
+            await process.WaitForExitAsync(stop.Token);
         }
         catch (OperationCanceledException)
         {
             try { process.Kill(entireProcessTree: true); }
             catch (InvalidOperationException) { }
-            return $"Abgebrochen nach {clock.Elapsed.TotalSeconds:0} s, ohne Ende. Bisher kam: {Short(await Settle(output))}";
+            return new Outcome(null, await Settle(output), "", clock.Elapsed);
         }
         finally
         {
             try { File.Delete(file); }
             catch (IOException) { }
         }
-
-        var text = new StringBuilder();
-        text.Append(process.ExitCode == 0 ? "Fertig" : $"Beendet mit Code {process.ExitCode}");
-        text.Append($" nach {clock.Elapsed.TotalSeconds:0.0} s.");
-        if (Short(await output) is { Length: > 0 } written)
-            text.Append(" Ausgabe: ").Append(written);
-        if (Short(await errors) is { Length: > 0 } failed)
-            text.Append(" Fehler: ").Append(failed);
-        return text.ToString();
+        return new Outcome(process.ExitCode, await output, await errors, clock.Elapsed);
     }
 
     private static async Task<string> Settle(Task<string> output)
