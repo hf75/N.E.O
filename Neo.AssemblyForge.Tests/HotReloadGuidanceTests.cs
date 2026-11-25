@@ -30,6 +30,18 @@ public class HotReloadGuidanceTests
         message.Should().Contain("FindControl").And.Contain("FindName").And.Contain("null");
     }
 
+    [Theory]
+    [InlineData(AssemblyForgeUiFramework.Avalonia)]
+    [InlineData(AssemblyForgeUiFramework.Wpf)]
+    public void UserControl_prompts_say_where_an_addition_reaches_the_running_app(AssemblyForgeUiFramework framework)
+    {
+        // A shark added to a running aquarium was created in the method that had filled the tank at start. That method
+        // never ran again, so the change arrived without its shark: 2 of 5 real changes showed it, 4 of 5 with this note.
+        var message = AssemblyForgeSystemMessages.GetSystemMessage(framework, useReact: false, usePython: false);
+
+        message.Should().Contain("field initializer").And.Contain("does not run again");
+    }
+
     [Fact]
     public void Prompts_without_a_patched_UserControl_do_not_get_the_rules()
     {
